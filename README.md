@@ -79,12 +79,44 @@ plain C host can still pass `malloc`/`free` in two lines.
 
 ### Validation at the boundary
 
-ozz is a release-build-`assert`-free library: a wrong-type archive, a truncated
-file or an unsupported version generally leaves you holding a silently empty
-object. Every loader here tag-tests before parsing and sanity-checks after, so
-those cases surface as `BadFormat` instead of a zero-duration clip that samples
-to garbage. NaN ratios and misaligned matrix buffers are rejected too, rather
-than being passed through to fault inside SIMD code.
+ozz checks nothing in a release build. `IArchive::operator>>` for a primitive
+is `Read(&v, sizeof(v))` followed by `assert(size == sizeof(v))` — and under
+`NDEBUG` that assert is gone, so a short read leaves `v` holding stack garbage
+and parsing continues. A count read that way decides how much ozz allocates and
+copies. The tag check is an assert too. An unsupported archive version is
+logged and leaves you an empty object with no error returned.
+
+So the loaders here bracket ozz's parser with the checks it does not perform:
+
+- **Tag-test before parsing** — wrong-type or non-ozz input is `BadFormat`, not
+  a parse of unrelated bytes.
+- **Truncation detection** — every archive, *including files*, is parsed
+  through `ConstMemoryStream`, which satisfies each read in full, zero-fills
+  past the end and latches a flag the loader checks. Zeros are the safe filler:
+  a zeroed count is zero, so ozz's loops do nothing rather than run wild, and
+  no partially-overwritten count can round upward. Files are buffered whole
+  rather than handed to ozz's own `File` stream precisely because that stream
+  returns the short reads ozz fails to check.
+- **Sanity-check after parsing** — joint counts within ozz's own limit, arrays
+  of consistent length, positive duration. This is what turns a
+  version-mismatched clip into `BadFormat` instead of a zero-duration animation
+  that samples to garbage.
+- **Real out-of-memory handling** — `ozz::New` is a placement-new on an
+  unchecked allocation, so a failed allocation constructs at address zero.
+  `ffi/zozz_internal.h` replaces it with a checked version, which is what makes
+  the `OutOfMemory` paths reachable rather than decorative.
+
+Every prefix of a valid archive — all ~15 000 of them across both fixtures — is
+verified to be rejected, and the whole archives still load. NaN ratios and
+misaligned matrix buffers are refused too, rather than faulting inside SIMD
+code.
+
+What this does **not** claim: ozz's parser is not hardened against arbitrary
+hostile input, and zozz cannot make it so from the outside. The guarantee here
+is that truncation and type confusion fail cleanly and deterministically, with
+counts bounded rather than attacker-influenced. If you ever need to load `.ozz`
+from an untrusted source, put a length-and-checksum container around it and
+validate that first.
 
 ### The ABI guard
 
@@ -126,6 +158,18 @@ of a future cook.
 `zig build test-c` runs the C-level smoke test on its own, proving the header
 is a real C contract rather than a private detail of the Zig wrapper, and that
 the allocator seam is genuinely in use (it asserts allocations balance).
+
+The truncated-archive test skips under Zig's C sanitizer and needs:
+
+```sh
+zig build test -Dsanitize_c=false
+```
+
+Not because the test fails, but because upstream ozz forms member accesses on a
+null pointer when a keyframe array has zero entries — the exact shape a
+zero-filled count produces. That is real, if benign, undefined behaviour *in
+ozz*, and keeping the sanitizer on to see it is worth more than switching it
+off globally to silence it. See [UPSTREAM.md](UPSTREAM.md).
 
 To additionally check a real asset on disk:
 
