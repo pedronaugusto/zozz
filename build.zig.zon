@@ -1,0 +1,19 @@
+.{
+    .name = .zozz,
+    .version = "0.1.0",
+    .minimum_zig_version = "0.16.0",
+    .fingerprint = 0x34d1aa71fdee4bb,
+    .paths = .{
+        "build.zig",
+        "build.zig.zon",
+        "ci",
+        ".github",
+        "ffi",
+        "libs",
+        "src",
+        "tests",
+        "LICENSE",
+        "README.md",
+        "UPSTREAM.md",
+    },
+}
