@@ -1,5 +1,7 @@
 # zozz
 
+[![CI](https://github.com/pedronaugusto/zozz/actions/workflows/ci.yml/badge.svg)](https://github.com/pedronaugusto/zozz/actions/workflows/ci.yml)
+
 Zig bindings for the [ozz-animation](https://github.com/guillaumeblanc/ozz-animation)
 runtime — skeletal animation sampling, in a package with no renderer, no engine
 and no asset system attached.
@@ -183,8 +185,36 @@ transforms, parent-precedes-child joint ordering, root joints whose model
 matrix matches their local translation, a clip that demonstrably moves, and a
 NaN ratio that is refused.
 
-Verified on macOS/aarch64, Zig 0.16, across Debug, ReleaseSafe, ReleaseFast and
-ReleaseSmall.
+### Continuous integration
+
+CI runs the whole suite on **Linux, macOS and Windows**, in four optimize modes
+with the sanitizer both on and off, plus the standalone C test — and
+cross-compiles eight further targets. See
+[`.github/workflows/ci.yml`](.github/workflows/ci.yml).
+
+The same matrix runs locally, so a failure is reproducible on your machine
+before it is a red mark on a pull request:
+
+```sh
+ci/run.sh            # the full matrix
+ci/run.sh --quick    # native Debug only, for the inner loop
+ci/install-hooks.sh  # run it automatically before every push
+```
+
+About twenty seconds for the full run. It reports every failure rather than
+stopping at the first.
+
+### What is verified where
+
+| | Executed | Cross-compiled |
+|---|---|---|
+| Linux | x86_64 (glibc) | + aarch64, musl |
+| macOS | aarch64 | + x86_64 |
+| Windows | x86_64 (MSVC ABI) | + gnu ABI, aarch64 |
+
+Cross-compilation proves the sources and build graph are portable; only the
+executed configurations prove behaviour. Both are reported separately in CI so
+the distinction stays visible rather than implied.
 
 ## Scope
 
@@ -207,6 +237,20 @@ Nothing above is blocked — the sources are vendored and the C-boundary pattern
 is established; they are simply not written yet. Deliberately out of scope: a
 blend tree, a state machine, a clock, or an asset system. Those are a host's
 job, and keeping them out is what makes this package reusable.
+
+## Contributing
+
+Issues and pull requests are welcome. Two things to know before opening one:
+
+- **`libs/ozz` is vendored verbatim and must not be edited.** Changes there are
+  lost at the next re-vendor. If upstream needs fixing, fix it upstream; if
+  zozz needs to work around upstream, do it in `ffi/` and record it in
+  [UPSTREAM.md](UPSTREAM.md).
+- **Run `ci/run.sh` before pushing** — or `ci/install-hooks.sh` once, and it
+  runs itself. It is the same matrix CI runs.
+
+New source files are added to the explicit lists in `build.zig` deliberately;
+there are no globs, so nothing starts compiling by accident.
 
 ## Licence
 

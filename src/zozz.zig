@@ -253,4 +253,3 @@ test "buffer size and joint count mismatches are refused" {
 
     try std.testing.expectError(Error.InvalidArgument, SoaPose.init(0));
 }
-
