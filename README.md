@@ -103,10 +103,15 @@ So the loaders here bracket ozz's parser with the checks it does not perform:
   of consistent length, positive duration. This is what turns a
   version-mismatched clip into `BadFormat` instead of a zero-duration animation
   that samples to garbage.
-- **Real out-of-memory handling** — `ozz::New` is a placement-new on an
-  unchecked allocation, so a failed allocation constructs at address zero.
-  `ffi/zozz_internal.h` replaces it with a checked version, which is what makes
-  the `OutOfMemory` paths reachable rather than decorative.
+- **Real out-of-memory handling, as far as it goes** — `ozz::New` is a
+  placement-new on an unchecked allocation, so a failed allocation constructs
+  at address zero. `ffi/zozz_internal.h` replaces it with a checked version,
+  which is what makes the `OutOfMemory` paths reachable rather than decorative.
+  What that does **not** cover is ozz's own internal allocations: `Skeleton`
+  and `Animation` each build spans over an unchecked `Allocate` and write
+  through them, so a load under memory pressure is a null dereference inside
+  ozz. That is not fixable from outside; it is documented with file and line in
+  [UPSTREAM.md](UPSTREAM.md). Sampling, once loaded, allocates nothing.
 
 Every prefix of a valid archive — all ~15 000 of them across both fixtures — is
 verified to be rejected, and the whole archives still load. NaN ratios and
@@ -210,7 +215,7 @@ stopping at the first.
 |---|---|---|
 | Linux | x86_64 (glibc) | + aarch64, musl |
 | macOS | aarch64 | + x86_64 |
-| Windows | x86_64 (MSVC ABI) | + gnu ABI, aarch64 |
+| Windows | x86_64, both gnu and MSVC ABI | + aarch64 |
 
 Compiling proves the sources and build graph are portable; only an executed
 configuration proves behaviour, which is why the two are separate jobs.

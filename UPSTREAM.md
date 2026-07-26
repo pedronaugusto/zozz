@@ -88,6 +88,19 @@ caller sees no failure. Worked around by validating after load
 placement-new at address zero. Replaced by a checked `zozz::New` in
 `ffi/zozz_internal.h`.
 
+**ozz does not survive an allocation failure inside itself.** This one could
+not be closed from outside, so it is recorded rather than glossed.
+`Skeleton::Allocate` (`src/animation/runtime/skeleton.cc:81`) and
+`Animation::Allocate` (`src/animation/runtime/animation.cc:105`) both assign
+`allocation_ = allocator->Allocate(...)` and immediately construct spans over
+the result with no null check; the spans are then written through. Under memory
+pressure a load is a null dereference, not an error.
+
+zozz's own allocations are checked — that is what `zozz::New` above is for — but
+these happen inside a call zozz makes, so there is no position from which to
+intercept them. The practical reading: load assets where an allocation failure
+is not survivable anyway. Sampling, once loaded, allocates nothing.
+
 **Zero-length keyframe arrays trigger undefined behaviour.** With a zero count,
 `Animation::Load` reaches `_keys->values` through a null pointer
 (`animation.cc:214`). Harmless in practice — the surrounding loop has zero
