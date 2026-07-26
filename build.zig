@@ -111,27 +111,31 @@ pub fn build(b: *std.Build) void {
         lib.root_module.addCMacro("ZOZZ_BUILD", "");
     }
 
-    // -fno-exceptions matches how ozz is built upstream; it uses none and the
-    // C boundary could not propagate them anyway.
+    // ozz throws nothing and uses no RTTI, so both are disabled where doing so
+    // is reliable. Under the MSVC ABI they are not: the Microsoft standard
+    // library headers that ozz pulls in (<iostream> in its logger) are written
+    // assuming exceptions are available, and disabling them through Clang
+    // flags is a well-known source of header errors. The saving is a little
+    // code size; the cost would be a toolchain-specific build failure, so the
+    // MSVC ABI keeps the defaults.
     //
-    // Note what is NOT here: no -fno-access-control (the FFI layer uses only
-    // ozz's public API, so it has no reason to defeat access checking) and no
-    // blanket -fno-sanitize=undefined (UBSan stays on in Debug, controlled by
-    // the `sanitize_c` option, so that real undefined behaviour surfaces
-    // instead of being suppressed).
-    const cxx_flags = [_][]const u8{
-        "-std=c++17",
-        "-fno-exceptions",
-        "-fno-rtti",
-    };
+    // Note what is NOT here on any target: no -fno-access-control (the FFI
+    // layer uses only ozz's public API, so it has no reason to defeat access
+    // checking) and no blanket -fno-sanitize=undefined (UBSan stays on in
+    // Debug, controlled by the `sanitize_c` option, so that real undefined
+    // behaviour surfaces instead of being suppressed).
+    const cxx_flags: []const []const u8 = if (target.result.abi == .msvc)
+        &.{"-std=c++17"}
+    else
+        &.{ "-std=c++17", "-fno-exceptions", "-fno-rtti" };
 
     lib.root_module.addCSourceFiles(.{
         .files = &ozz_runtime_sources,
-        .flags = &cxx_flags,
+        .flags = cxx_flags,
     });
     lib.root_module.addCSourceFiles(.{
         .files = &zozz_ffi_sources,
-        .flags = &cxx_flags,
+        .flags = cxx_flags,
     });
     lib.root_module.sanitize_c = if (options.sanitize_c) .full else .off;
 
@@ -182,11 +186,11 @@ pub fn build(b: *std.Build) void {
     if (!options.enable_asserts) fixture.root_module.addCMacro("NDEBUG", "");
     fixture.root_module.addCSourceFiles(.{
         .files = &ozz_offline_sources,
-        .flags = &cxx_flags,
+        .flags = cxx_flags,
     });
     fixture.root_module.addCSourceFile(.{
         .file = b.path("tests/fixture.cpp"),
-        .flags = &cxx_flags,
+        .flags = cxx_flags,
     });
     fixture.root_module.sanitize_c = if (options.sanitize_c) .full else .off;
     fixture.root_module.linkLibrary(lib);
