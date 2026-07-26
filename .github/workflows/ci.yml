@@ -112,3 +112,13 @@ jobs:
         run: zig build -Denable_asserts=false
       - name: ReleaseFast with asserts enabled
         run: zig build -Doptimize=ReleaseFast -Denable_asserts=true
+
+  # Proves libs/ is still a pristine copy of the pinned upstream commit, rather
+  # than a claim in a markdown file. Needs network, so it is its own job and is
+  # not part of the local inner loop.
+  vendor-integrity:
+    name: vendor integrity
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - run: ci/verify-vendor.sh
