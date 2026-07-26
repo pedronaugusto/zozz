@@ -26,14 +26,14 @@ ZozzResult zozzSamplingContextCreate(int max_tracks,
     return ZOZZ_ERR_INVALID_ARGUMENT;
   }
 
-  ZozzSamplingContext* context = ozz::New<ZozzSamplingContext>();
+  ZozzSamplingContext* context = zozz::New<ZozzSamplingContext>();
   if (context == nullptr) return ZOZZ_ERR_OUT_OF_MEMORY;
 
   context->impl.Resize(max_tracks);
   if (context->impl.max_tracks() < max_tracks) {
     // Resize allocates internally and cannot report failure; an undersized
     // context after the call is the only observable symptom.
-    ozz::Delete(context);
+    zozz::Delete(context);
     return ZOZZ_ERR_OUT_OF_MEMORY;
   }
 
@@ -42,7 +42,7 @@ ZozzResult zozzSamplingContextCreate(int max_tracks,
 }
 
 void zozzSamplingContextDestroy(ZozzSamplingContext* context) {
-  ozz::Delete(context);
+  zozz::Delete(context);
 }
 
 void zozzSamplingContextInvalidate(ZozzSamplingContext* context) {

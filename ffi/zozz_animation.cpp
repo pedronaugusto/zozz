@@ -19,12 +19,12 @@ ZozzResult ValidateAnimation(const ozz::animation::Animation& animation) {
 ZozzResult FinishLoad(ZozzAnimation* animation, ZozzResult load_result,
                       ZozzAnimation** out) {
   if (load_result != ZOZZ_OK) {
-    ozz::Delete(animation);
+    zozz::Delete(animation);
     return load_result;
   }
   const ZozzResult valid = ValidateAnimation(animation->impl);
   if (valid != ZOZZ_OK) {
-    ozz::Delete(animation);
+    zozz::Delete(animation);
     return valid;
   }
   *out = animation;
@@ -38,7 +38,7 @@ extern "C" {
 ZozzResult zozzAnimationLoadFile(const char* path, ZozzAnimation** out) {
   if (out == nullptr) return ZOZZ_ERR_INVALID_ARGUMENT;
   *out = nullptr;
-  ZozzAnimation* animation = ozz::New<ZozzAnimation>();
+  ZozzAnimation* animation = zozz::New<ZozzAnimation>();
   if (animation == nullptr) return ZOZZ_ERR_OUT_OF_MEMORY;
   return FinishLoad(animation, zozz::LoadFromFile(path, &animation->impl), out);
 }
@@ -47,13 +47,13 @@ ZozzResult zozzAnimationLoadMemory(const void* data, size_t size,
                                    ZozzAnimation** out) {
   if (out == nullptr) return ZOZZ_ERR_INVALID_ARGUMENT;
   *out = nullptr;
-  ZozzAnimation* animation = ozz::New<ZozzAnimation>();
+  ZozzAnimation* animation = zozz::New<ZozzAnimation>();
   if (animation == nullptr) return ZOZZ_ERR_OUT_OF_MEMORY;
   return FinishLoad(
       animation, zozz::LoadFromMemory(data, size, &animation->impl), out);
 }
 
-void zozzAnimationDestroy(ZozzAnimation* animation) { ozz::Delete(animation); }
+void zozzAnimationDestroy(ZozzAnimation* animation) { zozz::Delete(animation); }
 
 float zozzAnimationDuration(const ZozzAnimation* animation) {
   return animation == nullptr ? 0.f : animation->impl.duration();

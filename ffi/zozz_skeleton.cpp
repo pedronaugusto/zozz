@@ -26,12 +26,12 @@ ZozzResult ValidateSkeleton(const ozz::animation::Skeleton& skeleton) {
 ZozzResult FinishLoad(ZozzSkeleton* skeleton, ZozzResult load_result,
                       ZozzSkeleton** out) {
   if (load_result != ZOZZ_OK) {
-    ozz::Delete(skeleton);
+    zozz::Delete(skeleton);
     return load_result;
   }
   const ZozzResult valid = ValidateSkeleton(skeleton->impl);
   if (valid != ZOZZ_OK) {
-    ozz::Delete(skeleton);
+    zozz::Delete(skeleton);
     return valid;
   }
   *out = skeleton;
@@ -45,7 +45,7 @@ extern "C" {
 ZozzResult zozzSkeletonLoadFile(const char* path, ZozzSkeleton** out) {
   if (out == nullptr) return ZOZZ_ERR_INVALID_ARGUMENT;
   *out = nullptr;
-  ZozzSkeleton* skeleton = ozz::New<ZozzSkeleton>();
+  ZozzSkeleton* skeleton = zozz::New<ZozzSkeleton>();
   if (skeleton == nullptr) return ZOZZ_ERR_OUT_OF_MEMORY;
   return FinishLoad(skeleton, zozz::LoadFromFile(path, &skeleton->impl), out);
 }
@@ -54,13 +54,13 @@ ZozzResult zozzSkeletonLoadMemory(const void* data, size_t size,
                                   ZozzSkeleton** out) {
   if (out == nullptr) return ZOZZ_ERR_INVALID_ARGUMENT;
   *out = nullptr;
-  ZozzSkeleton* skeleton = ozz::New<ZozzSkeleton>();
+  ZozzSkeleton* skeleton = zozz::New<ZozzSkeleton>();
   if (skeleton == nullptr) return ZOZZ_ERR_OUT_OF_MEMORY;
   return FinishLoad(skeleton, zozz::LoadFromMemory(data, size, &skeleton->impl),
                     out);
 }
 
-void zozzSkeletonDestroy(ZozzSkeleton* skeleton) { ozz::Delete(skeleton); }
+void zozzSkeletonDestroy(ZozzSkeleton* skeleton) { zozz::Delete(skeleton); }
 
 int zozzSkeletonNumJoints(const ZozzSkeleton* skeleton) {
   return skeleton == nullptr ? 0 : skeleton->impl.num_joints();

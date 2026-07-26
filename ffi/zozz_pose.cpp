@@ -107,7 +107,7 @@ ZozzResult zozzSoaPoseCreate(int num_joints, ZozzSoaPose** out) {
                           alignof(ozz::math::SoaTransform));
   if (storage == nullptr) return ZOZZ_ERR_OUT_OF_MEMORY;
 
-  ZozzSoaPose* pose = ozz::New<ZozzSoaPose>();
+  ZozzSoaPose* pose = zozz::New<ZozzSoaPose>();
   if (pose == nullptr) {
     allocator->Deallocate(storage);
     return ZOZZ_ERR_OUT_OF_MEMORY;
@@ -127,7 +127,7 @@ ZozzResult zozzSoaPoseCreate(int num_joints, ZozzSoaPose** out) {
 void zozzSoaPoseDestroy(ZozzSoaPose* pose) {
   if (pose == nullptr) return;
   ozz::memory::default_allocator()->Deallocate(pose->data);
-  ozz::Delete(pose);
+  zozz::Delete(pose);
 }
 
 int zozzSoaPoseNumJoints(const ZozzSoaPose* pose) {

@@ -65,6 +65,38 @@ after loading. ozz itself logs the version mismatch and leaves the object empty
 rather than failing the load; without that check a version-6 clip would present
 as a zero-duration animation and sample as garbage.
 
+## Known upstream behaviour worked around here
+
+Recorded so a future re-vendor can check whether any of it has been fixed, and
+so the workarounds are not mistaken for arbitrary defensiveness.
+
+**The archive reader does not check its reads.** `IArchive::operator>>` for a
+primitive is `Read(&v, sizeof(v))` followed by `assert(size == sizeof(v))`.
+Under `NDEBUG` the assert vanishes, so a short read leaves `v` holding stack
+garbage and parsing continues — with a count read that way deciding how much
+ozz allocates. The tag check is an assert too. Worked around by parsing
+everything, files included, through `ConstMemoryStream`, which never returns a
+short read and latches a truncation flag instead.
+
+**An unsupported archive version is not an error.** `Animation::Load` logs
+`"Unsupported animation version N."` and returns, leaving an empty object; the
+caller sees no failure. Worked around by validating after load
+(`duration() > 0`, joint counts in range).
+
+**`ozz::New` does not check its allocation.** It is
+`new (allocator->Allocate(...)) T(...)`, so a failed allocation is a
+placement-new at address zero. Replaced by a checked `zozz::New` in
+`ffi/zozz_internal.h`.
+
+**Zero-length keyframe arrays trigger undefined behaviour.** With a zero count,
+`Animation::Load` reaches `_keys->values` through a null pointer
+(`animation.cc:214`). Harmless in practice — the surrounding loop has zero
+iterations — but Zig's C sanitizer traps it, which is how it was found. Not
+worked around: it is upstream's to fix, it only occurs on malformed input that
+zozz already rejects, and suppressing the sanitizer to hide it would cost more
+than it saves. The truncated-archive test therefore runs with
+`-Dsanitize_c=false`.
+
 ## Re-vendoring procedure
 
 1. Clone upstream at the new tag; copy `include/` and `src/` over `libs/ozz/`,

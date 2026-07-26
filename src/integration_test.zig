@@ -278,3 +278,56 @@ test "the full pipeline runs against .ozz files on disk" {
 
     try expectPipelineWorks(gpa, skeleton, clip);
 }
+
+test "a truncated archive is refused rather than trusted" {
+    // The dangerous case is not random garbage — the tag test catches that.
+    // It is a VALID archive cut short: the tag passes, then every subsequent
+    // read runs past the end. ozz ignores short reads under NDEBUG, so
+    // whatever lands in a length field is believed and then allocated.
+    //
+    // ConstMemoryStream closes that by zero-filling past the end and latching
+    // a flag the loader checks. This test walks every prefix of both fixtures
+    // and requires that not one of them loads.
+    //
+    // Skipped when Zig's C sanitizer is on: upstream ozz forms member accesses
+    // on a null pointer when a keyframe array has zero entries — exactly the
+    // shape a zero-filled count produces. That is real (if benign) undefined
+    // behaviour in ozz, not in zozz, and it is worth keeping the sanitizer
+    // enabled to see rather than switching it off globally. Run
+    // `zig build test -Dsanitize_c=false` to exercise this test.
+    if (zozz.options.sanitize_c) return error.SkipZigTest;
+
+    const gpa = std.testing.allocator;
+    try zozz.setAllocator(gpa);
+    defer zozz.resetAllocator();
+
+    const skeleton_blob = try FixtureBlob.init(zozzFixtureSkeleton);
+    defer skeleton_blob.deinit();
+    const animation_blob = try FixtureBlob.init(zozzFixtureAnimation);
+    defer animation_blob.deinit();
+
+    var len: usize = 1;
+    while (len < skeleton_blob.bytes.len) : (len += 1) {
+        if (zozz.Skeleton.initFromMemory(skeleton_blob.bytes[0..len])) |loaded| {
+            loaded.deinit();
+            std.debug.print("truncated skeleton accepted at {d} bytes\n", .{len});
+            return error.TestUnexpectedResult;
+        } else |_| {}
+    }
+
+    len = 1;
+    while (len < animation_blob.bytes.len) : (len += 1) {
+        if (zozz.Animation.initFromMemory(animation_blob.bytes[0..len])) |loaded| {
+            loaded.deinit();
+            std.debug.print("truncated animation accepted at {d} bytes\n", .{len});
+            return error.TestUnexpectedResult;
+        } else |_| {}
+    }
+
+    // The complete archives must still load, so the test cannot pass by
+    // rejecting everything.
+    const whole_skeleton = try zozz.Skeleton.initFromMemory(skeleton_blob.bytes);
+    whole_skeleton.deinit();
+    const whole_animation = try zozz.Animation.initFromMemory(animation_blob.bytes);
+    whole_animation.deinit();
+}
