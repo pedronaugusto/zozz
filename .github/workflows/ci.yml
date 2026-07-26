@@ -63,6 +63,14 @@ jobs:
       - name: Test — C ABI standalone
         run: zig build test-c
 
+      # Zig's default ABI for Windows is gnu, so every step above exercises
+      # that one and the MSVC branches in build.zig would never be built at
+      # all. On a Windows runner the MSVC ABI is native, so the suite can run
+      # there too rather than merely compile.
+      - name: Test — Windows MSVC ABI
+        if: runner.os == 'Windows'
+        run: zig build test -Dtarget=x86_64-windows-msvc -Dsanitize_c=false
+
   # Compile-only coverage of the targets the suite cannot execute on. These
   # prove the sources and build graph are portable; the `test` job above is
   # what proves behaviour.
