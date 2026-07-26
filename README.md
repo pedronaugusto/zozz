@@ -204,17 +204,21 @@ ci/install-hooks.sh  # run it automatically before every push
 About twenty seconds for the full run. It reports every failure rather than
 stopping at the first.
 
-### What is verified where
+### Platform coverage
 
-| | Executed | Cross-compiled |
+| | Suite executed by CI | Compile-checked by CI |
 |---|---|---|
 | Linux | x86_64 (glibc) | + aarch64, musl |
 | macOS | aarch64 | + x86_64 |
 | Windows | x86_64 (MSVC ABI) | + gnu ABI, aarch64 |
 
-Cross-compilation proves the sources and build graph are portable; only the
-executed configurations prove behaviour. Both are reported separately in CI so
-the distinction stays visible rather than implied.
+Compiling proves the sources and build graph are portable; only an executed
+configuration proves behaviour, which is why the two are separate jobs.
+
+That table describes the matrix, not a promise: **the badge at the top of this
+file is the authority on whether those runs have actually happened and passed.**
+At the time of writing the suite has been executed by hand on macOS/aarch64
+only, and the Windows MSVC configuration has never been executed at all.
 
 ## Scope
 
