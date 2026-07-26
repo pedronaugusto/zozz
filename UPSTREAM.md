@@ -112,6 +112,10 @@ than it saves. The truncated-archive test therefore runs with
 
 ## Re-vendoring procedure
 
+`ci/verify-vendor.sh` fetches the pinned commit and diffs it against
+`libs/`, so the claim that this copy is unmodified is checked rather than
+asserted. It runs as its own CI job. Run it after any step below.
+
 1. Clone upstream at the new tag; copy `include/` and `src/` over `libs/ozz/`,
    re-applying the exclusions above.
 2. Update the table at the top of this file and `zozzOzzVersion()` in
