@@ -88,7 +88,7 @@ static void test_abi_layout(void) {
   CHECK(layout.float4x4_size == (uint32_t)sizeof(ZozzFloat4x4));
   CHECK(layout.float4x4_align == 16);
   CHECK(layout.allocator_size == (uint32_t)sizeof(ZozzAllocator));
-  CHECK(layout.result_count == (uint32_t)ZOZZ_ERR_SKELETON_MISMATCH + 1u);
+  CHECK(layout.result_count == (uint32_t)ZOZZ_ERR_INVALID_DATA + 1u);
 }
 
 static void test_allocator_rejects_incomplete(void) {

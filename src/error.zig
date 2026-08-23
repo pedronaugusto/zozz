@@ -20,6 +20,9 @@ pub const Error = error{
     BufferTooSmall,
     /// Skeleton and pose (or animation) describe different joint counts.
     SkeletonMismatch,
+    /// Authored offline data failed ozz validation: a raw skeleton over the
+    /// depth limit, or raw animation keys out of order.
+    InvalidData,
 };
 
 /// Turns a C result into a Zig error, or void on success.
@@ -38,6 +41,7 @@ pub fn check(result: c.Result) Error!void {
         .job_invalid => Error.JobInvalid,
         .buffer_too_small => Error.BufferTooSmall,
         .skeleton_mismatch => Error.SkeletonMismatch,
+        .invalid_data => Error.InvalidData,
     };
 }
 

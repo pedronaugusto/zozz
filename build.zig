@@ -45,6 +45,7 @@ const ozz_offline_sources = [_][]const u8{
 /// single monolithic binding file.
 const zozz_ffi_sources = [_][]const u8{
     "ffi/zozz_core.cpp",
+    "ffi/zozz_offline.cpp",
     "ffi/zozz_pose.cpp",
     "ffi/zozz_skeleton.cpp",
     "ffi/zozz_animation.cpp",
@@ -134,6 +135,10 @@ pub fn build(b: *std.Build) void {
         .flags = cxx_flags,
     });
     lib.root_module.addCSourceFiles(.{
+        .files = &ozz_offline_sources,
+        .flags = cxx_flags,
+    });
+    lib.root_module.addCSourceFiles(.{
         .files = &zozz_ffi_sources,
         .flags = cxx_flags,
     });
@@ -184,10 +189,8 @@ pub fn build(b: *std.Build) void {
     fixture.root_module.addIncludePath(b.path("ffi"));
     fixture.root_module.addIncludePath(b.path("tests"));
     if (!options.enable_asserts) fixture.root_module.addCMacro("NDEBUG", "");
-    fixture.root_module.addCSourceFiles(.{
-        .files = &ozz_offline_sources,
-        .flags = cxx_flags,
-    });
+    // The offline builders live in the zozz library itself now (they are part
+    // of the public surface); the fixture links them from there.
     fixture.root_module.addCSourceFile(.{
         .file = b.path("tests/fixture.cpp"),
         .flags = cxx_flags,
