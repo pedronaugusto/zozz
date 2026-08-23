@@ -5,9 +5,9 @@
 | | |
 |---|---|
 | Source | <https://github.com/guillaumeblanc/ozz-animation> |
-| Version | 0.16.0 |
-| Commit | `6cbdc790123aa4731d82e255df187b3a8a808256` |
-| Date | 2025-01-19 |
+| Version | 0.17.0 |
+| Commit | `744eb9d99f606eda849acb0b1204f7a3dc20bca1` |
+| Date | 2026-08-01 |
 | License | MIT (`libs/ozz/LICENSE.md`) |
 
 ## Why upstream and not a fork
