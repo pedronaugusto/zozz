@@ -170,7 +170,7 @@ test "the C library agrees with the extern declarations in c.zig" {
 test "version reporting is wired up" {
     const v = version();
     try std.testing.expectEqual(@as(u8, 0), v.major);
-    try std.testing.expectEqual(@as(u8, 1), v.minor);
+    try std.testing.expectEqual(@as(u8, 2), v.minor);
 
     const ozz = ozzVersion();
     try std.testing.expectEqual(@as(u8, 17), ozz.minor);
