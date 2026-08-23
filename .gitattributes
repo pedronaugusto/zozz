@@ -1,0 +1,5 @@
+# One line-ending truth on every platform. The Windows CI runner checks out
+# with core.autocrlf=true by default, which turned every LF file into CRLF and
+# made `zig fmt --check` flag the whole tree (run 32667186311). Checkout must
+# not be a transform.
+* text=auto eol=lf
