@@ -130,13 +130,27 @@ pub fn build(b: *std.Build) void {
     else
         &.{ "-std=c++17", "-fno-exceptions", "-fno-rtti" };
 
+    // The vendored TUs alone additionally drop UBSan's nonnull-attribute
+    // check. Upstream serialisation memcpy's a null source when an array is
+    // empty (`MemoryStream::Write`, src/base/io/stream.cc:160) — and an empty
+    // array is the NORMAL case: every short animation has empty
+    // `iframe_entries`, so the trap fires on well-formed input (CI run
+    // 32667186311, ubuntu Debug). The tree stays pristine
+    // (ci/verify-vendor.sh), so the site cannot be patched; the suppression
+    // is one check class, vendored code only — zozz's own ffi keeps the full
+    // sanitizer. UPSTREAM.md § "Known upstream behaviour" has the entry.
+    const ozz_cxx_flags = std.mem.concat(b.allocator, []const u8, &.{
+        cxx_flags,
+        &.{"-fno-sanitize=nonnull-attribute"},
+    }) catch @panic("OOM");
+
     lib.root_module.addCSourceFiles(.{
         .files = &ozz_runtime_sources,
-        .flags = cxx_flags,
+        .flags = ozz_cxx_flags,
     });
     lib.root_module.addCSourceFiles(.{
         .files = &ozz_offline_sources,
-        .flags = cxx_flags,
+        .flags = ozz_cxx_flags,
     });
     lib.root_module.addCSourceFiles(.{
         .files = &zozz_ffi_sources,
