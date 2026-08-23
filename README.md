@@ -7,8 +7,10 @@ runtime — skeletal animation sampling, in a package with no renderer, no engin
 and no asset system attached.
 
 - Vendored, pinned upstream ozz (0.17.0). No fork, no patches. See [UPSTREAM.md](UPSTREAM.md).
-- A real C ABI (`ffi/zozz.h`) that stands on its own — the Zig wrapper is one
-  consumer of it, not its only reason to exist.
+- A C ABI (`ffi/zozz.h`) that exists because it must — ozz is C++ and Zig
+  cannot call that — kept clean and tested as a real contract (the C smoke
+  test consumes it with no Zig in the picture). The Zig wrapper is its one
+  production consumer today.
 - Host allocator injection: every ozz allocation can go through your
   `std.mem.Allocator`.
 - Layout drift between the C header and the Zig externs is a **test failure**,
