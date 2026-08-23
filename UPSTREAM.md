@@ -101,6 +101,20 @@ these happen inside a call zozz makes, so there is no position from which to
 intercept them. The practical reading: load assets where an allocation failure
 is not survivable anyway. Sampling, once loaded, allocates nothing.
 
+**Serialising an empty array memcpy's a null source.** The save side of the
+same class as the entry below, found by CI's sanitized ubuntu arm (run
+32667186311): `MemoryStream::Write` (`src/base/io/stream.cc:160`) calls
+`std::memcpy(buffer_ + tell_, _buffer, _size)` without a size check, and an
+empty `ozz::vector` hands the archive a null data pointer — `memcpy`'s source
+is declared nonnull even for size 0, so the sanitizer traps. Unlike the load
+side, this fires on WELL-FORMED input: every short animation has an empty
+`iframe_entries`, so any save of a small clip reaches it. Handled differently
+for that reason: the vendored TUs are compiled with
+`-fno-sanitize=nonnull-attribute` (that one check class, vendored code only —
+see build.zig; zozz's own ffi keeps the full sanitizer) rather than by
+excusing the affected tests from the sanitizer, which would have unsanitized
+the whole normal path.
+
 **Zero-length keyframe arrays trigger undefined behaviour.** With a zero count,
 `Animation::Load` reaches `_keys->values` through a null pointer
 (`animation.cc:214`). Harmless in practice — the surrounding loop has zero
