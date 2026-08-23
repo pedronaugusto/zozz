@@ -230,6 +230,9 @@ only, and the Windows MSVC configuration has never been executed at all.
 Exposed today:
 
 - Skeleton and animation loading, from file or memory
+- Offline building: author a skeleton (`RawSkeleton`) or clip (`RawAnimation`)
+  at runtime and build it into the same runtime objects the loaders produce.
+  Importers (glTF and friends) are still not exposed
 - Sampling with a frame-coherency context
 - SoA pose storage, and SoA ↔ AoS conversion
 - Local-to-model
