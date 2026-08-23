@@ -24,6 +24,7 @@ pub const Result = enum(c_int) {
     job_invalid = 6,
     buffer_too_small = 7,
     skeleton_mismatch = 8,
+    invalid_data = 9,
 };
 
 //=============================================================================
@@ -75,6 +76,8 @@ pub const Skeleton = opaque {};
 pub const Animation = opaque {};
 pub const SamplingContext = opaque {};
 pub const SoaPose = opaque {};
+pub const RawSkeleton = opaque {};
+pub const RawAnimation = opaque {};
 
 //=============================================================================
 // Entry points
@@ -109,6 +112,21 @@ pub extern fn zozzSoaPoseSetIdentity(pose: *SoaPose) Result;
 pub extern fn zozzSoaPoseSetRestPose(pose: *SoaPose, skeleton: *const Skeleton) Result;
 pub extern fn zozzSoaPoseToLocalTransforms(pose: *const SoaPose, out: [*]Transform, count: usize) Result;
 pub extern fn zozzSoaPoseFromLocalTransforms(pose: *SoaPose, in: [*]const Transform, count: usize) Result;
+
+pub extern fn zozzRawSkeletonCreate(out: **RawSkeleton) Result;
+pub extern fn zozzRawSkeletonDestroy(raw: ?*RawSkeleton) void;
+pub extern fn zozzRawSkeletonAddJoint(raw: *RawSkeleton, parent: i32, name: [*:0]const u8, rest: *const Transform, out_index: ?*i32) Result;
+pub extern fn zozzRawSkeletonNumJoints(raw: ?*const RawSkeleton) c_int;
+pub extern fn zozzSkeletonBuild(raw: *const RawSkeleton, out: **Skeleton) Result;
+
+pub extern fn zozzRawAnimationCreate(num_tracks: c_int, duration: f32, name: ?[*:0]const u8, out: **RawAnimation) Result;
+pub extern fn zozzRawAnimationDestroy(raw: ?*RawAnimation) void;
+pub extern fn zozzRawAnimationNumTracks(raw: ?*const RawAnimation) c_int;
+pub extern fn zozzRawAnimationDuration(raw: ?*const RawAnimation) f32;
+pub extern fn zozzRawAnimationPushTranslation(raw: *RawAnimation, track: c_int, time: f32, value: *const [3]f32) Result;
+pub extern fn zozzRawAnimationPushRotation(raw: *RawAnimation, track: c_int, time: f32, value: *const [4]f32) Result;
+pub extern fn zozzRawAnimationPushScale(raw: *RawAnimation, track: c_int, time: f32, value: *const [3]f32) Result;
+pub extern fn zozzAnimationBuild(raw: *const RawAnimation, out: **Animation) Result;
 
 pub extern fn zozzSamplingContextCreate(max_tracks: c_int, out: **SamplingContext) Result;
 pub extern fn zozzSamplingContextDestroy(context: ?*SamplingContext) void;

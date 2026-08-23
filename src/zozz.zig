@@ -34,6 +34,7 @@ const skeleton_mod = @import("skeleton.zig");
 const animation_mod = @import("animation.zig");
 const pose_mod = @import("pose.zig");
 const sampling_mod = @import("sampling.zig");
+const offline_mod = @import("offline.zig");
 
 //=============================================================================
 // Public surface
@@ -60,6 +61,9 @@ pub const SoaPose = pose_mod.SoaPose;
 pub const SamplingContext = sampling_mod.SamplingContext;
 pub const sample = sampling_mod.sample;
 pub const localToModel = sampling_mod.localToModel;
+
+pub const RawSkeleton = offline_mod.RawSkeleton;
+pub const RawAnimation = offline_mod.RawAnimation;
 
 /// Build options the C library was actually compiled with, so a consumer can
 /// branch on them instead of assuming.
@@ -112,6 +116,7 @@ test {
     _ = sampling_mod;
     // Only reachable in a test build, where the fixture library is linked.
     _ = @import("integration_test.zig");
+    _ = @import("offline.zig");
 }
 
 test "the C library agrees with the extern declarations in c.zig" {
