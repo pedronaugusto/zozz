@@ -76,6 +76,8 @@ const char* zozzResultName(ZozzResult result) {
       return "buffer too small";
     case ZOZZ_ERR_SKELETON_MISMATCH:
       return "skeleton mismatch";
+    case ZOZZ_ERR_INVALID_DATA:
+      return "invalid data";
   }
   return "unknown result";
 }
