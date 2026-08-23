@@ -6,7 +6,7 @@ Zig bindings for the [ozz-animation](https://github.com/guillaumeblanc/ozz-anima
 runtime — skeletal animation sampling, in a package with no renderer, no engine
 and no asset system attached.
 
-- Vendored, pinned upstream ozz (0.16.0). No fork, no patches. See [UPSTREAM.md](UPSTREAM.md).
+- Vendored, pinned upstream ozz (0.17.0). No fork, no patches. See [UPSTREAM.md](UPSTREAM.md).
 - A real C ABI (`ffi/zozz.h`) that stands on its own — the Zig wrapper is one
   consumer of it, not its only reason to exist.
 - Host allocator injection: every ozz allocation can go through your

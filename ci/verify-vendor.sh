@@ -22,8 +22,8 @@ cd "$(dirname "$0")/.."
 
 # Kept in step with UPSTREAM.md by the check below, so the two cannot drift.
 UPSTREAM_URL="https://github.com/guillaumeblanc/ozz-animation.git"
-UPSTREAM_TAG="0.16.0"
-UPSTREAM_COMMIT="6cbdc790123aa4731d82e255df187b3a8a808256"
+UPSTREAM_TAG="0.17.0"
+UPSTREAM_COMMIT="744eb9d99f606eda849acb0b1204f7a3dc20bca1"
 
 # Directories and files copied verbatim from upstream.
 VENDORED=(include src LICENSE.md AUTHORS.md CHANGES.md)
