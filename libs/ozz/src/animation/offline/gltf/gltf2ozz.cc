@@ -111,10 +111,9 @@ bool FixupNames(_VectorType& _data, const char* _pretty_name,
 template <typename T>
 ozz::span<const T> BufferView(const tinygltf::Model& _model,
                               const tinygltf::Accessor& _accessor) {
-  const int32_t component_size =
-      tinygltf::GetComponentSizeInBytes(_accessor.componentType);
-  const int32_t element_size =
-      component_size * tinygltf::GetTypeSizeInBytes(_accessor.type);
+  const size_t element_size =
+      tinygltf::GetComponentSizeInBytes(_accessor.componentType) *
+      tinygltf::GetNumComponentsInType(_accessor.type);
   if (element_size != sizeof(T)) {
     ozz::log::Err() << "Invalid buffer view access. Expected element size '"
                     << sizeof(T) << " got " << element_size << " instead."
