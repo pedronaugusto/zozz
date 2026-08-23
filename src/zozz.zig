@@ -168,7 +168,7 @@ test "version reporting is wired up" {
     try std.testing.expectEqual(@as(u8, 1), v.minor);
 
     const ozz = ozzVersion();
-    try std.testing.expectEqual(@as(u8, 16), ozz.minor);
+    try std.testing.expectEqual(@as(u8, 17), ozz.minor);
 }
 
 test "result names are never null" {
