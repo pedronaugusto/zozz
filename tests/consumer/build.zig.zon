@@ -1,0 +1,10 @@
+.{
+    .name = .zozz_consumer,
+    .version = "0.0.0",
+    .fingerprint = 0x906dd6963effaffa,
+    .minimum_zig_version = "0.16.0",
+    .dependencies = .{
+        .zozz = .{ .path = "../.." },
+    },
+    .paths = .{""},
+}
