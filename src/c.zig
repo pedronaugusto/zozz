@@ -485,7 +485,7 @@ pub const IKTwoBoneJob = extern struct {
     end_joint: *const Float4x4,
     start_joint_correction: *[4]f32,
     mid_joint_correction: *[4]f32,
-    reached: ?*i32,
+    reached: ?*bool,
 };
 
 pub extern fn zozzIKTwoBoneJobDefaults(out: *IKTwoBoneJob) void;
@@ -501,7 +501,7 @@ pub const IKAimJob = extern struct {
     weight: f32,
     joint: *const Float4x4,
     joint_correction: *[4]f32,
-    reached: ?*i32,
+    reached: ?*bool,
 };
 
 pub extern fn zozzIKAimJobDefaults(out: *IKAimJob) void;

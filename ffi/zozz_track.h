@@ -178,6 +178,17 @@ typedef struct ZozzTrackEdge {
 /// iterator already positioned at the first edge (or already past the end if
 /// `from == to` or no edge exists) — step it with
 /// zozzTrackTriggeringIteratorNext.
+///
+/// **A track is cyclic, and the loop seam is an edge like any other.** The
+/// value at ratio 1 wraps to the value at ratio 0, so a wave that ends on the
+/// far side of `threshold` from where it starts fires one more edge — and that
+/// edge lands at the START of the range, not the end, because the wrap happens
+/// at `from`. Over [0, 1] a square wave that begins low and ends high yields
+/// four edges, not three, and the first is at ratio 0.
+///
+/// A host driving a footstep or a gunshot off a looping clip gets that trigger
+/// on every lap, at the moment the clip restarts. It is correct, and it is not
+/// what counting the keyframes suggests.
 ZOZZ_API ZozzResult zozzFloatTrackTriggeringJobRun(
     const ZozzFloatTrack* track, float from, float to, float threshold,
     ZozzTrackTriggeringIterator** out);

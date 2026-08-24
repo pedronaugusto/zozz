@@ -45,7 +45,7 @@ pub const TwoBoneResult = struct {
 pub fn runTwoBone(job: TwoBoneJob) err.Error!TwoBoneResult {
     var start_correction: [4]f32 = undefined;
     var mid_correction: [4]f32 = undefined;
-    var reached: i32 = 0;
+    var reached: bool = false;
     var raw = c.IKTwoBoneJob{
         .target = job.target,
         .mid_axis = job.mid_axis,
@@ -64,7 +64,7 @@ pub fn runTwoBone(job: TwoBoneJob) err.Error!TwoBoneResult {
     return .{
         .start_joint_correction = start_correction,
         .mid_joint_correction = mid_correction,
-        .reached = reached != 0,
+        .reached = reached,
     };
 }
 
@@ -94,7 +94,7 @@ pub const AimResult = struct {
 /// Runs an aim IK solve.
 pub fn runAim(job: AimJob) err.Error!AimResult {
     var correction: [4]f32 = undefined;
-    var reached: i32 = 0;
+    var reached: bool = false;
     var raw = c.IKAimJob{
         .target = job.target,
         .forward = job.forward,
@@ -108,7 +108,7 @@ pub fn runAim(job: AimJob) err.Error!AimResult {
         .reached = &reached,
     };
     try err.check(c.zozzIKAimJobRun(&raw));
-    return .{ .joint_correction = correction, .reached = reached != 0 };
+    return .{ .joint_correction = correction, .reached = reached };
 }
 
 /// Left-multiplies `correction` (xyzw, w LAST) onto `joint`'s current

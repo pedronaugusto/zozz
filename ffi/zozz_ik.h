@@ -7,9 +7,11 @@
 #ifndef ZOZZ_IK_H_
 #define ZOZZ_IK_H_
 
-#include <stdint.h>
-
 #include "zozz.h"
+
+#ifndef __cplusplus
+#include <stdbool.h>
+#endif
 
 #ifdef __cplusplus
 extern "C" {
@@ -60,9 +62,9 @@ typedef struct ZozzIKTwoBoneJob {
   float* start_joint_correction;
   float* mid_joint_correction;
 
-  /// Optional (NULL to ignore). On success, set to non-zero if the target
-  /// was reachable and zero otherwise. Left untouched on failure.
-  int32_t* reached;
+  /// Optional (NULL to ignore). On success, set to true if the target was
+  /// reachable, false otherwise. Left untouched on failure.
+  bool* reached;
 } ZozzIKTwoBoneJob;
 
 /// Fills `out` with ozz's own defaults: z-axis mid_axis, y-axis pole_vector,
@@ -112,9 +114,9 @@ typedef struct ZozzIKAimJob {
   /// to caller-owned storage; left untouched on failure.
   float* joint_correction;
 
-  /// Optional (NULL to ignore). On success, set to non-zero if the target
-  /// was reachable and zero otherwise. Left untouched on failure.
-  int32_t* reached;
+  /// Optional (NULL to ignore). On success, set to true if the target was
+  /// reachable, false otherwise. Left untouched on failure.
+  bool* reached;
 } ZozzIKAimJob;
 
 /// Fills `out` with ozz's own defaults: x-axis forward, zero target/offset,
