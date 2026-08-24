@@ -38,6 +38,7 @@ const offline_mod = @import("offline.zig");
 const track_mod = @import("track.zig");
 const utils_mod = @import("utils.zig");
 const motion_mod = @import("motion.zig");
+const blending_mod = @import("blending.zig");
 
 //=============================================================================
 // Public surface
@@ -88,6 +89,10 @@ pub const countScaleKeys = utils_mod.countScaleKeys;
 
 pub const BlendLayer = motion_mod.BlendLayer;
 pub const blendMotion = motion_mod.blend;
+
+pub const SoaWeights = blending_mod.SoaWeights;
+pub const BlendingLayer = blending_mod.Layer;
+pub const blend = blending_mod.run;
 
 /// Build options the C library was actually compiled with, so a consumer can
 /// branch on them instead of assuming.
@@ -141,6 +146,7 @@ test {
     _ = track_mod;
     _ = utils_mod;
     _ = motion_mod;
+    _ = blending_mod;
     // Only reachable in a test build, where the fixture library is linked.
     _ = @import("integration_test.zig");
     _ = @import("offline.zig");
