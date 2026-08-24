@@ -95,8 +95,12 @@ it in `src/c.zig`, because the guard only walks that file.
   call leaves the caller's outputs defined rather than untouched.
 - **Reject null pointers** with `ZOZZ_RESULT_INVALID_ARGUMENT`.
 - **A job's `Validate()` returning false is a real error path**, not an
-  assertion. Map it to `ZOZZ_RESULT_INVALID_ARGUMENT` — ozz jobs check their
-  own spans and will happily run garbage if you skip it.
+  assertion. Map it to **`ZOZZ_RESULT_JOB_INVALID`**, which exists for exactly
+  that and is what the rest of the package already returns — ozz jobs check
+  their own spans and will happily run garbage if you skip it.
+  `ZOZZ_RESULT_INVALID_ARGUMENT` is for what *this* layer rejects: a null
+  handle, a negative count, a NaN. Keeping the two apart is what lets a caller
+  tell "you passed me nonsense" from "ozz would not accept this job".
 - **The declared surface never depends on build options.** A header whose
   contents move with a `-D` flag cannot be checked.
 - **Allocate through `ozz::memory::default_allocator()`**, never `new` or
