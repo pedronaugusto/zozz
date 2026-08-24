@@ -36,6 +36,10 @@ const ozz_runtime_sources = [_][]const u8{
     "libs/ozz/src/animation/runtime/skeleton_utils.cc",
     "libs/ozz/src/animation/runtime/animation_utils.cc",
     "libs/ozz/src/animation/runtime/motion_blending_job.cc",
+    "libs/ozz/src/animation/runtime/ik_two_bone_job.cc",
+    "libs/ozz/src/animation/runtime/ik_aim_job.cc",
+    // geometry — matrix-palette skinning
+    "libs/ozz/src/geometry/runtime/skinning_job.cc",
 };
 
 /// ozz's offline builders, needed only by the test fixture. They turn raw
@@ -59,6 +63,8 @@ const zozz_ffi_sources = [_][]const u8{
     "ffi/zozz_animation.cpp",
     "ffi/zozz_sampling.cpp",
     "ffi/zozz_track.cpp",
+    "ffi/zozz_ik.cpp",
+    "ffi/zozz_skinning.cpp",
     "ffi/zozz_abi.cpp",
     "ffi/zozz_utils.cpp",
     "ffi/zozz_motion.cpp",
@@ -195,6 +201,13 @@ pub fn build(b: *std.Build) void {
     lib.installHeader(b.path("ffi/zozz_motion.h"), "zozz_motion.h");
     lib.installHeader(b.path("ffi/zozz_blending.h"), "zozz_blending.h");
     lib.installHeader(b.path("ffi/zozz_archive.h"), "zozz_archive.h");
+    // Consumers get the public headers without reaching into the source
+    // tree. zozz_ik.h and zozz_skinning.h are #include-d from zozz.h itself,
+    // so both must be installed alongside it for that #include to resolve
+    // from an installed prefix.
+    lib.installHeader(b.path("ffi/zozz.h"), "zozz.h");
+    lib.installHeader(b.path("ffi/zozz_ik.h"), "zozz_ik.h");
+    lib.installHeader(b.path("ffi/zozz_skinning.h"), "zozz_skinning.h");
 
     //=====================================================================
     // The Zig module.
