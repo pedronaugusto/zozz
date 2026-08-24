@@ -99,33 +99,6 @@ typedef enum ZozzResult {
   ZOZZ_RESULT_INVALID_DATA = 9,
 } ZozzResult;
 
-//===----------------------------------------------------------------------===//
-// DEPRECATED result spellings
-//
-// v0.2.0 named these enumerators without their type: ZOZZ_OK, ZOZZ_ERR_IO and
-// so on. Renaming them is a source-breaking change to a published C API, so
-// every old spelling stays here as a macro that expands to the new enumerator.
-// Existing code keeps compiling and keeps meaning exactly what it meant; the
-// values did not move.
-//
-// These aliases are DEPRECATED and will be REMOVED in v0.4.0. Port at your
-// convenience: ZOZZ_OK -> ZOZZ_RESULT_OK, and ZOZZ_ERR_<WHAT> ->
-// ZOZZ_RESULT_<WHAT> for the rest. They are macros rather than enumerators on
-// purpose — an alias enumerator would collide with the real one, and a second
-// enum would be a second thing to keep in step.
-//===----------------------------------------------------------------------===//
-
-#define ZOZZ_OK ZOZZ_RESULT_OK
-#define ZOZZ_ERR_FILE_NOT_FOUND ZOZZ_RESULT_FILE_NOT_FOUND
-#define ZOZZ_ERR_IO ZOZZ_RESULT_IO
-#define ZOZZ_ERR_BAD_FORMAT ZOZZ_RESULT_BAD_FORMAT
-#define ZOZZ_ERR_OUT_OF_MEMORY ZOZZ_RESULT_OUT_OF_MEMORY
-#define ZOZZ_ERR_INVALID_ARGUMENT ZOZZ_RESULT_INVALID_ARGUMENT
-#define ZOZZ_ERR_JOB_INVALID ZOZZ_RESULT_JOB_INVALID
-#define ZOZZ_ERR_BUFFER_TOO_SMALL ZOZZ_RESULT_BUFFER_TOO_SMALL
-#define ZOZZ_ERR_SKELETON_MISMATCH ZOZZ_RESULT_SKELETON_MISMATCH
-#define ZOZZ_ERR_INVALID_DATA ZOZZ_RESULT_INVALID_DATA
-
 /// Static, never-NULL description of a result code. Borrowed; do not free.
 ZOZZ_API const char* zozzResultName(ZozzResult result);
 
