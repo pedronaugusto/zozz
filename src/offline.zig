@@ -145,7 +145,52 @@ pub const RawAnimation = struct {
         try err.check(c.zozzRawAnimationExtractTimePoints(self.handle, out.ptr, out.len, &count));
         return out;
     }
+
+    /// Samples `joint`, in MODEL space, across the union of keyframe times
+    /// that affect it — its own keys plus every ancestor's, since a
+    /// parent's motion moves `joint` even at an instant where `joint` itself
+    /// carries no key. `skeleton` supplies the hierarchy a `RawAnimation`
+    /// does not otherwise know: its tracks pair with joints only by index.
+    ///
+    /// For offline use only (preview, re-timing, cooking) — `zozz.SamplingJob`
+    /// plus `zozz.LocalToModelJob` are the runtime path over a built
+    /// `Animation` and `Skeleton`. `skeleton` must have as many joints as
+    /// `self` has tracks, else `error.SkeletonMismatch`; `joint` must be one
+    /// of them. Allocated with `allocator`; caller frees the result.
+    pub fn sampleTrackModelSpace(
+        self: RawAnimation,
+        skeleton: skeleton_mod.Skeleton,
+        joint: u32,
+        allocator: std.mem.Allocator,
+    ) err.Error![]ModelSpaceSample {
+        var count: usize = undefined;
+        try err.check(c.zozzRawAnimationSampleTrackModelSpace(
+            self.handle,
+            skeleton.handle,
+            @intCast(joint),
+            null,
+            0,
+            &count,
+        ));
+
+        const out = allocator.alloc(ModelSpaceSample, count) catch return err.Error.OutOfMemory;
+        errdefer allocator.free(out);
+        try err.check(c.zozzRawAnimationSampleTrackModelSpace(
+            self.handle,
+            skeleton.handle,
+            @intCast(joint),
+            out.ptr,
+            out.len,
+            &count,
+        ));
+        return out;
+    }
 };
+
+/// One keyframe of `RawAnimation.sampleTrackModelSpace`: `time` in the
+/// animation's own seconds, `transform` the sampled joint's model-space
+/// matrix at that time.
+pub const ModelSpaceSample = c.ModelSpaceSample;
 
 //=============================================================================
 // Tests

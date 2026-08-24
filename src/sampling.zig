@@ -33,6 +33,16 @@ pub const SamplingContext = struct {
         c.zozzSamplingContextDestroy(self.handle);
     }
 
+    /// Resizes the context in place for clips of at most `max_tracks`
+    /// tracks, discarding whatever allocation it already held — the effect
+    /// of `deinit` + `init` without giving up the handle, for reusing one
+    /// context across differently-sized skeletons instead of destroying and
+    /// recreating it each time. Also invalidates the context, exactly like
+    /// `invalidate`.
+    pub fn resize(self: SamplingContext, max_tracks: u32) err.Error!void {
+        try err.check(c.zozzSamplingContextResize(self.handle, @intCast(max_tracks)));
+    }
+
     pub fn maxTracks(self: SamplingContext) u32 {
         return @intCast(c.zozzSamplingContextMaxTracks(self.handle));
     }

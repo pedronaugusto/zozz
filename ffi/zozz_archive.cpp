@@ -3,6 +3,7 @@
 //===----------------------------------------------------------------------===//
 
 #include "zozz_internal.h"
+#include "zozz_track_types.h"
 
 namespace {
 
@@ -156,6 +157,36 @@ ZozzResult zozzOArchiveSaveAnimation(ZozzOArchive* archive,
   return SaveObject(archive, animation->impl);
 }
 
+ZozzResult zozzOArchiveSaveFloatTrack(ZozzOArchive* archive,
+                                      const ZozzFloatTrack* track) {
+  if (track == nullptr) return ZOZZ_RESULT_INVALID_ARGUMENT;
+  return SaveObject(archive, track->impl);
+}
+
+ZozzResult zozzOArchiveSaveFloat2Track(ZozzOArchive* archive,
+                                       const ZozzFloat2Track* track) {
+  if (track == nullptr) return ZOZZ_RESULT_INVALID_ARGUMENT;
+  return SaveObject(archive, track->impl);
+}
+
+ZozzResult zozzOArchiveSaveFloat3Track(ZozzOArchive* archive,
+                                       const ZozzFloat3Track* track) {
+  if (track == nullptr) return ZOZZ_RESULT_INVALID_ARGUMENT;
+  return SaveObject(archive, track->impl);
+}
+
+ZozzResult zozzOArchiveSaveFloat4Track(ZozzOArchive* archive,
+                                       const ZozzFloat4Track* track) {
+  if (track == nullptr) return ZOZZ_RESULT_INVALID_ARGUMENT;
+  return SaveObject(archive, track->impl);
+}
+
+ZozzResult zozzOArchiveSaveQuaternionTrack(ZozzOArchive* archive,
+                                           const ZozzQuaternionTrack* track) {
+  if (track == nullptr) return ZOZZ_RESULT_INVALID_ARGUMENT;
+  return SaveObject(archive, track->impl);
+}
+
 ZozzResult zozzSkeletonSaveFile(const ZozzSkeleton* skeleton,
                                 const char* path) {
   if (skeleton == nullptr) return ZOZZ_RESULT_INVALID_ARGUMENT;
@@ -166,6 +197,36 @@ ZozzResult zozzAnimationSaveFile(const ZozzAnimation* animation,
                                  const char* path) {
   if (animation == nullptr) return ZOZZ_RESULT_INVALID_ARGUMENT;
   return SaveToFile(path, animation->impl);
+}
+
+ZozzResult zozzFloatTrackSaveFile(const ZozzFloatTrack* track,
+                                  const char* path) {
+  if (track == nullptr) return ZOZZ_RESULT_INVALID_ARGUMENT;
+  return SaveToFile(path, track->impl);
+}
+
+ZozzResult zozzFloat2TrackSaveFile(const ZozzFloat2Track* track,
+                                   const char* path) {
+  if (track == nullptr) return ZOZZ_RESULT_INVALID_ARGUMENT;
+  return SaveToFile(path, track->impl);
+}
+
+ZozzResult zozzFloat3TrackSaveFile(const ZozzFloat3Track* track,
+                                   const char* path) {
+  if (track == nullptr) return ZOZZ_RESULT_INVALID_ARGUMENT;
+  return SaveToFile(path, track->impl);
+}
+
+ZozzResult zozzFloat4TrackSaveFile(const ZozzFloat4Track* track,
+                                   const char* path) {
+  if (track == nullptr) return ZOZZ_RESULT_INVALID_ARGUMENT;
+  return SaveToFile(path, track->impl);
+}
+
+ZozzResult zozzQuaternionTrackSaveFile(const ZozzQuaternionTrack* track,
+                                       const char* path) {
+  if (track == nullptr) return ZOZZ_RESULT_INVALID_ARGUMENT;
+  return SaveToFile(path, track->impl);
 }
 
 }  // extern "C"
