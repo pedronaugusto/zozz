@@ -61,6 +61,17 @@ const zozz_dep = b.dependency("zozz", .{ .target = target, .optimize = optimize 
 exe.root_module.addImport("zozz", zozz_dep.module("zozz"));
 ```
 
+A C or C++ host takes the library and its installed header instead:
+
+```zig
+exe.root_module.linkLibrary(zozz_dep.artifact("zozz"));  // then #include <zozz.h>
+```
+
+Forward `optimize` as shown. zozz does not turn on Zig's C sanitizer for you
+(see [Build hygiene](#build-hygiene)), so a mismatched build mode is a size
+difference rather than an unresolved `__ubsan_handle_*` symbol — but a Debug
+library inside a release executable is still not what you meant.
+
 ## Design
 
 ### The SoA pose is opaque, and stays that way
@@ -205,8 +216,14 @@ results as `zozz.Error` values and its `c.Result` field names have not changed.
   what compiles.
 - No `-fno-access-control`. The FFI layer uses only ozz's public API, so it has
   no reason to defeat C++ access checking and no coupling to ozz internals.
-- UBSan is **not** blanket-disabled. It stays on in Debug (`-Dsanitize_c`), so
-  real undefined behaviour surfaces instead of being suppressed.
+- UBSan is **not** blanket-disabled, and it is **not** on by default either.
+  `-Dsanitize_c=true` turns it on and zozz's own CI runs Debug that way, so
+  real undefined behaviour surfaces instead of being suppressed. It stays off
+  by default because Zig's C sanitizer emits calls into a runtime linked only
+  into a compilation that is itself sanitized: a consumer who forgets to
+  forward `optimize` would get an `undefined symbol: __ubsan_handle_*` link
+  failure naming nothing they can act on. A library does not get to decide
+  that its consumers are running a sanitizer.
 - Build options are declared once and mirrored into a Zig `options` module, so
   the wrapper cannot disagree with how the C++ was compiled.
 - One translation unit per concern on both sides of the boundary.
@@ -227,17 +244,28 @@ of a future cook.
 is a real C contract rather than a private detail of the Zig wrapper, and that
 the allocator seam is genuinely in use (it asserts allocations balance).
 
-The truncated-archive test skips under Zig's C sanitizer and needs:
-
 ```sh
-zig build test -Dsanitize_c=false
+zig build --build-file tests/consumer/build.zig run
 ```
 
-Not because the test fails, but because upstream ozz forms member accesses on a
-null pointer when a keyframe array has zero entries — the exact shape a
+builds zozz the way a downstream package does — through `b.dependency`, which
+resolves the artifact by scanning the dependency's install step and the header
+by its installed spelling. Neither of those is exercised by anything in `src/`
+or `tests/`, so both can break while the whole suite stays green. The Zig
+module and the C artifact are each driven by a real consumer there.
+
+Zig's C sanitizer is off by default, so a plain `zig build test` runs
+everything. Turning it on skips one test:
+
+```sh
+zig build test -Dsanitize_c=true    # skips the truncated-archive test
+```
+
+Not because that test fails, but because upstream ozz forms member accesses on
+a null pointer when a keyframe array has zero entries — the exact shape a
 zero-filled count produces. That is real, if benign, undefined behaviour *in
-ozz*, and keeping the sanitizer on to see it is worth more than switching it
-off globally to silence it. See [UPSTREAM.md](UPSTREAM.md).
+ozz*, and being able to see it is worth more than switching the sanitizer off
+globally to silence it. See [UPSTREAM.md](UPSTREAM.md).
 
 To additionally check a real asset on disk:
 
@@ -254,9 +282,9 @@ NaN ratio that is refused.
 ### Continuous integration
 
 CI runs the whole suite on **Linux, macOS and Windows**, in four optimize modes
-with the sanitizer both on and off, plus the standalone C test — and
-cross-compiles eight further targets, runs the ABI drift mutation test, and
-verifies the vendored tree. See
+with the sanitizer both on and off, plus the standalone C test and the
+downstream-consumer build — and cross-compiles eight further targets, runs the
+ABI drift mutation test, and verifies the vendored tree. See
 [`.github/workflows/ci.yml`](.github/workflows/ci.yml).
 
 The same matrix runs locally, so a failure is reproducible on your machine

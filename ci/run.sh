@@ -68,7 +68,8 @@ section 'Hygiene'
 
 # Only our own Zig sources: libs/ozz is vendored verbatim and must not be
 # reformatted, or the next re-vendor becomes an unreadable diff.
-run 'zig fmt (src, build.zig)' zig fmt --check src build.zig
+run 'zig fmt (src, tests, build.zig)' \
+  zig fmt --check src tests/consumer build.zig
 
 #-----------------------------------------------------------------------------
 section 'Tests — native'
@@ -82,9 +83,11 @@ else
   printf '  %s(on-disk asset test will skip: set ZOZZ_SKELETON and ZOZZ_ANIMATION)%s\n' "$DIM" "$OFF"
 fi
 
-# Default config: the C sanitizer is on in Debug, so this is the run that would
-# catch undefined behaviour in our own code.
-run 'test Debug (UBSan on)' zig build test -Doptimize=Debug ${ASSET_ARGS[@]+"${ASSET_ARGS[@]}"}
+# The C sanitizer is opt-in — a library must not force its runtime into a
+# consumer's link — so zozz's own Debug run asks for it explicitly. This is the
+# run that would catch undefined behaviour in our own code.
+run 'test Debug (UBSan on)' \
+  zig build test -Doptimize=Debug -Dsanitize_c=true ${ASSET_ARGS[@]+"${ASSET_ARGS[@]}"}
 
 # The truncated-archive test only runs with the sanitizer off — see UPSTREAM.md
 # for why (upstream ozz UB on zero-count arrays). This is the run that proves
@@ -99,6 +102,12 @@ if [ $QUICK -eq 0 ]; then
 
   # The C boundary on its own, with no Zig in the picture.
   run 'test-c (C ABI standalone)' zig build test-c
+
+  # Consuming zozz as a dependency is a different code path from building it —
+  # artifact registration and installed-header spelling are invisible to the
+  # in-repo suite. See tests/consumer/build.zig.
+  run 'consumer (module + artifact)' \
+    zig build --build-file tests/consumer/build.zig run
 
   #---------------------------------------------------------------------------
   section 'ABI'

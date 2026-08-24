@@ -292,9 +292,10 @@ test "a truncated archive is refused rather than trusted" {
     // Skipped when Zig's C sanitizer is on: upstream ozz forms member accesses
     // on a null pointer when a keyframe array has zero entries — exactly the
     // shape a zero-filled count produces. That is real (if benign) undefined
-    // behaviour in ozz, not in zozz, and it is worth keeping the sanitizer
-    // enabled to see rather than switching it off globally. Run
-    // `zig build test -Dsanitize_c=false` to exercise this test.
+    // behaviour in ozz, not in zozz, and it is worth being able to see rather
+    // than suppressing globally. The sanitizer is off by default, so a plain
+    // `zig build test` exercises this; `-Dsanitize_c=true` is the run that
+    // skips it.
     if (zozz.options.sanitize_c) return error.SkipZigTest;
 
     const gpa = std.testing.allocator;
