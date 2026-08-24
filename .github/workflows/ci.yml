@@ -36,12 +36,13 @@ jobs:
       # Only our own sources: libs/ozz is vendored verbatim and reformatting it
       # would make the next re-vendor an unreadable diff.
       - name: Formatting
-        run: zig fmt --check src build.zig
+        run: zig fmt --check src tests/consumer build.zig
 
-      # Zig's C undefined-behaviour sanitizer is on by default in Debug, so
-      # this is the run that would catch UB in zozz's own code.
+      # Zig's C undefined-behaviour sanitizer is opt-in — a library must not
+      # force its runtime into a consumer's link — so zozz's own Debug run asks
+      # for it explicitly. This is the run that would catch UB in zozz's code.
       - name: Test — Debug, sanitizer on
-        run: zig build test -Doptimize=Debug
+        run: zig build test -Doptimize=Debug -Dsanitize_c=true
 
       # The truncated-archive test runs only with the sanitizer off; see
       # UPSTREAM.md for why. This is the run that proves malformed input is
@@ -70,6 +71,14 @@ jobs:
       - name: Test — Windows MSVC ABI
         if: runner.os == 'Windows'
         run: zig build test -Dtarget=x86_64-windows-msvc -Dsanitize_c=false
+
+      # Consuming zozz through `b.dependency` is a different code path from
+      # building it: artifacts resolve by scanning the dependency's install
+      # step, and headers by their installed spelling. Neither is exercised by
+      # anything in src/ or tests/, so both can break while the suite above
+      # stays green. See tests/consumer/build.zig.
+      - name: Consumer — Zig module and C artifact
+        run: zig build --build-file tests/consumer/build.zig run
 
   # Compile-only coverage of the targets the suite cannot execute on. These
   # prove the sources and build graph are portable; the `test` job above is
