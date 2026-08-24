@@ -122,8 +122,3 @@ fn lenOr0(comptime T: type, slice: ?[]const T) usize {
 fn mutLenOr0(comptime T: type, slice: ?[]T) usize {
     return if (slice) |s| s.len else 0;
 }
-
-/// Deprecated: call `Job.run` instead — `(job).run()`.
-pub fn run(job: Job) err.Error!void {
-    return job.run();
-}

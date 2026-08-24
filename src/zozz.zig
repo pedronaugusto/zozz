@@ -75,10 +75,6 @@ pub const SoaPose = pose_mod.SoaPose;
 pub const SamplingContext = sampling_mod.SamplingContext;
 pub const SamplingJob = sampling_mod.SamplingJob;
 pub const LocalToModelJob = sampling_mod.LocalToModelJob;
-/// Deprecated: use `SamplingJob.run` instead.
-pub const sample = sampling_mod.sample;
-/// Deprecated: use `LocalToModelJob.run` instead.
-pub const localToModel = sampling_mod.localToModel;
 
 pub const RawSkeleton = offline_mod.RawSkeleton;
 pub const RawAnimation = offline_mod.RawAnimation;
@@ -103,14 +99,10 @@ pub const countScaleKeys = utils_mod.countScaleKeys;
 
 pub const BlendLayer = motion_mod.BlendLayer;
 pub const MotionBlendingJob = motion_mod.MotionBlendingJob;
-/// Deprecated: use `MotionBlendingJob.run` instead.
-pub const blendMotion = motion_mod.blend;
 
 pub const SoaWeights = blending_mod.SoaWeights;
 pub const BlendingLayer = blending_mod.Layer;
 pub const BlendingJob = blending_mod.BlendingJob;
-/// Deprecated: use `BlendingJob.run` instead.
-pub const blend = blending_mod.run;
 
 pub const Stream = archive_mod.Stream;
 pub const OArchive = archive_mod.OArchive;
@@ -198,10 +190,10 @@ test {
     // the address of is never analysed, pulled-in module or not — so without
     // this, a real error in one of these bodies would compile clean.
     comptime {
-        _ = &ik_mod.runTwoBone;
-        _ = &ik_mod.runAim;
+        _ = &ik_mod.TwoBoneJob.run;
+        _ = &ik_mod.AimJob.run;
         _ = &ik_mod.applyCorrection;
-        _ = &skinning_mod.run;
+        _ = &skinning_mod.Job.run;
     }
 
     // Only reachable in a test build, where the fixture library is linked.
@@ -370,32 +362,4 @@ test "buffer size and joint count mismatches are refused" {
     try std.testing.expectError(Error.BufferTooSmall, pose.fromLocalTransforms(&too_small));
 
     try std.testing.expectError(Error.InvalidArgument, SoaPose.init(0));
-}
-
-test "a deprecated free-function alias agrees with its job-struct replacement" {
-    // Every job spells the same shape now — a struct with a `run` method —
-    // and every old free function is kept as a thin alias that just calls
-    // it. `blendMotion`/`MotionBlendingJob` is the cheapest of the seven to
-    // set up standalone, but the wiring it exercises (old name forwarding to
-    // `Type.run`) is identical for all seven.
-    const gpa = std.testing.allocator;
-    try setAllocator(gpa);
-    defer resetAllocator();
-
-    const delta: Transform = .{
-        .translation = .{ 3, 0, 4 },
-        .rotation = .{ 0, 0, 0, 1 },
-        .scale = .{ 2, 2, 2 },
-    };
-    const layers = [_]BlendLayer{.{ .weight = 1, .delta = &delta }};
-
-    var via_deprecated: Transform = undefined;
-    try blendMotion(&layers, &via_deprecated);
-
-    var via_current: Transform = undefined;
-    try (MotionBlendingJob{ .layers = &layers, .out = &via_current }).run();
-
-    try std.testing.expectEqual(via_deprecated.translation, via_current.translation);
-    try std.testing.expectEqual(via_deprecated.rotation, via_current.rotation);
-    try std.testing.expectEqual(via_deprecated.scale, via_current.scale);
 }

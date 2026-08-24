@@ -90,21 +90,3 @@ pub const BlendingJob = struct {
         ));
     }
 };
-
-/// Deprecated: call `BlendingJob.run` instead — `(job).run(gpa)`.
-pub fn run(
-    gpa: std.mem.Allocator,
-    layers: []const Layer,
-    additive_layers: []const Layer,
-    rest_pose: SoaPose,
-    threshold: f32,
-    out: SoaPose,
-) (std.mem.Allocator.Error || err.Error)!void {
-    return (BlendingJob{
-        .layers = layers,
-        .additive_layers = additive_layers,
-        .rest_pose = rest_pose,
-        .threshold = threshold,
-        .out = out,
-    }).run(gpa);
-}
