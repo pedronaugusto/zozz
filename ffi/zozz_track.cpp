@@ -3,6 +3,7 @@
 //===----------------------------------------------------------------------===//
 
 #include "zozz_internal.h"
+#include "zozz_track_types.h"
 #include "zozz_track.h"
 
 #include <cmath>
@@ -16,22 +17,6 @@
 // so — unlike ZozzSkeleton and friends — these live here rather than in
 // zozz_internal.h.
 //===----------------------------------------------------------------------===//
-
-struct ZozzFloatTrack {
-  ozz::animation::FloatTrack impl;
-};
-struct ZozzFloat2Track {
-  ozz::animation::Float2Track impl;
-};
-struct ZozzFloat3Track {
-  ozz::animation::Float3Track impl;
-};
-struct ZozzFloat4Track {
-  ozz::animation::Float4Track impl;
-};
-struct ZozzQuaternionTrack {
-  ozz::animation::QuaternionTrack impl;
-};
 
 // The iterator's job pointer (`job_` in ozz's Iterator) is only ever valid
 // for as long as the TrackTriggeringJob it was built from is alive, so the

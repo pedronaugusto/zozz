@@ -107,7 +107,7 @@ ZozzResult zozzIKTwoBoneJobRun(const ZozzIKTwoBoneJob* job) {
 
   m::StorePtrU(start_correction.xyzw, job->start_joint_correction);
   m::StorePtrU(mid_correction.xyzw, job->mid_joint_correction);
-  if (job->reached != nullptr) *job->reached = reached ? 1 : 0;
+  if (job->reached != nullptr) *job->reached = reached;
   return ZOZZ_RESULT_OK;
 }
 
@@ -140,7 +140,7 @@ ZozzResult zozzIKAimJobRun(const ZozzIKAimJob* job) {
   if (!ozz_job.Run()) return ZOZZ_RESULT_JOB_INVALID;
 
   m::StorePtrU(correction.xyzw, job->joint_correction);
-  if (job->reached != nullptr) *job->reached = reached ? 1 : 0;
+  if (job->reached != nullptr) *job->reached = reached;
   return ZOZZ_RESULT_OK;
 }
 
