@@ -8,6 +8,12 @@
 #include "ozz/base/containers/vector.h"
 #include "zozz_internal.h"
 
+struct ZozzSoaWeights {
+  ozz::math::SimdFloat4* data;
+  int num_joints;
+  int num_soa_joints;
+};
+
 namespace {
 
 /// Distributes `num_joints` flat weights into SoA blocks, one float per
@@ -51,12 +57,6 @@ bool FillLayers(const ZozzBlendingLayer* layers, size_t count,
 }
 
 }  // namespace
-
-struct ZozzSoaWeights {
-  ozz::math::SimdFloat4* data;
-  int num_joints;
-  int num_soa_joints;
-};
 
 extern "C" {
 
