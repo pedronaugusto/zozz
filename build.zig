@@ -28,6 +28,9 @@ const ozz_runtime_sources = [_][]const u8{
     "libs/ozz/src/animation/runtime/skeleton.cc",
     "libs/ozz/src/animation/runtime/sampling_job.cc",
     "libs/ozz/src/animation/runtime/local_to_model_job.cc",
+    "libs/ozz/src/animation/runtime/skeleton_utils.cc",
+    "libs/ozz/src/animation/runtime/animation_utils.cc",
+    "libs/ozz/src/animation/runtime/motion_blending_job.cc",
 };
 
 /// ozz's offline builders, needed only by the test fixture. They turn raw
@@ -51,6 +54,8 @@ const zozz_ffi_sources = [_][]const u8{
     "ffi/zozz_animation.cpp",
     "ffi/zozz_sampling.cpp",
     "ffi/zozz_abi.cpp",
+    "ffi/zozz_utils.cpp",
+    "ffi/zozz_motion.cpp",
 };
 
 pub fn build(b: *std.Build) void {
@@ -172,7 +177,11 @@ pub fn build(b: *std.Build) void {
     lib.root_module.sanitize_c = if (options.sanitize_c) .full else .off;
 
     // Consumers get the public header without reaching into the source tree.
+    // zozz.h #includes zozz_utils.h and zozz_motion.h by relative path, so
+    // both must land next to it in the installed include directory too.
     lib.installHeader(b.path("ffi/zozz.h"), "zozz.h");
+    lib.installHeader(b.path("ffi/zozz_utils.h"), "zozz_utils.h");
+    lib.installHeader(b.path("ffi/zozz_motion.h"), "zozz_motion.h");
 
     //=====================================================================
     // The Zig module.
