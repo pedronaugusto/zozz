@@ -1,7 +1,7 @@
 //===----------------------------------------------------------------------===//
 // zozz — two-bone and single-joint inverse kinematics.
 //
-// Conventions, ownership and thread safety are documented in zozz.h.
+// Conventions, ownership and thread safety are documented in zozz_core.h.
 //===----------------------------------------------------------------------===//
 
 #ifndef ZOZZ_IK_H_

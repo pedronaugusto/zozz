@@ -1,7 +1,7 @@
 //===----------------------------------------------------------------------===//
 // zozz — matrix-palette skinning.
 //
-// Conventions, ownership and thread safety are documented in zozz.h.
+// Conventions, ownership and thread safety are documented in zozz_core.h.
 //===----------------------------------------------------------------------===//
 
 #ifndef ZOZZ_SKINNING_H_

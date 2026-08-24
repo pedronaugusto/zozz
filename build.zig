@@ -210,29 +210,25 @@ pub fn build(b: *std.Build) void {
     lib.root_module.sanitize_c = if (options.sanitize_c) .full else .off;
 
     // Consumers get the public headers without reaching into the source tree.
+    // zozz.h is the umbrella and #includes every one of the rest by relative
+    // path, so all of them have to land side by side in the installed include
+    // directory for that #include to resolve from an installed prefix.
     lib.installHeader(b.path("ffi/zozz.h"), "zozz.h");
-    lib.installHeader(b.path("ffi/zozz_track.h"), "zozz_track.h");
-    // Consumers get the public header without reaching into the source tree.
-    // zozz.h #includes zozz_utils.h and zozz_motion.h by relative path, so
-    // both must land next to it in the installed include directory too.
-    lib.installHeader(b.path("ffi/zozz.h"), "zozz.h");
-    lib.installHeader(b.path("ffi/zozz_utils.h"), "zozz_utils.h");
-    lib.installHeader(b.path("ffi/zozz_motion.h"), "zozz_motion.h");
-    lib.installHeader(b.path("ffi/zozz_blending.h"), "zozz_blending.h");
-    lib.installHeader(b.path("ffi/zozz_archive.h"), "zozz_archive.h");
-    // Consumers get the public headers without reaching into the source
-    // tree. zozz_ik.h and zozz_skinning.h are #include-d from zozz.h itself,
-    // so both must be installed alongside it for that #include to resolve
-    // from an installed prefix.
-    lib.installHeader(b.path("ffi/zozz.h"), "zozz.h");
+    lib.installHeader(b.path("ffi/zozz_core.h"), "zozz_core.h");
+    lib.installHeader(b.path("ffi/zozz_skeleton.h"), "zozz_skeleton.h");
+    lib.installHeader(b.path("ffi/zozz_animation.h"), "zozz_animation.h");
+    lib.installHeader(b.path("ffi/zozz_pose.h"), "zozz_pose.h");
+    lib.installHeader(b.path("ffi/zozz_sampling.h"), "zozz_sampling.h");
     lib.installHeader(b.path("ffi/zozz_ik.h"), "zozz_ik.h");
     lib.installHeader(b.path("ffi/zozz_skinning.h"), "zozz_skinning.h");
-    // Consumers get the public headers without reaching into the source
-    // tree. zozz.h #includes the other two by relative path, so all three
-    // must land side by side in the install prefix.
-    lib.installHeader(b.path("ffi/zozz.h"), "zozz.h");
+    lib.installHeader(b.path("ffi/zozz_utils.h"), "zozz_utils.h");
+    lib.installHeader(b.path("ffi/zozz_motion.h"), "zozz_motion.h");
+    lib.installHeader(b.path("ffi/zozz_offline.h"), "zozz_offline.h");
     lib.installHeader(b.path("ffi/zozz_optimizer.h"), "zozz_optimizer.h");
     lib.installHeader(b.path("ffi/zozz_rawtrack.h"), "zozz_rawtrack.h");
+    lib.installHeader(b.path("ffi/zozz_track.h"), "zozz_track.h");
+    lib.installHeader(b.path("ffi/zozz_blending.h"), "zozz_blending.h");
+    lib.installHeader(b.path("ffi/zozz_archive.h"), "zozz_archive.h");
 
     //=====================================================================
     // The Zig module.
