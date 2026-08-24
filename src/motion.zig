@@ -32,8 +32,3 @@ pub const MotionBlendingJob = struct {
         try err.check(c.zozzMotionBlend(self.layers.ptr, self.layers.len, self.out));
     }
 };
-
-/// Deprecated: call `MotionBlendingJob.run` instead — `(job).run()`.
-pub fn blend(layers: []const BlendLayer, out: *math.Transform) err.Error!void {
-    return (MotionBlendingJob{ .layers = layers, .out = out }).run();
-}

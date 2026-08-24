@@ -119,8 +119,8 @@ pub const RawAnimation = struct {
 
     /// Samples one track at `time` (seconds; clamped to the track's own
     /// first/last key outside its range). For offline use only (preview,
-    /// re-timing, cooking) — use `zozz.sample` against a built `Animation`
-    /// at runtime.
+    /// re-timing, cooking) — use `zozz.SamplingJob` against a built
+    /// `Animation` at runtime.
     pub fn sampleTrack(self: RawAnimation, track: u32, time: f32) err.Error!math.Transform {
         var out: math.Transform = undefined;
         try err.check(c.zozzRawAnimationSampleTrack(self.handle, @intCast(track), time, &out));
