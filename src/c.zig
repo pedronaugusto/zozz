@@ -448,7 +448,7 @@ pub extern fn zozzSkeletonSaveFile(skeleton: ?*const Skeleton, path: [*:0]const 
 pub extern fn zozzAnimationSaveFile(animation: ?*const Animation, path: [*:0]const u8) Result;
 pub extern fn zozzSkeletonJointRestPoseLocal(skeleton: ?*const Skeleton, joint: c_int, out: *Transform) Result;
 pub extern fn zozzSkeletonRestPoseModelSpace(skeleton: ?*const Skeleton, out: [*]Float4x4, count: usize) Result;
-pub extern fn zozzSkeletonJointIsLeaf(skeleton: ?*const Skeleton, joint: c_int, out: *c_int) Result;
+pub extern fn zozzSkeletonJointIsLeaf(skeleton: ?*const Skeleton, joint: c_int, out: *bool) Result;
 pub extern fn zozzSkeletonFindJoint(skeleton: ?*const Skeleton, name: ?[*:0]const u8) c_int;
 pub extern fn zozzSkeletonIterateJointsDepthFirst(skeleton: ?*const Skeleton, from: c_int, visitor: JointVisitor, user: ?*anyopaque) Result;
 pub extern fn zozzSkeletonIterateJointsDepthFirstReverse(skeleton: ?*const Skeleton, visitor: JointVisitor, user: ?*anyopaque) Result;

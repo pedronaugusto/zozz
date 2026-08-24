@@ -79,15 +79,15 @@ ZozzResult zozzSkeletonRestPoseModelSpace(const ZozzSkeleton* skeleton,
 }
 
 ZozzResult zozzSkeletonJointIsLeaf(const ZozzSkeleton* skeleton, int joint,
-                                   int* out) {
+                                   bool* out) {
   if (skeleton == nullptr || out == nullptr) {
     return ZOZZ_RESULT_INVALID_ARGUMENT;
   }
-  *out = 0;
+  *out = false;
   if (joint < 0 || joint >= skeleton->impl.num_joints()) {
     return ZOZZ_RESULT_INVALID_ARGUMENT;
   }
-  *out = ozz::animation::IsLeaf(skeleton->impl, joint) ? 1 : 0;
+  *out = ozz::animation::IsLeaf(skeleton->impl, joint);
   return ZOZZ_RESULT_OK;
 }
 
