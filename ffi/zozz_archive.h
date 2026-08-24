@@ -27,6 +27,12 @@ extern "C" {
 
 typedef struct ZozzStream {
   /// Returns non-zero if the destination is open and ready to accept writes.
+  ///
+  /// Deliberately `int`, not `bool`, unlike an out-parameter elsewhere in
+  /// this ABI: this field is a HOST-IMPLEMENTED callback, not a value zozz
+  /// hands back, and a host compiling as strict C89 (no `<stdbool.h>`) can
+  /// still implement it without pulling in a C99+ header just for this one
+  /// signature.
   int (*opened)(void* user);
   /// Writes `size` bytes from `data`. Must return the number of bytes
   /// actually written; a short count is treated as an I/O failure.
