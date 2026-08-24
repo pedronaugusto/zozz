@@ -126,11 +126,36 @@ do
   while IFS= read -r m; do
     [ -z "$m" ] && continue
     p=$((p + 1))
-    # ozz names in snake_case (joint_parents); zozz's entry points are
-    # camelCase with no underscore at all (zozzSkeletonJointParent). Strip
-    # the underscore before comparing, or it blocks every match by itself.
-    needle=$(printf '%s' "$m" | tr 'A-Z' 'a-z' | tr -d '_')
-    if printf '%s\n' "$bound" | grep -q "$needle"; then
+    # ozz names in snake_case (joint_parents) or CamelCase (SampleAnimation);
+    # zozz's entry points are camelCase with no underscore at all. Comparing
+    # the flattened strings is the obvious thing and it is WRONG on word
+    # order: `SampleAnimation` flattens to `sampleanimation`, which does not
+    # appear in `zozzrawanimationsample` even though that is exactly the
+    # binding. It reported the already-bound SampleAnimation as a gap.
+    #
+    # So compare by WORDS, all of which must be present somewhere in a single
+    # bound name, in any order. Words shorter than four characters are
+    # dropped: `get`, `set` and `id` appear in almost every name and would
+    # match anything. If nothing survives that filter the whole flattened
+    # name is used, which is the old behaviour and right for a short name
+    # like `Resize`.
+    words=$(printf '%s' "$m" |
+            sed 's/_/ /g; s/\([a-z0-9]\)\([A-Z]\)/\1 \2/g' |
+            tr 'A-Z' 'a-z' | tr ' ' '\n' | awk 'length($0) >= 4')
+    [ -z "$words" ] && words=$(printf '%s' "$m" | tr 'A-Z' 'a-z' | tr -d '_')
+
+    hit=0
+    while IFS= read -r cand; do
+      [ -z "$cand" ] && continue
+      all=1
+      while IFS= read -r w; do
+        [ -z "$w" ] && continue
+        case "$cand" in *"$w"*) ;; *) all=0; break ;; esac
+      done <<< "$words"
+      if [ "$all" -eq 1 ]; then hit=1; break; fi
+    done <<< "$bound"
+
+    if [ "$hit" -eq 1 ]; then
       b=$((b + 1))
     else
       unbound="$unbound$m"$'\n'
