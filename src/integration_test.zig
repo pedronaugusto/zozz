@@ -222,6 +222,47 @@ test "a sampling context can be reused across clips after invalidation" {
     }
 }
 
+test "a sampling context can be resized in place and go on sampling correctly" {
+    const gpa = std.testing.allocator;
+    try zozz.setAllocator(gpa);
+    defer zozz.resetAllocator();
+
+    const skeleton_blob = try FixtureBlob.init(zozzFixtureSkeleton);
+    defer skeleton_blob.deinit();
+    const animation_blob = try FixtureBlob.init(zozzFixtureAnimation);
+    defer animation_blob.deinit();
+
+    const skeleton = try zozz.Skeleton.initFromMemory(skeleton_blob.bytes);
+    defer skeleton.deinit();
+    const clip = try zozz.Animation.initFromMemory(animation_blob.bytes);
+    defer clip.deinit();
+
+    // Oversized on purpose — as if sized for a different, bigger skeleton —
+    // then shrunk in place. Reusing the handle instead of destroy + recreate
+    // is the whole point of resize(); the capacity actually changing, and
+    // the context still sampling correctly afterwards, is what proves it
+    // really re-allocated rather than being a no-op.
+    const context = try zozz.SamplingContext.init(40);
+    defer context.deinit();
+    try std.testing.expect(context.maxTracks() >= 40);
+
+    try context.resize(fixture_joints);
+    try std.testing.expectEqual(@as(u32, fixture_joints), context.maxTracks());
+
+    const pose = try zozz.SoaPose.initForSkeleton(skeleton);
+    defer pose.deinit();
+    try pose.setRestPose(skeleton);
+    try (zozz.SamplingJob{ .animation = clip, .context = context, .ratio = 0.5, .out = pose }).run();
+
+    var locals: [fixture_joints]zozz.Transform = undefined;
+    try pose.toLocalTransforms(&locals);
+    for (locals) |t| try expectSaneTransform(t);
+
+    // Resizing to zero or negative tracks is rejected outright, not silently
+    // accepted as an unusable context.
+    try std.testing.expectError(zozz.Error.InvalidArgument, context.resize(0));
+}
+
 test "a pose smaller than the animation is refused" {
     const gpa = std.testing.allocator;
     try zozz.setAllocator(gpa);

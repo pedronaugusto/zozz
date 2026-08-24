@@ -267,6 +267,20 @@ pub extern fn zozzRawAnimationExtractTimePoints(
     out_count: *usize,
 ) Result;
 
+pub const ModelSpaceSample = extern struct {
+    time: f32,
+    transform: Float4x4,
+};
+
+pub extern fn zozzRawAnimationSampleTrackModelSpace(
+    raw: *const RawAnimation,
+    skeleton: *const Skeleton,
+    joint: i32,
+    out: ?[*]ModelSpaceSample,
+    count: usize,
+    out_count: *usize,
+) Result;
+
 pub extern fn zozzFixedRateSamplingTimeCreate(duration: f32, frequency: f32, out: **FixedRateSamplingTime) Result;
 pub extern fn zozzFixedRateSamplingTimeDestroy(self: ?*FixedRateSamplingTime) void;
 pub extern fn zozzFixedRateSamplingTimeNumKeys(self: ?*const FixedRateSamplingTime) usize;
@@ -346,6 +360,7 @@ pub extern fn zozzRawQuaternionTrackOptimize(input: *const RawQuaternionTrack, t
 
 pub extern fn zozzSamplingContextCreate(max_tracks: c_int, out: **SamplingContext) Result;
 pub extern fn zozzSamplingContextDestroy(context: ?*SamplingContext) void;
+pub extern fn zozzSamplingContextResize(context: ?*SamplingContext, max_tracks: c_int) Result;
 pub extern fn zozzSamplingContextInvalidate(context: ?*SamplingContext) void;
 pub extern fn zozzSamplingContextMaxTracks(context: ?*const SamplingContext) c_int;
 pub extern fn zozzSample(animation: *const Animation, context: *SamplingContext, ratio: f32, out: *SoaPose) Result;
@@ -444,8 +459,18 @@ pub extern fn zozzOArchiveSaveInt32(archive: ?*OArchive, value: i32) Result;
 pub extern fn zozzOArchiveSaveFloat(archive: ?*OArchive, value: f32) Result;
 pub extern fn zozzOArchiveSaveSkeleton(archive: ?*OArchive, skeleton: ?*const Skeleton) Result;
 pub extern fn zozzOArchiveSaveAnimation(archive: ?*OArchive, animation: ?*const Animation) Result;
+pub extern fn zozzOArchiveSaveFloatTrack(archive: ?*OArchive, track: ?*const FloatTrack) Result;
+pub extern fn zozzOArchiveSaveFloat2Track(archive: ?*OArchive, track: ?*const Float2Track) Result;
+pub extern fn zozzOArchiveSaveFloat3Track(archive: ?*OArchive, track: ?*const Float3Track) Result;
+pub extern fn zozzOArchiveSaveFloat4Track(archive: ?*OArchive, track: ?*const Float4Track) Result;
+pub extern fn zozzOArchiveSaveQuaternionTrack(archive: ?*OArchive, track: ?*const QuaternionTrack) Result;
 pub extern fn zozzSkeletonSaveFile(skeleton: ?*const Skeleton, path: [*:0]const u8) Result;
 pub extern fn zozzAnimationSaveFile(animation: ?*const Animation, path: [*:0]const u8) Result;
+pub extern fn zozzFloatTrackSaveFile(track: ?*const FloatTrack, path: [*:0]const u8) Result;
+pub extern fn zozzFloat2TrackSaveFile(track: ?*const Float2Track, path: [*:0]const u8) Result;
+pub extern fn zozzFloat3TrackSaveFile(track: ?*const Float3Track, path: [*:0]const u8) Result;
+pub extern fn zozzFloat4TrackSaveFile(track: ?*const Float4Track, path: [*:0]const u8) Result;
+pub extern fn zozzQuaternionTrackSaveFile(track: ?*const QuaternionTrack, path: [*:0]const u8) Result;
 pub extern fn zozzSkeletonJointRestPoseLocal(skeleton: ?*const Skeleton, joint: c_int, out: *Transform) Result;
 pub extern fn zozzSkeletonRestPoseModelSpace(skeleton: ?*const Skeleton, out: [*]Float4x4, count: usize) Result;
 pub extern fn zozzSkeletonJointIsLeaf(skeleton: ?*const Skeleton, joint: c_int, out: *bool) Result;

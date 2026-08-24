@@ -84,6 +84,25 @@ ZOZZ_API ZozzResult zozzOArchiveSaveSkeleton(ZozzOArchive* archive,
 ZOZZ_API ZozzResult zozzOArchiveSaveAnimation(ZozzOArchive* archive,
                                               const ZozzAnimation* animation);
 
+/// Writes a tagged, versioned runtime track — the same archive shape
+/// zozzFloatTrackLoadFile / zozzFloatTrackLoadMemory read back. One entry
+/// point per track value type; a TrackBuilder-produced track otherwise has
+/// no way to leave the process it was built in.
+ZOZZ_API ZozzResult zozzOArchiveSaveFloatTrack(ZozzOArchive* archive,
+                                               const ZozzFloatTrack* track);
+
+ZOZZ_API ZozzResult zozzOArchiveSaveFloat2Track(ZozzOArchive* archive,
+                                                const ZozzFloat2Track* track);
+
+ZOZZ_API ZozzResult zozzOArchiveSaveFloat3Track(ZozzOArchive* archive,
+                                                const ZozzFloat3Track* track);
+
+ZOZZ_API ZozzResult zozzOArchiveSaveFloat4Track(ZozzOArchive* archive,
+                                                const ZozzFloat4Track* track);
+
+ZOZZ_API ZozzResult zozzOArchiveSaveQuaternionTrack(
+    ZozzOArchive* archive, const ZozzQuaternionTrack* track);
+
 //===----------------------------------------------------------------------===//
 // File convenience
 //
@@ -96,6 +115,21 @@ ZOZZ_API ZozzResult zozzSkeletonSaveFile(const ZozzSkeleton* skeleton,
 
 ZOZZ_API ZozzResult zozzAnimationSaveFile(const ZozzAnimation* animation,
                                           const char* path);
+
+ZOZZ_API ZozzResult zozzFloatTrackSaveFile(const ZozzFloatTrack* track,
+                                           const char* path);
+
+ZOZZ_API ZozzResult zozzFloat2TrackSaveFile(const ZozzFloat2Track* track,
+                                            const char* path);
+
+ZOZZ_API ZozzResult zozzFloat3TrackSaveFile(const ZozzFloat3Track* track,
+                                            const char* path);
+
+ZOZZ_API ZozzResult zozzFloat4TrackSaveFile(const ZozzFloat4Track* track,
+                                            const char* path);
+
+ZOZZ_API ZozzResult zozzQuaternionTrackSaveFile(const ZozzQuaternionTrack* track,
+                                                const char* path);
 
 #ifdef __cplusplus
 }  // extern "C"
