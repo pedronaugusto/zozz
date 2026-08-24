@@ -35,6 +35,8 @@ const animation_mod = @import("animation.zig");
 const pose_mod = @import("pose.zig");
 const sampling_mod = @import("sampling.zig");
 const offline_mod = @import("offline.zig");
+const optimizer_mod = @import("optimizer.zig");
+const rawtrack_mod = @import("rawtrack.zig");
 
 //=============================================================================
 // Public surface
@@ -64,6 +66,26 @@ pub const localToModel = sampling_mod.localToModel;
 
 pub const RawSkeleton = offline_mod.RawSkeleton;
 pub const RawAnimation = offline_mod.RawAnimation;
+
+pub const AnimationOptimizer = optimizer_mod.AnimationOptimizer;
+pub const OptimizerSetting = optimizer_mod.OptimizerSetting;
+pub const FixedRateSamplingTime = optimizer_mod.FixedRateSamplingTime;
+pub const AdditiveAnimationBuilder = optimizer_mod.AdditiveAnimationBuilder;
+pub const MotionExtractor = optimizer_mod.MotionExtractor;
+pub const MotionReference = optimizer_mod.MotionReference;
+pub const MotionSettings = optimizer_mod.MotionSettings;
+
+pub const TrackInterpolation = rawtrack_mod.Interpolation;
+pub const RawFloatTrack = rawtrack_mod.RawFloatTrack;
+pub const RawFloat2Track = rawtrack_mod.RawFloat2Track;
+pub const RawFloat3Track = rawtrack_mod.RawFloat3Track;
+pub const RawFloat4Track = rawtrack_mod.RawFloat4Track;
+pub const RawQuaternionTrack = rawtrack_mod.RawQuaternionTrack;
+pub const FloatTrack = rawtrack_mod.FloatTrack;
+pub const Float2Track = rawtrack_mod.Float2Track;
+pub const Float3Track = rawtrack_mod.Float3Track;
+pub const Float4Track = rawtrack_mod.Float4Track;
+pub const QuaternionTrack = rawtrack_mod.QuaternionTrack;
 
 /// Build options the C library was actually compiled with, so a consumer can
 /// branch on them instead of assuming.
@@ -117,6 +139,8 @@ test {
     // Only reachable in a test build, where the fixture library is linked.
     _ = @import("integration_test.zig");
     _ = @import("offline.zig");
+    _ = @import("optimizer.zig");
+    _ = @import("rawtrack.zig");
 
     // Test-only: this one @cImport-s the C header. Reached from a test block
     // and nowhere else, so a normal build never analyses it and the shipped
