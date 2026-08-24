@@ -28,6 +28,7 @@ const ozz_runtime_sources = [_][]const u8{
     "libs/ozz/src/animation/runtime/skeleton.cc",
     "libs/ozz/src/animation/runtime/sampling_job.cc",
     "libs/ozz/src/animation/runtime/local_to_model_job.cc",
+    "libs/ozz/src/animation/runtime/blending_job.cc",
     // animation runtime — user tracks and edge triggering
     "libs/ozz/src/animation/runtime/track.cc",
     "libs/ozz/src/animation/runtime/track_sampling_job.cc",
@@ -61,6 +62,7 @@ const zozz_ffi_sources = [_][]const u8{
     "ffi/zozz_abi.cpp",
     "ffi/zozz_utils.cpp",
     "ffi/zozz_motion.cpp",
+    "ffi/zozz_blending.cpp",
 };
 
 pub fn build(b: *std.Build) void {
@@ -190,6 +192,7 @@ pub fn build(b: *std.Build) void {
     lib.installHeader(b.path("ffi/zozz.h"), "zozz.h");
     lib.installHeader(b.path("ffi/zozz_utils.h"), "zozz_utils.h");
     lib.installHeader(b.path("ffi/zozz_motion.h"), "zozz_motion.h");
+    lib.installHeader(b.path("ffi/zozz_blending.h"), "zozz_blending.h");
 
     //=====================================================================
     // The Zig module.
