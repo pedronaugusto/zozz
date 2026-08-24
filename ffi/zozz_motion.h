@@ -1,10 +1,12 @@
 //===----------------------------------------------------------------------===//
 // zozz — root-motion blending.
 //
-// Mirrors ozz's motion_blending_job.h. There is no motion-sampling entry
-// point here: ozz 0.17.0 ships no motion_sampling_job.h in the runtime —
-// root-motion deltas are authored offline (ozz::animation::offline's motion
-// extractor, unbound) and consumed at runtime only through blending.
+// Mirrors ozz's motion_blending_job.h. There is no motion-SAMPLING entry
+// point here: ozz 0.17.0 ships no motion_sampling_job.h in the runtime, so
+// root-motion deltas are consumed at runtime only through blending. Motion
+// EXTRACTION is bound, just not in this file — see zozzMotionExtractorRun in
+// zozz_optimizer.h, which pulls root motion out of an authored clip into the
+// tracks this header's zozzMotionBlend then recombines at runtime.
 //
 // Pulled into zozz.h — the umbrella — so a consumer needs only that one
 // include; this header stands on its own only because zozz.h pulls it in.
