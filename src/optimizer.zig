@@ -58,7 +58,8 @@ pub const AnimationOptimizer = struct {
     /// Replaces the default setting applied to every joint not otherwise
     /// overridden.
     pub fn setSetting(self: AnimationOptimizer, setting: OptimizerSetting) err.Error!void {
-        try err.check(c.zozzAnimationOptimizerSetSetting(self.handle, settingToC(setting)));
+        const raw = settingToC(setting);
+        try err.check(c.zozzAnimationOptimizerSetSetting(self.handle, &raw));
     }
 
     pub fn getSetting(self: AnimationOptimizer) err.Error!OptimizerSetting {
@@ -73,7 +74,8 @@ pub const AnimationOptimizer = struct {
     /// whichever skeleton `run` is later called with can make it valid or
     /// not.
     pub fn setJointOverride(self: AnimationOptimizer, joint: u32, setting: OptimizerSetting) err.Error!void {
-        try err.check(c.zozzAnimationOptimizerSetJointOverride(self.handle, @intCast(joint), settingToC(setting)));
+        const raw = settingToC(setting);
+        try err.check(c.zozzAnimationOptimizerSetJointOverride(self.handle, @intCast(joint), &raw));
     }
 
     /// Removes a joint's override, if any. Not an error if it had none.
@@ -223,7 +225,8 @@ pub const MotionExtractor = struct {
     }
 
     pub fn setPositionSettings(self: MotionExtractor, settings: MotionSettings) err.Error!void {
-        try err.check(c.zozzMotionExtractorSetPositionSettings(self.handle, motionSettingsToC(settings)));
+        const raw = motionSettingsToC(settings);
+        try err.check(c.zozzMotionExtractorSetPositionSettings(self.handle, &raw));
     }
 
     pub fn positionSettings(self: MotionExtractor) err.Error!MotionSettings {
@@ -233,7 +236,8 @@ pub const MotionExtractor = struct {
     }
 
     pub fn setRotationSettings(self: MotionExtractor, settings: MotionSettings) err.Error!void {
-        try err.check(c.zozzMotionExtractorSetRotationSettings(self.handle, motionSettingsToC(settings)));
+        const raw = motionSettingsToC(settings);
+        try err.check(c.zozzMotionExtractorSetRotationSettings(self.handle, &raw));
     }
 
     pub fn rotationSettings(self: MotionExtractor) err.Error!MotionSettings {
