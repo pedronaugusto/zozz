@@ -160,12 +160,14 @@ void zozzAnimationOptimizerDestroy(ZozzAnimationOptimizer* optimizer) {
   zozz::Delete(optimizer);
 }
 
-ZozzResult zozzAnimationOptimizerSetSetting(ZozzAnimationOptimizer* optimizer,
-                                            ZozzOptimizerSetting setting) {
-  if (optimizer == nullptr) return ZOZZ_RESULT_INVALID_ARGUMENT;
-  if (!FiniteSetting(setting)) return ZOZZ_RESULT_INVALID_ARGUMENT;
-  optimizer->impl.setting.tolerance = setting.tolerance;
-  optimizer->impl.setting.distance = setting.distance;
+ZozzResult zozzAnimationOptimizerSetSetting(
+    ZozzAnimationOptimizer* optimizer, const ZozzOptimizerSetting* setting) {
+  if (optimizer == nullptr || setting == nullptr) {
+    return ZOZZ_RESULT_INVALID_ARGUMENT;
+  }
+  if (!FiniteSetting(*setting)) return ZOZZ_RESULT_INVALID_ARGUMENT;
+  optimizer->impl.setting.tolerance = setting->tolerance;
+  optimizer->impl.setting.distance = setting->distance;
   return ZOZZ_RESULT_OK;
 }
 
@@ -181,13 +183,15 @@ ZozzResult zozzAnimationOptimizerGetSetting(
 
 ZozzResult zozzAnimationOptimizerSetJointOverride(
     ZozzAnimationOptimizer* optimizer, int32_t joint,
-    ZozzOptimizerSetting setting) {
-  if (optimizer == nullptr) return ZOZZ_RESULT_INVALID_ARGUMENT;
+    const ZozzOptimizerSetting* setting) {
+  if (optimizer == nullptr || setting == nullptr) {
+    return ZOZZ_RESULT_INVALID_ARGUMENT;
+  }
   if (joint < 0) return ZOZZ_RESULT_INVALID_ARGUMENT;
-  if (!FiniteSetting(setting)) return ZOZZ_RESULT_INVALID_ARGUMENT;
+  if (!FiniteSetting(*setting)) return ZOZZ_RESULT_INVALID_ARGUMENT;
   optimizer->impl.joints_setting_override[joint] =
-      ozz::animation::offline::AnimationOptimizer::Setting(setting.tolerance,
-                                                            setting.distance);
+      ozz::animation::offline::AnimationOptimizer::Setting(setting->tolerance,
+                                                            setting->distance);
   return ZOZZ_RESULT_OK;
 }
 
@@ -383,10 +387,12 @@ int32_t zozzMotionExtractorGetRootJoint(const ZozzMotionExtractor* extractor) {
 }
 
 ZozzResult zozzMotionExtractorSetPositionSettings(
-    ZozzMotionExtractor* extractor, ZozzMotionSettings settings) {
-  if (extractor == nullptr) return ZOZZ_RESULT_INVALID_ARGUMENT;
-  if (!ValidReference(settings.reference)) return ZOZZ_RESULT_INVALID_ARGUMENT;
-  extractor->impl.position_settings = ToOzz(settings);
+    ZozzMotionExtractor* extractor, const ZozzMotionSettings* settings) {
+  if (extractor == nullptr || settings == nullptr) {
+    return ZOZZ_RESULT_INVALID_ARGUMENT;
+  }
+  if (!ValidReference(settings->reference)) return ZOZZ_RESULT_INVALID_ARGUMENT;
+  extractor->impl.position_settings = ToOzz(*settings);
   return ZOZZ_RESULT_OK;
 }
 
@@ -400,10 +406,12 @@ ZozzResult zozzMotionExtractorGetPositionSettings(
 }
 
 ZozzResult zozzMotionExtractorSetRotationSettings(
-    ZozzMotionExtractor* extractor, ZozzMotionSettings settings) {
-  if (extractor == nullptr) return ZOZZ_RESULT_INVALID_ARGUMENT;
-  if (!ValidReference(settings.reference)) return ZOZZ_RESULT_INVALID_ARGUMENT;
-  extractor->impl.rotation_settings = ToOzz(settings);
+    ZozzMotionExtractor* extractor, const ZozzMotionSettings* settings) {
+  if (extractor == nullptr || settings == nullptr) {
+    return ZOZZ_RESULT_INVALID_ARGUMENT;
+  }
+  if (!ValidReference(settings->reference)) return ZOZZ_RESULT_INVALID_ARGUMENT;
+  extractor->impl.rotation_settings = ToOzz(*settings);
   return ZOZZ_RESULT_OK;
 }
 

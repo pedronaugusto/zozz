@@ -243,9 +243,9 @@ pub extern fn zozzAnimationBuild(raw: *const RawAnimation, out: **Animation) Res
 
 pub extern fn zozzAnimationOptimizerCreate(out: **AnimationOptimizer) Result;
 pub extern fn zozzAnimationOptimizerDestroy(optimizer: ?*AnimationOptimizer) void;
-pub extern fn zozzAnimationOptimizerSetSetting(optimizer: *AnimationOptimizer, setting: OptimizerSetting) Result;
+pub extern fn zozzAnimationOptimizerSetSetting(optimizer: *AnimationOptimizer, setting: *const OptimizerSetting) Result;
 pub extern fn zozzAnimationOptimizerGetSetting(optimizer: ?*const AnimationOptimizer, out: *OptimizerSetting) Result;
-pub extern fn zozzAnimationOptimizerSetJointOverride(optimizer: *AnimationOptimizer, joint: i32, setting: OptimizerSetting) Result;
+pub extern fn zozzAnimationOptimizerSetJointOverride(optimizer: *AnimationOptimizer, joint: i32, setting: *const OptimizerSetting) Result;
 pub extern fn zozzAnimationOptimizerClearJointOverride(optimizer: *AnimationOptimizer, joint: i32) Result;
 pub extern fn zozzAnimationOptimizerRun(
     optimizer: *const AnimationOptimizer,
@@ -292,9 +292,9 @@ pub extern fn zozzMotionExtractorCreate(out: **MotionExtractor) Result;
 pub extern fn zozzMotionExtractorDestroy(extractor: ?*MotionExtractor) void;
 pub extern fn zozzMotionExtractorSetRootJoint(extractor: *MotionExtractor, joint: i32) Result;
 pub extern fn zozzMotionExtractorGetRootJoint(extractor: ?*const MotionExtractor) i32;
-pub extern fn zozzMotionExtractorSetPositionSettings(extractor: *MotionExtractor, settings: MotionSettings) Result;
+pub extern fn zozzMotionExtractorSetPositionSettings(extractor: *MotionExtractor, settings: *const MotionSettings) Result;
 pub extern fn zozzMotionExtractorGetPositionSettings(extractor: ?*const MotionExtractor, out: *MotionSettings) Result;
-pub extern fn zozzMotionExtractorSetRotationSettings(extractor: *MotionExtractor, settings: MotionSettings) Result;
+pub extern fn zozzMotionExtractorSetRotationSettings(extractor: *MotionExtractor, settings: *const MotionSettings) Result;
 pub extern fn zozzMotionExtractorGetRotationSettings(extractor: ?*const MotionExtractor, out: *MotionSettings) Result;
 pub extern fn zozzMotionExtractorRun(
     extractor: *const MotionExtractor,
