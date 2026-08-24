@@ -36,6 +36,18 @@ fi
 
 printf 'public headers                        %s\n' "$(ls ffi/*.h | wc -l | tr -d ' ')"
 
+section "ozz coverage"
+
+# tools/coverage.sh enumerates ozz's public names against zozz's entry points
+# by name, per vendored area. The total is a work list, not a score: most of
+# what it counts as "public" is internal ozz machinery no C ABI should carry.
+# See tools/coverage.sh for what counts and what is deliberately excluded.
+coverage_line=$(tools/coverage.sh | sed -n 's/^  TOTAL *\([0-9]*\) *\([0-9]*\).*/\1 \2/p')
+coverage_bound=$(printf '%s' "$coverage_line" | cut -d' ' -f1)
+coverage_public=$(printf '%s' "$coverage_line" | cut -d' ' -f2)
+printf 'ozz public names bound (of total)    %s / %s\n' \
+  "${coverage_bound:-unknown}" "${coverage_public:-unknown}"
+
 section "Tests"
 
 # The counts the build itself reports, rather than counting `test` keywords:
