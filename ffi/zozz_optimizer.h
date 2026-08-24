@@ -12,6 +12,12 @@
 // Included from zozz.h; not meant to be included on its own, though its own
 // `#include "zozz.h"` makes that safe too (header guards make the include a
 // no-op the second time through).
+//
+// ZozzOptimizerSetting and ZozzMotionSettings are passed by CONST POINTER,
+// never by value, at every entry point below — including the setters, where a
+// value would fit in one register on some ABIs. Small-aggregate-by-value is
+// exactly where SysV and the Windows x64 ABI disagree on whether the caller
+// passes registers or a hidden reference; a pointer is unambiguous on both.
 //===----------------------------------------------------------------------===//
 
 #ifndef ZOZZ_OPTIMIZER_H_
@@ -56,9 +62,9 @@ ZOZZ_API ZozzResult zozzAnimationOptimizerCreate(ZozzAnimationOptimizer** out);
 ZOZZ_API void zozzAnimationOptimizerDestroy(ZozzAnimationOptimizer* optimizer);
 
 /// Replaces the default setting applied to every joint not otherwise
-/// overridden.
+/// overridden. `setting` is read only for the duration of the call.
 ZOZZ_API ZozzResult zozzAnimationOptimizerSetSetting(
-    ZozzAnimationOptimizer* optimizer, ZozzOptimizerSetting setting);
+    ZozzAnimationOptimizer* optimizer, const ZozzOptimizerSetting* setting);
 
 ZOZZ_API ZozzResult zozzAnimationOptimizerGetSetting(
     const ZozzAnimationOptimizer* optimizer, ZozzOptimizerSetting* out);
@@ -67,10 +73,11 @@ ZOZZ_API ZozzResult zozzAnimationOptimizerGetSetting(
 /// index (see zozz_offline.cpp for the depth-first index mapping); it is not
 /// checked against any particular skeleton here, only rejected if negative —
 /// the joint a given index names is a property of whichever skeleton
-/// zozzAnimationOptimizerRun is later called with.
+/// zozzAnimationOptimizerRun is later called with. `setting` is read only for
+/// the duration of the call.
 ZOZZ_API ZozzResult zozzAnimationOptimizerSetJointOverride(
     ZozzAnimationOptimizer* optimizer, int32_t joint,
-    ZozzOptimizerSetting setting);
+    const ZozzOptimizerSetting* setting);
 
 /// Removes a joint's override, if any. Not an error if `joint` had none.
 ZOZZ_API ZozzResult zozzAnimationOptimizerClearJointOverride(
@@ -217,14 +224,16 @@ ZOZZ_API ZozzResult zozzMotionExtractorSetRootJoint(
 ZOZZ_API int32_t
 zozzMotionExtractorGetRootJoint(const ZozzMotionExtractor* extractor);
 
+/// `settings` is read only for the duration of the call.
 ZOZZ_API ZozzResult zozzMotionExtractorSetPositionSettings(
-    ZozzMotionExtractor* extractor, ZozzMotionSettings settings);
+    ZozzMotionExtractor* extractor, const ZozzMotionSettings* settings);
 
 ZOZZ_API ZozzResult zozzMotionExtractorGetPositionSettings(
     const ZozzMotionExtractor* extractor, ZozzMotionSettings* out);
 
+/// `settings` is read only for the duration of the call.
 ZOZZ_API ZozzResult zozzMotionExtractorSetRotationSettings(
-    ZozzMotionExtractor* extractor, ZozzMotionSettings settings);
+    ZozzMotionExtractor* extractor, const ZozzMotionSettings* settings);
 
 ZOZZ_API ZozzResult zozzMotionExtractorGetRotationSettings(
     const ZozzMotionExtractor* extractor, ZozzMotionSettings* out);
