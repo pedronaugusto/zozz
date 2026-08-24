@@ -35,6 +35,8 @@ const animation_mod = @import("animation.zig");
 const pose_mod = @import("pose.zig");
 const sampling_mod = @import("sampling.zig");
 const offline_mod = @import("offline.zig");
+const ik_mod = @import("ik.zig");
+const skinning_mod = @import("skinning.zig");
 
 //=============================================================================
 // Public surface
@@ -64,6 +66,9 @@ pub const localToModel = sampling_mod.localToModel;
 
 pub const RawSkeleton = offline_mod.RawSkeleton;
 pub const RawAnimation = offline_mod.RawAnimation;
+
+pub const ik = ik_mod;
+pub const skinning = skinning_mod;
 
 /// Build options the C library was actually compiled with, so a consumer can
 /// branch on them instead of assuming.
@@ -114,6 +119,21 @@ test {
     _ = animation_mod;
     _ = pose_mod;
     _ = sampling_mod;
+    _ = ik_mod;
+    _ = skinning_mod;
+
+    // ik.zig and skinning.zig have no test blocks of their own, and nothing
+    // above calls into them the way the other modules' functions get
+    // exercised by the tests below. A function that nothing calls or takes
+    // the address of is never analysed, pulled-in module or not — so without
+    // this, a real error in one of these bodies would compile clean.
+    comptime {
+        _ = &ik_mod.runTwoBone;
+        _ = &ik_mod.runAim;
+        _ = &ik_mod.applyCorrection;
+        _ = &skinning_mod.run;
+    }
+
     // Only reachable in a test build, where the fixture library is linked.
     _ = @import("integration_test.zig");
     _ = @import("offline.zig");

@@ -174,3 +174,107 @@ pub extern fn zozzLocalToModel(
     out: [*]Float4x4,
     count: usize,
 ) Result;
+
+pub extern fn zozzLocalToModelRange(
+    skeleton: *const Skeleton,
+    locals: *const SoaPose,
+    root: ?*const Float4x4,
+    from: c_int,
+    to: c_int,
+    from_excluded: c_int,
+    out: [*]Float4x4,
+    count: usize,
+) Result;
+
+//=============================================================================
+// Inverse kinematics
+//=============================================================================
+
+pub const IKTwoBoneJob = extern struct {
+    target: [3]f32,
+    mid_axis: [3]f32,
+    pole_vector: [3]f32,
+    twist_angle: f32,
+    soften: f32,
+    weight: f32,
+    start_joint: *const Float4x4,
+    mid_joint: *const Float4x4,
+    end_joint: *const Float4x4,
+    start_joint_correction: *[4]f32,
+    mid_joint_correction: *[4]f32,
+    reached: ?*i32,
+};
+
+pub extern fn zozzIKTwoBoneJobDefaults(out: *IKTwoBoneJob) void;
+pub extern fn zozzIKTwoBoneJobRun(job: *const IKTwoBoneJob) Result;
+
+pub const IKAimJob = extern struct {
+    target: [3]f32,
+    forward: [3]f32,
+    offset: [3]f32,
+    up: [3]f32,
+    pole_vector: [3]f32,
+    twist_angle: f32,
+    weight: f32,
+    joint: *const Float4x4,
+    joint_correction: *[4]f32,
+    reached: ?*i32,
+};
+
+pub extern fn zozzIKAimJobDefaults(out: *IKAimJob) void;
+pub extern fn zozzIKAimJobRun(job: *const IKAimJob) Result;
+
+pub extern fn zozzSoaPoseApplyLocalCorrection(
+    pose: *SoaPose,
+    joint: c_int,
+    correction: *const [4]f32,
+) Result;
+
+//=============================================================================
+// Skinning
+//=============================================================================
+
+pub const SkinningJob = extern struct {
+    vertex_count: c_int,
+    influences_count: c_int,
+
+    joint_matrices: [*]const Float4x4,
+    joint_matrices_count: usize,
+
+    joint_inverse_transpose_matrices: ?[*]const Float4x4,
+    joint_inverse_transpose_matrices_count: usize,
+
+    joint_indices: [*]const u16,
+    joint_indices_count: usize,
+    joint_indices_stride: usize,
+
+    joint_weights: ?[*]const f32,
+    joint_weights_count: usize,
+    joint_weights_stride: usize,
+
+    in_positions: [*]const f32,
+    in_positions_count: usize,
+    in_positions_stride: usize,
+
+    in_normals: ?[*]const f32,
+    in_normals_count: usize,
+    in_normals_stride: usize,
+
+    in_tangents: ?[*]const f32,
+    in_tangents_count: usize,
+    in_tangents_stride: usize,
+
+    out_positions: [*]f32,
+    out_positions_count: usize,
+    out_positions_stride: usize,
+
+    out_normals: ?[*]f32,
+    out_normals_count: usize,
+    out_normals_stride: usize,
+
+    out_tangents: ?[*]f32,
+    out_tangents_count: usize,
+    out_tangents_stride: usize,
+};
+
+pub extern fn zozzSkinningJobRun(job: *const SkinningJob) Result;
