@@ -57,28 +57,69 @@ ZOZZ_API uint32_t zozzOzzVersion(void);
 // Results
 //===----------------------------------------------------------------------===//
 
+// Every enumerator carries its type's name: ZOZZ_RESULT_<WHAT>, never
+// ZOZZ_<WHAT>. That is not house style, it is what makes the enum checkable.
+// The comptime cross-check in ../src/abi_check.zig pairs each Zig enum field
+// with a header enumerator by computing `ZOZZ_` + TYPE + `_` + FIELD, and it
+// has to, because a C enum reaches Zig as a plain integer alias with no
+// record of which enumerators belonged to it. The prefix is the only thing
+// left that can put them back together.
+//
+// No enumerator may be negative, here or in any enum added later. C leaves an
+// enum's underlying type to the implementation and the implementations
+// disagree — clang and gcc pick an unsigned type when every enumerator is
+// non-negative, MSVC uses int. Staying non-negative is what makes that choice
+// unobservable. A negative sentinel belongs in a fixed-width constant, the way
+// ZOZZ_NO_PARENT is one.
 typedef enum ZozzResult {
-  ZOZZ_OK = 0,
+  ZOZZ_RESULT_OK = 0,
   /// The path could not be opened for reading.
-  ZOZZ_ERR_FILE_NOT_FOUND = 1,
+  ZOZZ_RESULT_FILE_NOT_FOUND = 1,
   /// The stream ended early or could not be read.
-  ZOZZ_ERR_IO = 2,
+  ZOZZ_RESULT_IO = 2,
   /// The archive tag did not identify the expected ozz object type.
-  ZOZZ_ERR_BAD_FORMAT = 3,
+  ZOZZ_RESULT_BAD_FORMAT = 3,
   /// The allocator returned NULL.
-  ZOZZ_ERR_OUT_OF_MEMORY = 4,
+  ZOZZ_RESULT_OUT_OF_MEMORY = 4,
   /// A NULL handle, a negative count, or a NaN/out-of-domain scalar.
-  ZOZZ_ERR_INVALID_ARGUMENT = 5,
+  ZOZZ_RESULT_INVALID_ARGUMENT = 5,
   /// An ozz job rejected its own parameters (Validate() returned false).
-  ZOZZ_ERR_JOB_INVALID = 6,
+  ZOZZ_RESULT_JOB_INVALID = 6,
   /// A caller-provided output buffer was too small for the required count.
-  ZOZZ_ERR_BUFFER_TOO_SMALL = 7,
+  ZOZZ_RESULT_BUFFER_TOO_SMALL = 7,
   /// The skeleton and animation describe a different number of joints/tracks.
-  ZOZZ_ERR_SKELETON_MISMATCH = 8,
+  ZOZZ_RESULT_SKELETON_MISMATCH = 8,
   /// Authored offline data failed ozz validation (Validate() returned false):
   /// a raw skeleton over the depth limit, or raw animation keys out of order.
-  ZOZZ_ERR_INVALID_DATA = 9,
+  ZOZZ_RESULT_INVALID_DATA = 9,
 } ZozzResult;
+
+//===----------------------------------------------------------------------===//
+// DEPRECATED result spellings
+//
+// v0.2.0 named these enumerators without their type: ZOZZ_OK, ZOZZ_ERR_IO and
+// so on. Renaming them is a source-breaking change to a published C API, so
+// every old spelling stays here as a macro that expands to the new enumerator.
+// Existing code keeps compiling and keeps meaning exactly what it meant; the
+// values did not move.
+//
+// These aliases are DEPRECATED and will be REMOVED in v0.4.0. Port at your
+// convenience: ZOZZ_OK -> ZOZZ_RESULT_OK, and ZOZZ_ERR_<WHAT> ->
+// ZOZZ_RESULT_<WHAT> for the rest. They are macros rather than enumerators on
+// purpose — an alias enumerator would collide with the real one, and a second
+// enum would be a second thing to keep in step.
+//===----------------------------------------------------------------------===//
+
+#define ZOZZ_OK ZOZZ_RESULT_OK
+#define ZOZZ_ERR_FILE_NOT_FOUND ZOZZ_RESULT_FILE_NOT_FOUND
+#define ZOZZ_ERR_IO ZOZZ_RESULT_IO
+#define ZOZZ_ERR_BAD_FORMAT ZOZZ_RESULT_BAD_FORMAT
+#define ZOZZ_ERR_OUT_OF_MEMORY ZOZZ_RESULT_OUT_OF_MEMORY
+#define ZOZZ_ERR_INVALID_ARGUMENT ZOZZ_RESULT_INVALID_ARGUMENT
+#define ZOZZ_ERR_JOB_INVALID ZOZZ_RESULT_JOB_INVALID
+#define ZOZZ_ERR_BUFFER_TOO_SMALL ZOZZ_RESULT_BUFFER_TOO_SMALL
+#define ZOZZ_ERR_SKELETON_MISMATCH ZOZZ_RESULT_SKELETON_MISMATCH
+#define ZOZZ_ERR_INVALID_DATA ZOZZ_RESULT_INVALID_DATA
 
 /// Static, never-NULL description of a result code. Borrowed; do not free.
 ZOZZ_API const char* zozzResultName(ZozzResult result);
@@ -116,7 +157,7 @@ typedef struct ZozzAllocator {
 /// `alloc` is copied by value; the caller need not keep it alive, but `user`
 /// must outlive every handle allocated through it.
 ///
-/// Returns ZOZZ_ERR_INVALID_ARGUMENT if either function pointer is NULL, in
+/// Returns ZOZZ_RESULT_INVALID_ARGUMENT if either function pointer is NULL, in
 /// which case the previously installed allocator is left untouched.
 ZOZZ_API ZozzResult zozzSetAllocator(const ZozzAllocator* alloc);
 
@@ -208,7 +249,7 @@ ZOZZ_API int16_t zozzSkeletonJointParent(const ZozzSkeleton* skeleton,
                                          int joint);
 
 /// Writes the rest pose as AoS local transforms. `count` must be at least
-/// zozzSkeletonNumJoints, else ZOZZ_ERR_BUFFER_TOO_SMALL.
+/// zozzSkeletonNumJoints, else ZOZZ_RESULT_BUFFER_TOO_SMALL.
 ZOZZ_API ZozzResult zozzSkeletonRestPose(const ZozzSkeleton* skeleton,
                                          ZozzTransform* out, size_t count);
 
@@ -367,7 +408,7 @@ ZOZZ_API float zozzRawAnimationDuration(const ZozzRawAnimation* raw);
 /// Appends one translation key to `track`. `time` must be finite and within
 /// [0, duration]; `value` must be finite. Keys must be pushed in
 /// non-decreasing time order per channel — violations surface at
-/// zozzAnimationBuild as ZOZZ_ERR_INVALID_DATA.
+/// zozzAnimationBuild as ZOZZ_RESULT_INVALID_DATA.
 ZOZZ_API ZozzResult zozzRawAnimationPushTranslation(ZozzRawAnimation* raw,
                                                     int track, float time,
                                                     const float value[3]);

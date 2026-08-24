@@ -71,7 +71,7 @@ static void test_version(void) {
 }
 
 static void test_result_names(void) {
-  for (int i = 0; i <= (int)ZOZZ_ERR_SKELETON_MISMATCH; ++i) {
+  for (int i = 0; i <= (int)ZOZZ_RESULT_SKELETON_MISMATCH; ++i) {
     const char* name = zozzResultName((ZozzResult)i);
     CHECK(name != NULL);
     CHECK(strlen(name) > 0);
@@ -88,7 +88,7 @@ static void test_abi_layout(void) {
   CHECK(layout.float4x4_size == (uint32_t)sizeof(ZozzFloat4x4));
   CHECK(layout.float4x4_align == 16);
   CHECK(layout.allocator_size == (uint32_t)sizeof(ZozzAllocator));
-  CHECK(layout.result_count == (uint32_t)ZOZZ_ERR_INVALID_DATA + 1u);
+  CHECK(layout.result_count == (uint32_t)ZOZZ_RESULT_INVALID_DATA + 1u);
 }
 
 static void test_allocator_rejects_incomplete(void) {
@@ -96,7 +96,7 @@ static void test_allocator_rejects_incomplete(void) {
   bad.allocate = NULL;
   bad.deallocate = count_deallocate;
   bad.user = NULL;
-  CHECK(zozzSetAllocator(&bad) == ZOZZ_ERR_INVALID_ARGUMENT);
+  CHECK(zozzSetAllocator(&bad) == ZOZZ_RESULT_INVALID_ARGUMENT);
 }
 
 static void test_bad_input(void) {
@@ -104,19 +104,19 @@ static void test_bad_input(void) {
   const char garbage[64] = "not an ozz archive, not even close, honestly";
 
   CHECK(zozzSkeletonLoadMemory(garbage, sizeof(garbage), &skeleton) ==
-        ZOZZ_ERR_BAD_FORMAT);
+        ZOZZ_RESULT_BAD_FORMAT);
   // The out-parameter must be cleared even on failure.
   CHECK(skeleton == NULL);
 
   CHECK(zozzSkeletonLoadMemory(NULL, 0, &skeleton) ==
-        ZOZZ_ERR_INVALID_ARGUMENT);
+        ZOZZ_RESULT_INVALID_ARGUMENT);
   CHECK(zozzSkeletonLoadFile("/nonexistent/zozz.ozz", &skeleton) ==
-        ZOZZ_ERR_FILE_NOT_FOUND);
-  CHECK(zozzSkeletonLoadFile(NULL, &skeleton) == ZOZZ_ERR_INVALID_ARGUMENT);
+        ZOZZ_RESULT_FILE_NOT_FOUND);
+  CHECK(zozzSkeletonLoadFile(NULL, &skeleton) == ZOZZ_RESULT_INVALID_ARGUMENT);
 
   ZozzAnimation* animation = (ZozzAnimation*)0x1;
   CHECK(zozzAnimationLoadMemory(garbage, sizeof(garbage), &animation) ==
-        ZOZZ_ERR_BAD_FORMAT);
+        ZOZZ_RESULT_BAD_FORMAT);
   CHECK(animation == NULL);
 
   // Destroying NULL is defined and must not crash.
@@ -129,7 +129,7 @@ static void test_bad_input(void) {
 
 static void test_pose_round_trip(void) {
   ZozzSoaPose* pose = NULL;
-  CHECK(zozzSoaPoseCreate(5, &pose) == ZOZZ_OK);
+  CHECK(zozzSoaPoseCreate(5, &pose) == ZOZZ_RESULT_OK);
   CHECK(pose != NULL);
   if (pose == NULL) return;
 
@@ -150,11 +150,11 @@ static void test_pose_round_trip(void) {
     written[i].scale[2] = f;
   }
 
-  CHECK(zozzSoaPoseFromLocalTransforms(pose, written, 5) == ZOZZ_OK);
+  CHECK(zozzSoaPoseFromLocalTransforms(pose, written, 5) == ZOZZ_RESULT_OK);
 
   ZozzTransform read_back[5];
   memset(read_back, 0, sizeof(read_back));
-  CHECK(zozzSoaPoseToLocalTransforms(pose, read_back, 5) == ZOZZ_OK);
+  CHECK(zozzSoaPoseToLocalTransforms(pose, read_back, 5) == ZOZZ_RESULT_OK);
 
   for (int i = 0; i < 5; ++i) {
     for (int k = 0; k < 3; ++k) {
@@ -166,21 +166,21 @@ static void test_pose_round_trip(void) {
 
   // Undersized buffers are refused, not truncated.
   CHECK(zozzSoaPoseToLocalTransforms(pose, read_back, 2) ==
-        ZOZZ_ERR_BUFFER_TOO_SMALL);
+        ZOZZ_RESULT_BUFFER_TOO_SMALL);
 
   zozzSoaPoseDestroy(pose);
 }
 
 static void test_sampling_context(void) {
   ZozzSamplingContext* context = NULL;
-  CHECK(zozzSamplingContextCreate(20, &context) == ZOZZ_OK);
+  CHECK(zozzSamplingContextCreate(20, &context) == ZOZZ_RESULT_OK);
   CHECK(context != NULL);
   CHECK(zozzSamplingContextMaxTracks(context) >= 20);
   zozzSamplingContextInvalidate(context);
   zozzSamplingContextDestroy(context);
 
-  CHECK(zozzSamplingContextCreate(0, &context) == ZOZZ_ERR_INVALID_ARGUMENT);
-  CHECK(zozzSamplingContextCreate(-1, &context) == ZOZZ_ERR_INVALID_ARGUMENT);
+  CHECK(zozzSamplingContextCreate(0, &context) == ZOZZ_RESULT_INVALID_ARGUMENT);
+  CHECK(zozzSamplingContextCreate(-1, &context) == ZOZZ_RESULT_INVALID_ARGUMENT);
 }
 
 int main(void) {
@@ -195,7 +195,7 @@ int main(void) {
   test_abi_layout();
   test_allocator_rejects_incomplete();
 
-  CHECK(zozzSetAllocator(&allocator) == ZOZZ_OK);
+  CHECK(zozzSetAllocator(&allocator) == ZOZZ_RESULT_OK);
 
   test_bad_input();
   test_pose_round_trip();
@@ -206,7 +206,7 @@ int main(void) {
   CHECK(counters.allocations > 0);
   CHECK(counters.allocations == counters.frees);
 
-  CHECK(zozzSetAllocator(NULL) == ZOZZ_OK);
+  CHECK(zozzSetAllocator(NULL) == ZOZZ_RESULT_OK);
 
   if (failures != 0) {
     fprintf(stderr, "zozz c smoke: %d check(s) failed\n", failures);

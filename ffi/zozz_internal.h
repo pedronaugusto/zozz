@@ -46,7 +46,7 @@ constexpr int SoaBlocks(int num_joints) { return (num_joints + 3) / 4; }
 // ozz::New is `new (allocator->Allocate(...)) T(...)` with no null check, so a
 // failed allocation is a placement-new at address zero rather than a
 // recoverable error. These replacements check first, which is what makes the
-// ZOZZ_ERR_OUT_OF_MEMORY paths in this library reachable instead of decorative.
+// ZOZZ_RESULT_OUT_OF_MEMORY paths in this library reachable instead of decorative.
 //===----------------------------------------------------------------------===//
 
 template <typename T, typename... Args>
@@ -168,19 +168,19 @@ class ConstMemoryStream : public ozz::io::Stream {
 ///     (ozz only asserts on the short read).
 template <typename T>
 ZozzResult LoadTagged(ConstMemoryStream* stream, T* out) {
-  if (!stream->opened()) return ZOZZ_ERR_IO;
+  if (!stream->opened()) return ZOZZ_RESULT_IO;
   ozz::io::IArchive archive(stream);
-  if (!archive.TestTag<T>()) return ZOZZ_ERR_BAD_FORMAT;
-  if (stream->truncated()) return ZOZZ_ERR_IO;
+  if (!archive.TestTag<T>()) return ZOZZ_RESULT_BAD_FORMAT;
+  if (stream->truncated()) return ZOZZ_RESULT_IO;
   archive >> *out;
-  if (stream->truncated()) return ZOZZ_ERR_IO;
-  return ZOZZ_OK;
+  if (stream->truncated()) return ZOZZ_RESULT_IO;
+  return ZOZZ_RESULT_OK;
 }
 
 /// Loads one tagged ozz object from a borrowed memory image.
 template <typename T>
 ZozzResult LoadFromMemory(const void* data, size_t size, T* out) {
-  if (data == nullptr || size == 0) return ZOZZ_ERR_INVALID_ARGUMENT;
+  if (data == nullptr || size == 0) return ZOZZ_RESULT_INVALID_ARGUMENT;
   ConstMemoryStream stream(data, size);
   return LoadTagged(&stream, out);
 }
@@ -195,22 +195,22 @@ ZozzResult LoadFromMemory(const void* data, size_t size, T* out) {
 /// truncation guarantee.
 template <typename T>
 ZozzResult LoadFromFile(const char* path, T* out) {
-  if (path == nullptr) return ZOZZ_ERR_INVALID_ARGUMENT;
+  if (path == nullptr) return ZOZZ_RESULT_INVALID_ARGUMENT;
 
   ozz::io::File file(path, "rb");
-  if (!file.opened()) return ZOZZ_ERR_FILE_NOT_FOUND;
+  if (!file.opened()) return ZOZZ_RESULT_FILE_NOT_FOUND;
 
   const size_t size = file.Size();
-  if (size == 0) return ZOZZ_ERR_BAD_FORMAT;
+  if (size == 0) return ZOZZ_RESULT_BAD_FORMAT;
 
   ozz::memory::Allocator* allocator = ozz::memory::default_allocator();
   void* buffer = allocator->Allocate(size, 16);
-  if (buffer == nullptr) return ZOZZ_ERR_OUT_OF_MEMORY;
+  if (buffer == nullptr) return ZOZZ_RESULT_OUT_OF_MEMORY;
 
   const size_t read = file.Read(buffer, size);
   if (read != size) {
     allocator->Deallocate(buffer);
-    return ZOZZ_ERR_IO;
+    return ZOZZ_RESULT_IO;
   }
 
   const ZozzResult result = LoadFromMemory(buffer, size, out);

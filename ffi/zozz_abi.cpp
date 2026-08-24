@@ -69,7 +69,7 @@ static_assert(sizeof(ZozzAllocator) == 3 * sizeof(void*),
 /// switch in zozzResultName is compiled with -Wswitch, so adding a result
 /// without handling it is already a warning there.
 constexpr uint32_t kResultCount =
-    static_cast<uint32_t>(ZOZZ_ERR_INVALID_DATA) + 1u;
+    static_cast<uint32_t>(ZOZZ_RESULT_INVALID_DATA) + 1u;
 
 }  // namespace
 

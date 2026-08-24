@@ -93,32 +93,32 @@ RawAnimation BuildRawAnimation() {
 template <typename T>
 ZozzResult Serialise(const T& object, void** out_data, size_t* out_size) {
   if (out_data == nullptr || out_size == nullptr) {
-    return ZOZZ_ERR_INVALID_ARGUMENT;
+    return ZOZZ_RESULT_INVALID_ARGUMENT;
   }
   *out_data = nullptr;
   *out_size = 0;
 
   ozz::io::MemoryStream stream;
-  if (!stream.opened()) return ZOZZ_ERR_IO;
+  if (!stream.opened()) return ZOZZ_RESULT_IO;
   {
     ozz::io::OArchive archive(&stream);
     archive << object;
   }
 
   const size_t size = stream.Size();
-  if (size == 0) return ZOZZ_ERR_IO;
-  if (stream.Seek(0, ozz::io::Stream::kSet) != 0) return ZOZZ_ERR_IO;
+  if (size == 0) return ZOZZ_RESULT_IO;
+  if (stream.Seek(0, ozz::io::Stream::kSet) != 0) return ZOZZ_RESULT_IO;
 
   void* buffer = std::malloc(size);
-  if (buffer == nullptr) return ZOZZ_ERR_OUT_OF_MEMORY;
+  if (buffer == nullptr) return ZOZZ_RESULT_OUT_OF_MEMORY;
   if (stream.Read(buffer, size) != size) {
     std::free(buffer);
-    return ZOZZ_ERR_IO;
+    return ZOZZ_RESULT_IO;
   }
 
   *out_data = buffer;
   *out_size = size;
-  return ZOZZ_OK;
+  return ZOZZ_RESULT_OK;
 }
 
 }  // namespace
@@ -127,22 +127,22 @@ extern "C" {
 
 ZozzResult zozzFixtureSkeleton(void** out_data, size_t* out_size) {
   const RawSkeleton raw = BuildRawSkeleton();
-  if (!raw.Validate()) return ZOZZ_ERR_BAD_FORMAT;
+  if (!raw.Validate()) return ZOZZ_RESULT_BAD_FORMAT;
 
   ozz::animation::offline::SkeletonBuilder builder;
   ozz::unique_ptr<ozz::animation::Skeleton> skeleton = builder(raw);
-  if (!skeleton) return ZOZZ_ERR_BAD_FORMAT;
+  if (!skeleton) return ZOZZ_RESULT_BAD_FORMAT;
 
   return Serialise(*skeleton, out_data, out_size);
 }
 
 ZozzResult zozzFixtureAnimation(void** out_data, size_t* out_size) {
   const RawAnimation raw = BuildRawAnimation();
-  if (!raw.Validate()) return ZOZZ_ERR_BAD_FORMAT;
+  if (!raw.Validate()) return ZOZZ_RESULT_BAD_FORMAT;
 
   ozz::animation::offline::AnimationBuilder builder;
   ozz::unique_ptr<ozz::animation::Animation> animation = builder(raw);
-  if (!animation) return ZOZZ_ERR_BAD_FORMAT;
+  if (!animation) return ZOZZ_RESULT_BAD_FORMAT;
 
   return Serialise(*animation, out_data, out_size);
 }

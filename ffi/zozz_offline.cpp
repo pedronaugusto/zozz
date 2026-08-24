@@ -12,9 +12,9 @@
 // borrowed pointer is at risk.
 //
 // Validation split, uniformly: argument-shape problems (range, NaN, NULL)
-// fail at the call that receives them with ZOZZ_ERR_INVALID_ARGUMENT;
+// fail at the call that receives them with ZOZZ_RESULT_INVALID_ARGUMENT;
 // data-shape problems only ozz can judge (hierarchy depth, key ordering)
-// fail at build time with ZOZZ_ERR_INVALID_DATA. Nothing asserts.
+// fail at build time with ZOZZ_RESULT_INVALID_DATA. Nothing asserts.
 //===----------------------------------------------------------------------===//
 
 #include <cmath>
@@ -97,12 +97,12 @@ extern "C" {
 //===----------------------------------------------------------------------===//
 
 ZozzResult zozzRawSkeletonCreate(ZozzRawSkeleton** out) {
-  if (out == nullptr) return ZOZZ_ERR_INVALID_ARGUMENT;
+  if (out == nullptr) return ZOZZ_RESULT_INVALID_ARGUMENT;
   *out = nullptr;
   ZozzRawSkeleton* raw = zozz::New<ZozzRawSkeleton>();
-  if (raw == nullptr) return ZOZZ_ERR_OUT_OF_MEMORY;
+  if (raw == nullptr) return ZOZZ_RESULT_OUT_OF_MEMORY;
   *out = raw;
-  return ZOZZ_OK;
+  return ZOZZ_RESULT_OK;
 }
 
 void zozzRawSkeletonDestroy(ZozzRawSkeleton* raw) { zozz::Delete(raw); }
@@ -112,18 +112,18 @@ ZozzResult zozzRawSkeletonAddJoint(ZozzRawSkeleton* raw, int32_t parent,
                                    const ZozzTransform* rest,
                                    int32_t* out_index) {
   if (raw == nullptr || name == nullptr || rest == nullptr) {
-    return ZOZZ_ERR_INVALID_ARGUMENT;
+    return ZOZZ_RESULT_INVALID_ARGUMENT;
   }
   const int32_t count = static_cast<int32_t>(raw->joints.size());
   if (parent != ZOZZ_NO_PARENT && (parent < 0 || parent >= count)) {
-    return ZOZZ_ERR_INVALID_ARGUMENT;
+    return ZOZZ_RESULT_INVALID_ARGUMENT;
   }
-  if (count >= zozz::kMaxJoints) return ZOZZ_ERR_INVALID_ARGUMENT;
-  if (!FiniteTransform(*rest)) return ZOZZ_ERR_INVALID_ARGUMENT;
+  if (count >= zozz::kMaxJoints) return ZOZZ_RESULT_INVALID_ARGUMENT;
+  if (!FiniteTransform(*rest)) return ZOZZ_RESULT_INVALID_ARGUMENT;
 
   raw->joints.push_back({parent, ozz::string(name), ToOzz(*rest)});
   if (out_index != nullptr) *out_index = count;
-  return ZOZZ_OK;
+  return ZOZZ_RESULT_OK;
 }
 
 int zozzRawSkeletonNumJoints(const ZozzRawSkeleton* raw) {
@@ -131,9 +131,9 @@ int zozzRawSkeletonNumJoints(const ZozzRawSkeleton* raw) {
 }
 
 ZozzResult zozzSkeletonBuild(const ZozzRawSkeleton* raw, ZozzSkeleton** out) {
-  if (raw == nullptr || out == nullptr) return ZOZZ_ERR_INVALID_ARGUMENT;
+  if (raw == nullptr || out == nullptr) return ZOZZ_RESULT_INVALID_ARGUMENT;
   *out = nullptr;
-  if (raw->joints.empty()) return ZOZZ_ERR_INVALID_DATA;
+  if (raw->joints.empty()) return ZOZZ_RESULT_INVALID_DATA;
 
   // Materialise the nested tree: bucket children per parent, then fill
   // depth-first from the roots. Insertion order is preserved within each
@@ -157,17 +157,17 @@ ZozzResult zozzSkeletonBuild(const ZozzRawSkeleton* raw, ZozzSkeleton** out) {
     FillChildren(raw->joints, children, roots[i], &raw_ozz.roots[i]);
   }
 
-  if (!raw_ozz.Validate()) return ZOZZ_ERR_INVALID_DATA;
+  if (!raw_ozz.Validate()) return ZOZZ_RESULT_INVALID_DATA;
 
   ozz::animation::offline::SkeletonBuilder builder;
   ozz::unique_ptr<ozz::animation::Skeleton> built = builder(raw_ozz);
-  if (!built) return ZOZZ_ERR_OUT_OF_MEMORY;
+  if (!built) return ZOZZ_RESULT_OUT_OF_MEMORY;
 
   ZozzSkeleton* skeleton = zozz::New<ZozzSkeleton>();
-  if (skeleton == nullptr) return ZOZZ_ERR_OUT_OF_MEMORY;
+  if (skeleton == nullptr) return ZOZZ_RESULT_OUT_OF_MEMORY;
   skeleton->impl = std::move(*built);
   *out = skeleton;
-  return ZOZZ_OK;
+  return ZOZZ_RESULT_OK;
 }
 
 //===----------------------------------------------------------------------===//
@@ -176,22 +176,22 @@ ZozzResult zozzSkeletonBuild(const ZozzRawSkeleton* raw, ZozzSkeleton** out) {
 
 ZozzResult zozzRawAnimationCreate(int num_tracks, float duration,
                                   const char* name, ZozzRawAnimation** out) {
-  if (out == nullptr) return ZOZZ_ERR_INVALID_ARGUMENT;
+  if (out == nullptr) return ZOZZ_RESULT_INVALID_ARGUMENT;
   *out = nullptr;
   if (num_tracks <= 0 || num_tracks > zozz::kMaxJoints) {
-    return ZOZZ_ERR_INVALID_ARGUMENT;
+    return ZOZZ_RESULT_INVALID_ARGUMENT;
   }
   if (!std::isfinite(duration) || duration <= 0.f) {
-    return ZOZZ_ERR_INVALID_ARGUMENT;
+    return ZOZZ_RESULT_INVALID_ARGUMENT;
   }
 
   ZozzRawAnimation* raw = zozz::New<ZozzRawAnimation>();
-  if (raw == nullptr) return ZOZZ_ERR_OUT_OF_MEMORY;
+  if (raw == nullptr) return ZOZZ_RESULT_OUT_OF_MEMORY;
   raw->impl.duration = duration;
   raw->impl.name = name == nullptr ? "" : name;
   raw->impl.tracks.resize(static_cast<size_t>(num_tracks));
   *out = raw;
-  return ZOZZ_OK;
+  return ZOZZ_RESULT_OK;
 }
 
 void zozzRawAnimationDestroy(ZozzRawAnimation* raw) { zozz::Delete(raw); }
@@ -212,17 +212,17 @@ ZozzResult CheckPush(ZozzRawAnimation* raw, int track, float time,
                      const float* value, int value_count,
                      ozz::animation::offline::RawAnimation::JointTrack**
                          out_track) {
-  if (raw == nullptr || value == nullptr) return ZOZZ_ERR_INVALID_ARGUMENT;
+  if (raw == nullptr || value == nullptr) return ZOZZ_RESULT_INVALID_ARGUMENT;
   if (track < 0 || track >= static_cast<int>(raw->impl.tracks.size())) {
-    return ZOZZ_ERR_INVALID_ARGUMENT;
+    return ZOZZ_RESULT_INVALID_ARGUMENT;
   }
   if (!std::isfinite(time) || time < 0.f || time > raw->impl.duration) {
-    return ZOZZ_ERR_INVALID_ARGUMENT;
+    return ZOZZ_RESULT_INVALID_ARGUMENT;
   }
   const bool finite = value_count == 4 ? Finite4(value) : Finite3(value);
-  if (!finite) return ZOZZ_ERR_INVALID_ARGUMENT;
+  if (!finite) return ZOZZ_RESULT_INVALID_ARGUMENT;
   *out_track = &raw->impl.tracks[static_cast<size_t>(track)];
-  return ZOZZ_OK;
+  return ZOZZ_RESULT_OK;
 }
 
 }  // namespace
@@ -231,47 +231,47 @@ ZozzResult zozzRawAnimationPushTranslation(ZozzRawAnimation* raw, int track,
                                            float time, const float value[3]) {
   ozz::animation::offline::RawAnimation::JointTrack* t = nullptr;
   const ZozzResult check = CheckPush(raw, track, time, value, 3, &t);
-  if (check != ZOZZ_OK) return check;
+  if (check != ZOZZ_RESULT_OK) return check;
   t->translations.push_back(
       {time, ozz::math::Float3(value[0], value[1], value[2])});
-  return ZOZZ_OK;
+  return ZOZZ_RESULT_OK;
 }
 
 ZozzResult zozzRawAnimationPushRotation(ZozzRawAnimation* raw, int track,
                                         float time, const float value[4]) {
   ozz::animation::offline::RawAnimation::JointTrack* t = nullptr;
   const ZozzResult check = CheckPush(raw, track, time, value, 4, &t);
-  if (check != ZOZZ_OK) return check;
+  if (check != ZOZZ_RESULT_OK) return check;
   t->rotations.push_back(
       {time,
        ozz::math::Quaternion(value[0], value[1], value[2], value[3])});
-  return ZOZZ_OK;
+  return ZOZZ_RESULT_OK;
 }
 
 ZozzResult zozzRawAnimationPushScale(ZozzRawAnimation* raw, int track,
                                      float time, const float value[3]) {
   ozz::animation::offline::RawAnimation::JointTrack* t = nullptr;
   const ZozzResult check = CheckPush(raw, track, time, value, 3, &t);
-  if (check != ZOZZ_OK) return check;
+  if (check != ZOZZ_RESULT_OK) return check;
   t->scales.push_back({time, ozz::math::Float3(value[0], value[1], value[2])});
-  return ZOZZ_OK;
+  return ZOZZ_RESULT_OK;
 }
 
 ZozzResult zozzAnimationBuild(const ZozzRawAnimation* raw,
                               ZozzAnimation** out) {
-  if (raw == nullptr || out == nullptr) return ZOZZ_ERR_INVALID_ARGUMENT;
+  if (raw == nullptr || out == nullptr) return ZOZZ_RESULT_INVALID_ARGUMENT;
   *out = nullptr;
-  if (!raw->impl.Validate()) return ZOZZ_ERR_INVALID_DATA;
+  if (!raw->impl.Validate()) return ZOZZ_RESULT_INVALID_DATA;
 
   ozz::animation::offline::AnimationBuilder builder;
   ozz::unique_ptr<ozz::animation::Animation> built = builder(raw->impl);
-  if (!built) return ZOZZ_ERR_OUT_OF_MEMORY;
+  if (!built) return ZOZZ_RESULT_OUT_OF_MEMORY;
 
   ZozzAnimation* animation = zozz::New<ZozzAnimation>();
-  if (animation == nullptr) return ZOZZ_ERR_OUT_OF_MEMORY;
+  if (animation == nullptr) return ZOZZ_RESULT_OUT_OF_MEMORY;
   animation->impl = std::move(*built);
   *out = animation;
-  return ZOZZ_OK;
+  return ZOZZ_RESULT_OK;
 }
 
 }  // extern "C"

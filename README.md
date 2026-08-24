@@ -13,8 +13,9 @@ and no asset system attached.
   production consumer today.
 - Host allocator injection: every ozz allocation can go through your
   `std.mem.Allocator`.
-- Layout drift between the C header and the Zig externs is a **test failure**,
-  not a memory-corruption bug.
+- Drift between the C header and the Zig externs is a **build failure**, not a
+  memory-corruption bug: every type, signature, enumerator and constant is
+  cross-checked at comptime, with no hand-kept list of what to check.
 
 Status: **v0.2** — load, sample, convert, local-to-model, and offline building
 (author a skeleton or clip in memory and build it into the same runtime objects
@@ -131,16 +132,72 @@ validate that first.
 
 ### The ABI guard
 
-The Zig side hand-writes `extern struct`s mirroring `zozz.h`. Nothing in either
-compiler checks those two declarations still agree — a field reordered on one
-side and not the other is silent corruption. `zozzAbiLayout()` reports what the
-C++ actually compiled to, and a test asserts every size and offset against the
-Zig declarations. In the other direction, `static_assert`s in `ffi/zozz_abi.cpp`
-fail the **build** if a vendored ozz upgrade changes a type this package casts
-to or from.
+The Zig side hand-writes its `extern` declarations rather than running
+translate-c, so the wrapper gets exactly the types it wants and the shipped
+module never compiles C. Nothing in either compiler checks that those
+declarations still agree with `ffi/zozz.h`, and a `size_t` narrowed to an `int`
+links cleanly and corrupts. Three checks close that, on three different axes:
 
-This is deliberate: it is the check that comparable C++-to-Zig bindings tend to
-skip, and the one whose absence is hardest to debug.
+- **`src/abi_check.zig` — the header against the declarations.** A comptime
+  `@cImport` of the real header, compared against `src/c.zig` by reflection:
+  every struct field paired **by name** with its own offset, every scalar's
+  size, alignment, signedness and int-versus-float, every function's arity and
+  variadic-ness, every enumerator's value, every constant. There is **no
+  hand-maintained list** — declarations are discovered by reflection and a
+  declaration the check cannot classify is a compile error rather than a silent
+  pass. It also sweeps the other direction, so a symbol the header exports but
+  `c.zig` never declares (or declares as something that is not an extern) fails
+  too. The `@cImport` happens in a test only; the shipped module stays
+  translate-c-free.
+- **`zozzAbiLayout()` — the compiled library against the declarations.** The
+  header is a source file and the library is a binary; they can describe
+  different structs while looking identical. This one asks the linked
+  translation unit what it really laid out. Neither check replaces the other.
+- **`static_assert`s in `ffi/zozz_abi.cpp` — ozz against the C++.** These fail
+  the build if a vendored ozz upgrade changes a type this package casts to or
+  from.
+
+The first of those is the one that guards everything else, and it is the one
+test here that cannot test itself: a refactor that quietly makes it vacuous
+looks exactly like a passing build. `ci/check-abi-drift.sh` is the answer —
+twelve deliberate drifts applied one at a time, each of which must be refused,
+including the field swap that leaves every offset in the struct unchanged and
+so defeats any positional or offsets-only comparison. It runs as its own CI job
+and under `ci/run.sh`.
+
+Because the check pairs an enum's fields to the header by name, the naming
+convention is load-bearing rather than cosmetic:
+
+| Zig side | C side |
+|---|---|
+| type `Foo` | `ZozzFoo` |
+| function `zozzFoo` | `zozzFoo` |
+| constant `foo_bar` | `ZOZZ_FOO_BAR` |
+| enum `Foo`'s field `bar` | `ZOZZ_FOO_BAR` |
+
+Enumerators take the **full type name**, always: `ZOZZ_RESULT_IO`, not
+`ZOZZ_ERR_IO`. A C enum reaches Zig as a plain integer alias with no record of
+which enumerators belonged to it, so the strict prefix is the only thing that
+can pair one back to its enum. **No enumerator may be negative**, either — C
+leaves an enum's underlying type to the implementation and the implementations
+disagree, and every value being non-negative is what makes that unobservable.
+The guard enforces both.
+
+#### Deprecated: the v0.2.0 result spellings
+
+That convention required renaming every `ZozzResult` enumerator, which is a
+source-breaking change to a published C API. Every old spelling therefore
+remains in `ffi/zozz.h` as a macro alias:
+
+| v0.2.0, deprecated | current |
+|---|---|
+| `ZOZZ_OK` | `ZOZZ_RESULT_OK` |
+| `ZOZZ_ERR_<WHAT>` | `ZOZZ_RESULT_<WHAT>` |
+
+The values did not move, so existing C code keeps compiling and keeps meaning
+what it meant. **The aliases will be removed in v0.4.0** — port at your
+convenience before then. Zig consumers are unaffected: the wrapper spells
+results as `zozz.Error` values and its `c.Result` field names have not changed.
 
 ### Build hygiene
 
@@ -198,7 +255,8 @@ NaN ratio that is refused.
 
 CI runs the whole suite on **Linux, macOS and Windows**, in four optimize modes
 with the sanitizer both on and off, plus the standalone C test — and
-cross-compiles eight further targets. See
+cross-compiles eight further targets, runs the ABI drift mutation test, and
+verifies the vendored tree. See
 [`.github/workflows/ci.yml`](.github/workflows/ci.yml).
 
 The same matrix runs locally, so a failure is reproducible on your machine
