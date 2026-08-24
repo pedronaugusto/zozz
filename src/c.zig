@@ -47,6 +47,21 @@ pub const Result = enum(c_int) {
     invalid_data = 9,
 };
 
+/// Step vs. linear interpolation for a raw-track keyframe. Mirrors
+/// `ZozzTrackInterpolation` (ffi/zozz_rawtrack.h).
+pub const TrackInterpolation = enum(c_int) {
+    step = 0,
+    linear = 1,
+};
+
+/// Which pose an extracted-motion component is measured against. Mirrors
+/// `ZozzMotionReference` (ffi/zozz_optimizer.h).
+pub const MotionReference = enum(c_int) {
+    absolute = 0,
+    skeleton = 1,
+    animation = 2,
+};
+
 //=============================================================================
 // Plain data
 //=============================================================================
@@ -72,6 +87,20 @@ pub const MotionBlendLayer = extern struct {
     weight: f32,
     /// Borrowed for the call only; not retained afterward.
     delta: *const Transform,
+};
+
+pub const OptimizerSetting = extern struct {
+    tolerance: f32,
+    distance: f32,
+};
+
+pub const MotionSettings = extern struct {
+    x: bool,
+    y: bool,
+    z: bool,
+    reference: MotionReference,
+    bake: bool,
+    loop: bool,
 };
 
 pub const AbiLayout = extern struct {
@@ -145,6 +174,16 @@ pub const TrackEdge = extern struct {
     rising: bool,
 };
 
+pub const AnimationOptimizer = opaque {};
+pub const FixedRateSamplingTime = opaque {};
+pub const MotionExtractor = opaque {};
+
+pub const RawFloatTrack = opaque {};
+pub const RawFloat2Track = opaque {};
+pub const RawFloat3Track = opaque {};
+pub const RawFloat4Track = opaque {};
+pub const RawQuaternionTrack = opaque {};
+
 //=============================================================================
 // Entry points
 //=============================================================================
@@ -197,6 +236,113 @@ pub extern fn zozzRawAnimationPushTranslation(raw: *RawAnimation, track: c_int, 
 pub extern fn zozzRawAnimationPushRotation(raw: *RawAnimation, track: c_int, time: f32, value: *const [4]f32) Result;
 pub extern fn zozzRawAnimationPushScale(raw: *RawAnimation, track: c_int, time: f32, value: *const [3]f32) Result;
 pub extern fn zozzAnimationBuild(raw: *const RawAnimation, out: **Animation) Result;
+
+//=============================================================================
+// Animation optimizer (ffi/zozz_optimizer.h)
+//=============================================================================
+
+pub extern fn zozzAnimationOptimizerCreate(out: **AnimationOptimizer) Result;
+pub extern fn zozzAnimationOptimizerDestroy(optimizer: ?*AnimationOptimizer) void;
+pub extern fn zozzAnimationOptimizerSetSetting(optimizer: *AnimationOptimizer, setting: OptimizerSetting) Result;
+pub extern fn zozzAnimationOptimizerGetSetting(optimizer: ?*const AnimationOptimizer, out: *OptimizerSetting) Result;
+pub extern fn zozzAnimationOptimizerSetJointOverride(optimizer: *AnimationOptimizer, joint: i32, setting: OptimizerSetting) Result;
+pub extern fn zozzAnimationOptimizerClearJointOverride(optimizer: *AnimationOptimizer, joint: i32) Result;
+pub extern fn zozzAnimationOptimizerRun(
+    optimizer: *const AnimationOptimizer,
+    input: *const RawAnimation,
+    skeleton: *const Skeleton,
+    output: *RawAnimation,
+) Result;
+
+//=============================================================================
+// Raw-animation sampling and re-timing utilities (ffi/zozz_optimizer.h)
+//=============================================================================
+
+pub extern fn zozzRawAnimationSampleTrack(raw: *const RawAnimation, track: i32, time: f32, out: *Transform) Result;
+pub extern fn zozzRawAnimationSample(raw: *const RawAnimation, time: f32, out: [*]Transform, count: usize) Result;
+pub extern fn zozzRawAnimationExtractTimePoints(
+    raw: *const RawAnimation,
+    out: ?[*]f32,
+    count: usize,
+    out_count: *usize,
+) Result;
+
+pub extern fn zozzFixedRateSamplingTimeCreate(duration: f32, frequency: f32, out: **FixedRateSamplingTime) Result;
+pub extern fn zozzFixedRateSamplingTimeDestroy(self: ?*FixedRateSamplingTime) void;
+pub extern fn zozzFixedRateSamplingTimeNumKeys(self: ?*const FixedRateSamplingTime) usize;
+pub extern fn zozzFixedRateSamplingTimeAt(self: *const FixedRateSamplingTime, key: usize, out: *f32) Result;
+
+//=============================================================================
+// Additive animation builder (ffi/zozz_optimizer.h)
+//=============================================================================
+
+pub extern fn zozzAdditiveAnimationBuilderRun(input: *const RawAnimation, output: *RawAnimation) Result;
+pub extern fn zozzAdditiveAnimationBuilderRunWithReference(
+    input: *const RawAnimation,
+    reference_pose: ?[*]const Transform,
+    reference_pose_count: usize,
+    output: *RawAnimation,
+) Result;
+
+//=============================================================================
+// Motion extractor (ffi/zozz_optimizer.h)
+//=============================================================================
+
+pub extern fn zozzMotionExtractorCreate(out: **MotionExtractor) Result;
+pub extern fn zozzMotionExtractorDestroy(extractor: ?*MotionExtractor) void;
+pub extern fn zozzMotionExtractorSetRootJoint(extractor: *MotionExtractor, joint: i32) Result;
+pub extern fn zozzMotionExtractorGetRootJoint(extractor: ?*const MotionExtractor) i32;
+pub extern fn zozzMotionExtractorSetPositionSettings(extractor: *MotionExtractor, settings: MotionSettings) Result;
+pub extern fn zozzMotionExtractorGetPositionSettings(extractor: ?*const MotionExtractor, out: *MotionSettings) Result;
+pub extern fn zozzMotionExtractorSetRotationSettings(extractor: *MotionExtractor, settings: MotionSettings) Result;
+pub extern fn zozzMotionExtractorGetRotationSettings(extractor: ?*const MotionExtractor, out: *MotionSettings) Result;
+pub extern fn zozzMotionExtractorRun(
+    extractor: *const MotionExtractor,
+    input: *const RawAnimation,
+    skeleton: *const Skeleton,
+    motion_position: *RawFloat3Track,
+    motion_rotation: *RawQuaternionTrack,
+    output: *RawAnimation,
+) Result;
+
+//=============================================================================
+// Raw tracks, TrackBuilder, TrackOptimizer (ffi/zozz_rawtrack.h)
+//=============================================================================
+
+pub extern fn zozzRawFloatTrackCreate(out: **RawFloatTrack) Result;
+pub extern fn zozzRawFloatTrackDestroy(raw: ?*RawFloatTrack) void;
+pub extern fn zozzRawFloatTrackNumKeyframes(raw: ?*const RawFloatTrack) c_int;
+pub extern fn zozzRawFloatTrackPushKeyframe(raw: *RawFloatTrack, interpolation: TrackInterpolation, ratio: f32, value: f32) Result;
+pub extern fn zozzFloatTrackBuild(raw: *const RawFloatTrack, out: **FloatTrack) Result;
+pub extern fn zozzRawFloatTrackOptimize(input: *const RawFloatTrack, tolerance: f32, output: *RawFloatTrack) Result;
+
+pub extern fn zozzRawFloat2TrackCreate(out: **RawFloat2Track) Result;
+pub extern fn zozzRawFloat2TrackDestroy(raw: ?*RawFloat2Track) void;
+pub extern fn zozzRawFloat2TrackNumKeyframes(raw: ?*const RawFloat2Track) c_int;
+pub extern fn zozzRawFloat2TrackPushKeyframe(raw: *RawFloat2Track, interpolation: TrackInterpolation, ratio: f32, value: *const [2]f32) Result;
+pub extern fn zozzFloat2TrackBuild(raw: *const RawFloat2Track, out: **Float2Track) Result;
+pub extern fn zozzRawFloat2TrackOptimize(input: *const RawFloat2Track, tolerance: f32, output: *RawFloat2Track) Result;
+
+pub extern fn zozzRawFloat3TrackCreate(out: **RawFloat3Track) Result;
+pub extern fn zozzRawFloat3TrackDestroy(raw: ?*RawFloat3Track) void;
+pub extern fn zozzRawFloat3TrackNumKeyframes(raw: ?*const RawFloat3Track) c_int;
+pub extern fn zozzRawFloat3TrackPushKeyframe(raw: *RawFloat3Track, interpolation: TrackInterpolation, ratio: f32, value: *const [3]f32) Result;
+pub extern fn zozzFloat3TrackBuild(raw: *const RawFloat3Track, out: **Float3Track) Result;
+pub extern fn zozzRawFloat3TrackOptimize(input: *const RawFloat3Track, tolerance: f32, output: *RawFloat3Track) Result;
+
+pub extern fn zozzRawFloat4TrackCreate(out: **RawFloat4Track) Result;
+pub extern fn zozzRawFloat4TrackDestroy(raw: ?*RawFloat4Track) void;
+pub extern fn zozzRawFloat4TrackNumKeyframes(raw: ?*const RawFloat4Track) c_int;
+pub extern fn zozzRawFloat4TrackPushKeyframe(raw: *RawFloat4Track, interpolation: TrackInterpolation, ratio: f32, value: *const [4]f32) Result;
+pub extern fn zozzFloat4TrackBuild(raw: *const RawFloat4Track, out: **Float4Track) Result;
+pub extern fn zozzRawFloat4TrackOptimize(input: *const RawFloat4Track, tolerance: f32, output: *RawFloat4Track) Result;
+
+pub extern fn zozzRawQuaternionTrackCreate(out: **RawQuaternionTrack) Result;
+pub extern fn zozzRawQuaternionTrackDestroy(raw: ?*RawQuaternionTrack) void;
+pub extern fn zozzRawQuaternionTrackNumKeyframes(raw: ?*const RawQuaternionTrack) c_int;
+pub extern fn zozzRawQuaternionTrackPushKeyframe(raw: *RawQuaternionTrack, interpolation: TrackInterpolation, ratio: f32, value: *const [4]f32) Result;
+pub extern fn zozzQuaternionTrackBuild(raw: *const RawQuaternionTrack, out: **QuaternionTrack) Result;
+pub extern fn zozzRawQuaternionTrackOptimize(input: *const RawQuaternionTrack, tolerance: f32, output: *RawQuaternionTrack) Result;
 
 pub extern fn zozzSamplingContextCreate(max_tracks: c_int, out: **SamplingContext) Result;
 pub extern fn zozzSamplingContextDestroy(context: ?*SamplingContext) void;

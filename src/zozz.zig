@@ -42,6 +42,8 @@ const blending_mod = @import("blending.zig");
 const archive_mod = @import("archive.zig");
 const ik_mod = @import("ik.zig");
 const skinning_mod = @import("skinning.zig");
+const optimizer_mod = @import("optimizer.zig");
+const rawtrack_mod = @import("rawtrack.zig");
 
 //=============================================================================
 // Public surface
@@ -103,6 +105,22 @@ pub const saveSkeletonToFile = archive_mod.saveSkeletonToFile;
 pub const saveAnimationToFile = archive_mod.saveAnimationToFile;
 pub const ik = ik_mod;
 pub const skinning = skinning_mod;
+pub const AnimationOptimizer = optimizer_mod.AnimationOptimizer;
+pub const OptimizerSetting = optimizer_mod.OptimizerSetting;
+pub const FixedRateSamplingTime = optimizer_mod.FixedRateSamplingTime;
+pub const AdditiveAnimationBuilder = optimizer_mod.AdditiveAnimationBuilder;
+pub const MotionExtractor = optimizer_mod.MotionExtractor;
+pub const MotionReference = optimizer_mod.MotionReference;
+pub const MotionSettings = optimizer_mod.MotionSettings;
+
+pub const TrackInterpolation = rawtrack_mod.Interpolation;
+pub const RawFloatTrack = rawtrack_mod.RawFloatTrack;
+pub const RawFloat2Track = rawtrack_mod.RawFloat2Track;
+pub const RawFloat3Track = rawtrack_mod.RawFloat3Track;
+pub const RawFloat4Track = rawtrack_mod.RawFloat4Track;
+pub const RawQuaternionTrack = rawtrack_mod.RawQuaternionTrack;
+// The runtime track types are re-exported from track.zig above; rawtrack.zig
+// names them too, for the builders that produce them.
 
 /// Build options the C library was actually compiled with, so a consumer can
 /// branch on them instead of assuming.
@@ -176,6 +194,8 @@ test {
     // Only reachable in a test build, where the fixture library is linked.
     _ = @import("integration_test.zig");
     _ = @import("offline.zig");
+    _ = @import("optimizer.zig");
+    _ = @import("rawtrack.zig");
 
     // Test-only: this one @cImport-s the C header. Reached from a test block
     // and nowhere else, so a normal build never analyses it and the shipped

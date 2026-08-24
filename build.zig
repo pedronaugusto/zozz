@@ -40,6 +40,11 @@ const ozz_runtime_sources = [_][]const u8{
     "libs/ozz/src/animation/runtime/ik_aim_job.cc",
     // geometry — matrix-palette skinning
     "libs/ozz/src/geometry/runtime/skinning_job.cc",
+    // animation runtime — needed by the offline processing sources below:
+    // skeleton_utils by the animation optimizer and motion extractor (joint
+    // hierarchy walks), track by TrackBuilder's output type.
+    "libs/ozz/src/animation/runtime/skeleton_utils.cc",
+    "libs/ozz/src/animation/runtime/track.cc",
 };
 
 /// ozz's offline builders, needed only by the test fixture. They turn raw
@@ -51,6 +56,18 @@ const ozz_offline_sources = [_][]const u8{
     "libs/ozz/src/animation/offline/raw_animation_utils.cc",
     "libs/ozz/src/animation/offline/skeleton_builder.cc",
     "libs/ozz/src/animation/offline/animation_builder.cc",
+    // animation processing: key-frame reduction, additive deltas, root-motion
+    // extraction.
+    "libs/ozz/src/animation/offline/animation_optimizer.cc",
+    "libs/ozz/src/animation/offline/additive_animation_builder.cc",
+    "libs/ozz/src/animation/offline/motion_extractor.cc",
+    // raw tracks: the five user-channel value types, their builder and their
+    // optimizer. raw_track_utils is motion_extractor's dependency (it samples
+    // the extracted rotation track while fixing up joint translations).
+    "libs/ozz/src/animation/offline/raw_track.cc",
+    "libs/ozz/src/animation/offline/raw_track_utils.cc",
+    "libs/ozz/src/animation/offline/track_builder.cc",
+    "libs/ozz/src/animation/offline/track_optimizer.cc",
 };
 
 /// The zozz C boundary. One translation unit per concern — deliberately not a
@@ -58,6 +75,8 @@ const ozz_offline_sources = [_][]const u8{
 const zozz_ffi_sources = [_][]const u8{
     "ffi/zozz_core.cpp",
     "ffi/zozz_offline.cpp",
+    "ffi/zozz_optimizer.cpp",
+    "ffi/zozz_rawtrack.cpp",
     "ffi/zozz_pose.cpp",
     "ffi/zozz_skeleton.cpp",
     "ffi/zozz_animation.cpp",
@@ -208,6 +227,12 @@ pub fn build(b: *std.Build) void {
     lib.installHeader(b.path("ffi/zozz.h"), "zozz.h");
     lib.installHeader(b.path("ffi/zozz_ik.h"), "zozz_ik.h");
     lib.installHeader(b.path("ffi/zozz_skinning.h"), "zozz_skinning.h");
+    // Consumers get the public headers without reaching into the source
+    // tree. zozz.h #includes the other two by relative path, so all three
+    // must land side by side in the install prefix.
+    lib.installHeader(b.path("ffi/zozz.h"), "zozz.h");
+    lib.installHeader(b.path("ffi/zozz_optimizer.h"), "zozz_optimizer.h");
+    lib.installHeader(b.path("ffi/zozz_rawtrack.h"), "zozz_rawtrack.h");
 
     //=====================================================================
     // The Zig module.

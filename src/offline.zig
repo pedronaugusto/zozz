@@ -116,6 +116,35 @@ pub const RawAnimation = struct {
         try err.check(c.zozzAnimationBuild(self.handle, &handle));
         return .{ .handle = handle };
     }
+
+    /// Samples one track at `time` (seconds; clamped to the track's own
+    /// first/last key outside its range). For offline use only (preview,
+    /// re-timing, cooking) — use `zozz.sample` against a built `Animation`
+    /// at runtime.
+    pub fn sampleTrack(self: RawAnimation, track: u32, time: f32) err.Error!math.Transform {
+        var out: math.Transform = undefined;
+        try err.check(c.zozzRawAnimationSampleTrack(self.handle, @intCast(track), time, &out));
+        return out;
+    }
+
+    /// Samples every track at `time`. `out` must hold at least `numTracks`
+    /// entries; slots past the track count are filled with the identity
+    /// transform.
+    pub fn sample(self: RawAnimation, time: f32, out: []math.Transform) err.Error!void {
+        try err.check(c.zozzRawAnimationSample(self.handle, time, out.ptr, out.len));
+    }
+
+    /// The sorted, de-duplicated union of every keyframe time across all
+    /// tracks, allocated with `allocator`. Caller frees the result.
+    pub fn extractTimePoints(self: RawAnimation, allocator: std.mem.Allocator) err.Error![]f32 {
+        var count: usize = undefined;
+        try err.check(c.zozzRawAnimationExtractTimePoints(self.handle, null, 0, &count));
+
+        const out = allocator.alloc(f32, count) catch return err.Error.OutOfMemory;
+        errdefer allocator.free(out);
+        try err.check(c.zozzRawAnimationExtractTimePoints(self.handle, out.ptr, out.len, &count));
+        return out;
+    }
 };
 
 //=============================================================================
