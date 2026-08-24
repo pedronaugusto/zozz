@@ -229,7 +229,7 @@ The guard enforces both.
 zig build test
 ```
 
-52 tests, one skipped by default. The suite is self-contained: assets are
+51 tests, plus one skipped by default. The suite is self-contained: assets are
 built at test time through ozz's own
 offline builders and serialised in memory (`tests/fixture.cpp`), so it is always
 version-matched to the vendored runtime and ships no third-party clips. That
