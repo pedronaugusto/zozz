@@ -16,8 +16,10 @@ and no asset system attached.
 - Layout drift between the C header and the Zig externs is a **test failure**,
   not a memory-corruption bug.
 
-Status: **v0.1** — load, sample, convert, local-to-model. Blending, IK and the
-offline cook are not exposed yet; see [Scope](#scope).
+Status: **v0.2** — load, sample, convert, local-to-model, and offline building
+(author a skeleton or clip in memory and build it into the same runtime objects
+the loaders produce). Blending, IK, tracks and skinning are not exposed yet;
+see [Scope](#scope).
 
 ## Usage
 
@@ -224,8 +226,10 @@ configuration proves behaviour, which is why the two are separate jobs.
 
 That table describes the matrix, not a promise: **the badge at the top of this
 file is the authority on whether those runs have actually happened and passed.**
-At the time of writing the suite has been executed by hand on macOS/aarch64
-only, and the Windows MSVC configuration has never been executed at all.
+The whole matrix has been executed — the suite on Linux, macOS and Windows,
+including the Windows MSVC ABI, alongside the cross-compilation and
+vendor-integrity jobs. What the badge tells you that this paragraph cannot is
+whether it still passes on the commit you are reading.
 
 ## Scope
 
@@ -245,12 +249,26 @@ Not yet exposed, in rough order of likely need:
 - Two-bone and aim IK
 - Tracks (`Track`, triggering)
 - Skinning (`SkinningJob`)
-- The offline path: glTF → `.ozz` cook
 
-Nothing above is blocked — the sources are vendored and the C-boundary pattern
-is established; they are simply not written yet. Deliberately out of scope: a
-blend tree, a state machine, a clock, or an asset system. Those are a host's
-job, and keeping them out is what makes this package reusable.
+Everything above is unblocked — the sources are vendored and the C-boundary
+pattern is established; they are simply not written yet.
+
+**A glTF → `.ozz` cook is a different matter**, and it is worth being exact
+about why rather than leaving it on a list. `gltf2ozz.cc` is vendored and has
+its own `main`, but it is written as a subclass of ozz's `OzzImporter` tool
+framework, and that framework is configured through jsoncpp — which is *not*
+vendored here, because it lives in upstream's `extern/` alongside glfw and
+gtest. So the cook is not a binding of vendored code that nobody has typed yet;
+it is either vendoring a JSON library and a command-line tool framework, or
+reimplementing the import against `tiny_gltf.h` directly. Both are real
+projects, and neither is on this list until it is chosen.
+
+The **FBX** importer is not a candidate at all: it needs the proprietary
+Autodesk FBX SDK, and its sources are excluded for that reason.
+
+Deliberately out of scope: a blend tree, a state machine, a clock, or an asset
+system. Those are a host's job, and keeping them out is what makes this package
+reusable.
 
 ## Contributing
 

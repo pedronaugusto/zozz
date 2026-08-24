@@ -34,10 +34,19 @@ Taken: `include/`, `src/`, `LICENSE.md`, `AUTHORS.md`, `CHANGES.md`.
 | `src/animation/offline/fbx` | Requires the proprietary Autodesk FBX SDK. |
 | `CMakeLists.txt` (all) | Superseded by `build.zig`. |
 
-`src/animation/offline/gltf` was **kept**: its only dependencies are the
-header-only `tiny_gltf.h` and `json.hpp`, vendored inside ozz itself. It is not
-compiled today, but it is the foundation of a future glTF → `.ozz` cook and
-costs nothing on disk.
+`src/animation/offline/gltf` was **kept**, and it is worth recording exactly
+what that does and does not buy. `gltf2ozz.cc` reads glTF through
+`tiny_gltf.h` and `json.hpp`, both header-only and both vendored inside ozz
+itself. But it is written as a subclass of `OzzImporter`
+(`include/ozz/animation/offline/tools/import2ozz.h`), and that framework is
+configured through **jsoncpp** — `src/animation/offline/tools/import2ozz_skel.cc`
+includes `<json/json.h>` — which lives in the excluded `extern/` directory.
+
+So these sources do not build as they stand, and a cook built on them means
+vendoring jsoncpp and the tool framework as well, or reimplementing the import
+against `tiny_gltf.h` directly. They are kept because they are the reference
+for what a correct glTF import does, and they cost nothing on disk. They are
+not a cook waiting to be typed.
 
 Which translation units actually compile is decided explicitly in `build.zig`
 (`ozz_runtime_sources`, `ozz_offline_sources`), never by a directory glob.
