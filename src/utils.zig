@@ -31,9 +31,9 @@ pub fn restPoseModelSpace(skeleton: Skeleton, out: []math.Mat4) err.Error!void {
 /// True if `joint` has no children: it is the last joint, or the next
 /// joint's parent is not `joint`.
 pub fn jointIsLeaf(skeleton: Skeleton, joint: u32) err.Error!bool {
-    var out: c_int = undefined;
+    var out: bool = undefined;
     try err.check(c.zozzSkeletonJointIsLeaf(skeleton.handle, @intCast(joint), &out));
-    return out != 0;
+    return out;
 }
 
 /// Finds a joint by exact, case-sensitive name. Null if no joint matches.

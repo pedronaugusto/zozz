@@ -10,6 +10,8 @@
 #ifndef ZOZZ_UTILS_H_
 #define ZOZZ_UTILS_H_
 
+#include <stdbool.h>
+
 #include "zozz.h"
 
 #ifdef __cplusplus
@@ -34,11 +36,17 @@ ZOZZ_API ZozzResult zozzSkeletonRestPoseModelSpace(const ZozzSkeleton* skeleton,
                                                    ZozzFloat4x4* out,
                                                    size_t count);
 
-/// Writes 1 to `*out` if `joint` has no children — it is the last joint, or
-/// the next joint's parent is not `joint` — 0 otherwise. `joint` must be in
-/// [0, zozzSkeletonNumJoints).
+/// Writes true to `*out` if `joint` has no children — it is the last joint,
+/// or the next joint's parent is not `joint` — false otherwise. `joint` must
+/// be in [0, zozzSkeletonNumJoints).
+///
+/// A result plus an out-param rather than a plain `bool` return like
+/// zozzSkeletonFindJoint's -1, because a boolean has no value left over to
+/// mean "you asked about a joint that does not exist": returning false for
+/// both a real interior joint and an out-of-range index is a bug a caller
+/// cannot see.
 ZOZZ_API ZozzResult zozzSkeletonJointIsLeaf(const ZozzSkeleton* skeleton,
-                                           int joint, int* out);
+                                            int joint, bool* out);
 
 /// Finds a joint by exact, case-sensitive name. Returns its index, or -1 if
 /// `skeleton` or `name` is NULL, or no joint matches.
