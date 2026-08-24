@@ -63,6 +63,7 @@ const zozz_ffi_sources = [_][]const u8{
     "ffi/zozz_utils.cpp",
     "ffi/zozz_motion.cpp",
     "ffi/zozz_blending.cpp",
+    "ffi/zozz_archive.cpp",
 };
 
 pub fn build(b: *std.Build) void {
@@ -193,6 +194,7 @@ pub fn build(b: *std.Build) void {
     lib.installHeader(b.path("ffi/zozz_utils.h"), "zozz_utils.h");
     lib.installHeader(b.path("ffi/zozz_motion.h"), "zozz_motion.h");
     lib.installHeader(b.path("ffi/zozz_blending.h"), "zozz_blending.h");
+    lib.installHeader(b.path("ffi/zozz_archive.h"), "zozz_archive.h");
 
     //=====================================================================
     // The Zig module.
