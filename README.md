@@ -17,10 +17,11 @@ and no asset system attached.
   memory-corruption bug: every type, signature, enumerator and constant is
   cross-checked at comptime, with no hand-kept list of what to check.
 
-Status: **v0.2** — load, sample, convert, local-to-model, and offline building
-(author a skeleton or clip in memory and build it into the same runtime objects
-the loaders produce). Blending, IK, tracks and skinning are not exposed yet;
-see [Scope](#scope).
+Status: **v0.2** — load, sample, convert, local-to-model, blend, apply IK, skin
+a mesh, and offline building (author a skeleton or clip in memory, optimize or
+extract motion from it, and build it into the same runtime objects the loaders
+produce). See [Scope](#scope) for what that covers and what still is not
+exposed.
 
 ## Usage
 
@@ -319,25 +320,34 @@ whether it still passes on the commit you are reading.
 
 ## Scope
 
-Exposed today:
+Exposed today, one C header per concern (see `ffi/zozz.h`, the umbrella that
+pulls all of them in):
 
 - Skeleton and animation loading, from file or memory
-- Offline building: author a skeleton (`RawSkeleton`) or clip (`RawAnimation`)
-  at runtime and build it into the same runtime objects the loaders produce.
-  Importers (glTF and friends) are still not exposed
 - Sampling with a frame-coherency context
 - SoA pose storage, and SoA ↔ AoS conversion
-- Local-to-model
+- Local-to-model, full and range-limited (the latter for re-running only the
+  chain an IK correction touched)
+- Pose blending (`BlendingJob`): weighted, additive, and per-joint partial
+  blending
+- Two-bone and aim IK, and folding a correction back into a pose
+- Matrix-palette skinning (`SkinningJob`)
+- Runtime tracks (`Track`): five value types — float, float2, float3, float4,
+  quaternion — plus edge-triggering over a `FloatTrack`
+- Root-motion blending
+- Skeleton and animation utilities: single-joint rest pose, hierarchy
+  traversal, name lookup, per-track keyframe counts
+- Offline building: author a skeleton (`RawSkeleton`) or clip (`RawAnimation`)
+  at runtime and build it into the same runtime objects the loaders produce
+- Offline animation processing: the animation optimizer (key-frame reduction),
+  raw-animation sampling and re-timing, the additive animation builder, and
+  root-motion extraction
+- Raw tracks: the same five value types on the authoring side, with their own
+  builders and optimizers
+- The `OArchive` write path: saving a skeleton or a clip to a host-controlled
+  stream, or straight to a file
 
-Not yet exposed, in rough order of likely need:
-
-- Blending (`BlendingJob`), additive blending
-- Two-bone and aim IK
-- Tracks (`Track`, triggering)
-- Skinning (`SkinningJob`)
-
-Everything above is unblocked — the sources are vendored and the C-boundary
-pattern is established; they are simply not written yet.
+Importers (glTF and friends) are not exposed; see below for why.
 
 **A glTF → `.ozz` cook is a different matter**, and it is worth being exact
 about why rather than leaving it on a list. `gltf2ozz.cc` is vendored and has
