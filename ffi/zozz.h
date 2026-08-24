@@ -342,6 +342,35 @@ ZOZZ_API ZozzResult zozzLocalToModel(const ZozzSkeleton* skeleton,
                                      const ZozzFloat4x4* root,
                                      ZozzFloat4x4* out, size_t count);
 
+/// Same as zozzLocalToModel, but restricted to the joint range [from, to]
+/// ("to" included), which lets a host re-run only the chain an IK correction
+/// touched instead of the whole skeleton. `input` and `out` must still cover
+/// every joint regardless of the range — ancestors outside it are read, not
+/// written, and a descendant's parent may be one of them.
+///
+/// `from` is ZOZZ_NO_PARENT to start at the root, and any joint index
+/// otherwise; pass zozzSkeletonNumJoints (or larger) as `to` to update
+/// through the last joint. If `from_excluded` is non-zero, `from` itself is
+/// left untouched in `out` and must already hold a valid model-space matrix
+/// there, since its children are expressed relative to it — this is the
+/// combination that updates a corrected chain without recomputing the joint
+/// the correction was already applied to.
+ZOZZ_API ZozzResult zozzLocalToModelRange(const ZozzSkeleton* skeleton,
+                                          const ZozzSoaPose* locals,
+                                          const ZozzFloat4x4* root, int from,
+                                          int to, int from_excluded,
+                                          ZozzFloat4x4* out, size_t count);
+
+//===----------------------------------------------------------------------===//
+// Inverse kinematics and skinning
+//
+// Declared in their own headers, included here so one #include of zozz.h
+// still gets the whole surface.
+//===----------------------------------------------------------------------===//
+
+#include "zozz_ik.h"
+#include "zozz_skinning.h"
+
 //===----------------------------------------------------------------------===//
 // Offline builders
 //
