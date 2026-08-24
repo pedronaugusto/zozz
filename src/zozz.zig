@@ -39,6 +39,7 @@ const track_mod = @import("track.zig");
 const utils_mod = @import("utils.zig");
 const motion_mod = @import("motion.zig");
 const blending_mod = @import("blending.zig");
+const archive_mod = @import("archive.zig");
 
 //=============================================================================
 // Public surface
@@ -94,6 +95,11 @@ pub const SoaWeights = blending_mod.SoaWeights;
 pub const BlendingLayer = blending_mod.Layer;
 pub const blend = blending_mod.run;
 
+pub const Stream = archive_mod.Stream;
+pub const OArchive = archive_mod.OArchive;
+pub const saveSkeletonToFile = archive_mod.saveSkeletonToFile;
+pub const saveAnimationToFile = archive_mod.saveAnimationToFile;
+
 /// Build options the C library was actually compiled with, so a consumer can
 /// branch on them instead of assuming.
 pub const options = @import("zozz_options");
@@ -147,6 +153,7 @@ test {
     _ = utils_mod;
     _ = motion_mod;
     _ = blending_mod;
+    _ = archive_mod;
     // Only reachable in a test build, where the fixture library is linked.
     _ = @import("integration_test.zig");
     _ = @import("offline.zig");
