@@ -274,6 +274,21 @@ ZOZZ_API int zozzAnimationNumTracks(const ZozzAnimation* animation);
 /// Borrowed clip name; "" when unnamed, never NULL for a valid handle.
 ZOZZ_API const char* zozzAnimationName(const ZozzAnimation* animation);
 
+/// Number of SoA blocks matching the track count: (numTracks + 3) / 4.
+ZOZZ_API int zozzAnimationNumSoaTracks(const ZozzAnimation* animation);
+
+/// Estimated size of the clip's compressed keyframe data, in bytes.
+ZOZZ_API size_t zozzAnimationSize(const ZozzAnimation* animation);
+
+/// Number of distinct time points shared across the clip's keyframes.
+ZOZZ_API int zozzAnimationNumTimepoints(const ZozzAnimation* animation);
+
+/// Writes the clip's time points, in seconds and ascending order. `count`
+/// must be at least zozzAnimationNumTimepoints, else
+/// ZOZZ_RESULT_BUFFER_TOO_SMALL.
+ZOZZ_API ZozzResult zozzAnimationTimepoints(const ZozzAnimation* animation,
+                                           float* out, size_t count);
+
 //===----------------------------------------------------------------------===//
 // SoA pose
 //===----------------------------------------------------------------------===//
@@ -341,6 +356,17 @@ ZOZZ_API ZozzResult zozzLocalToModel(const ZozzSkeleton* skeleton,
                                      const ZozzSoaPose* locals,
                                      const ZozzFloat4x4* root,
                                      ZozzFloat4x4* out, size_t count);
+
+//===----------------------------------------------------------------------===//
+// Skeleton and animation utilities, and root-motion blending
+//
+// Split into their own headers, one per concern, and pulled in here so a
+// consumer still needs only this one include. ffi/zozz_utils.h and
+// ffi/zozz_motion.h stand on their own and document each area in full.
+//===----------------------------------------------------------------------===//
+
+#include "zozz_utils.h"
+#include "zozz_motion.h"
 
 //===----------------------------------------------------------------------===//
 // Offline builders
@@ -483,5 +509,19 @@ ZOZZ_API void zozzAbiLayout(ZozzAbiLayout* out);
 //===----------------------------------------------------------------------===//
 
 #include "zozz_track.h"
+
+//===----------------------------------------------------------------------===//
+// Pose blending — weighted, additive and per-joint partial blending, all one
+// job. Split out into its own header for the same reason tracks are.
+//===----------------------------------------------------------------------===//
+
+#include "zozz_blending.h"
+
+//===----------------------------------------------------------------------===//
+// The OArchive write path — persisting a skeleton or a clip to a stream a
+// host controls, or straight to a file.
+//===----------------------------------------------------------------------===//
+
+#include "zozz_archive.h"
 
 #endif  // ZOZZ_H_
