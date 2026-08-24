@@ -475,4 +475,13 @@ ZOZZ_API void zozzAbiLayout(ZozzAbiLayout* out);
 }  // extern "C"
 #endif
 
+//===----------------------------------------------------------------------===//
+// Runtime user tracks — keyframed curves sampled independently of the
+// skeletal animation pipeline, plus edge triggering over a FloatTrack. Split
+// out into its own header because ozz templates the runtime type over five
+// value types, which is a lot of declarations for one area.
+//===----------------------------------------------------------------------===//
+
+#include "zozz_track.h"
+
 #endif  // ZOZZ_H_
