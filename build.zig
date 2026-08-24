@@ -29,7 +29,10 @@ const ozz_runtime_sources = [_][]const u8{
     "libs/ozz/src/animation/runtime/sampling_job.cc",
     "libs/ozz/src/animation/runtime/local_to_model_job.cc",
     "libs/ozz/src/animation/runtime/blending_job.cc",
-    // animation runtime — user tracks and edge triggering
+    // animation runtime — user tracks and edge triggering. track.cc is also
+    // what TrackBuilder in the offline sources below builds INTO, and
+    // skeleton_utils.cc is what the animation optimizer and the motion
+    // extractor walk hierarchies with; one entry each covers both uses.
     "libs/ozz/src/animation/runtime/track.cc",
     "libs/ozz/src/animation/runtime/track_sampling_job.cc",
     "libs/ozz/src/animation/runtime/track_triggering_job.cc",
@@ -40,11 +43,6 @@ const ozz_runtime_sources = [_][]const u8{
     "libs/ozz/src/animation/runtime/ik_aim_job.cc",
     // geometry — matrix-palette skinning
     "libs/ozz/src/geometry/runtime/skinning_job.cc",
-    // animation runtime — needed by the offline processing sources below:
-    // skeleton_utils by the animation optimizer and motion extractor (joint
-    // hierarchy walks), track by TrackBuilder's output type.
-    "libs/ozz/src/animation/runtime/skeleton_utils.cc",
-    "libs/ozz/src/animation/runtime/track.cc",
 };
 
 /// ozz's offline builders, needed only by the test fixture. They turn raw
@@ -90,6 +88,30 @@ const zozz_ffi_sources = [_][]const u8{
     "ffi/zozz_blending.cpp",
     "ffi/zozz_archive.cpp",
 };
+
+// Refuses a source listed twice, across all three lists at once.
+//
+// A duplicate is invisible in a static archive — the linker takes one member
+// and never looks at the other — so it survives every default build and every
+// test, and only surfaces when something needs both objects at once. The
+// shared-library configuration is the first thing that does, which is a long
+// way from the edit that caused it. Two sources were listed twice here for
+// exactly that reason before this check existed.
+comptime {
+    @setEvalBranchQuota(100_000);
+    const lists = .{ ozz_runtime_sources, ozz_offline_sources, zozz_ffi_sources };
+    var all: []const []const u8 = &.{};
+    for (lists) |list| all = all ++ @as([]const []const u8, &list);
+    for (all, 0..) |a, i| {
+        for (all[i + 1 ..]) |b| {
+            if (std.mem.eql(u8, a, b)) {
+                @compileError("build.zig lists `" ++ a ++ "` more than once. " ++
+                    "A duplicate source is a duplicate symbol, which a static " ++
+                    "archive hides and a shared library refuses.");
+            }
+        }
+    }
+}
 
 pub fn build(b: *std.Build) void {
     const target = b.standardTargetOptions(.{});
