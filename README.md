@@ -17,11 +17,16 @@ and no asset system attached.
   memory-corruption bug: every type, signature, enumerator and constant is
   cross-checked at comptime, with no hand-kept list of what to check.
 
-Status: **v0.2** — load, sample, convert, local-to-model, blend, apply IK, skin
-a mesh, and offline building (author a skeleton or clip in memory, optimize or
+Status: **v0.3** — load, sample, convert, local-to-model, blend, apply IK, skin
+a mesh, and offline building (author a skeleton or clip in memory, optimise or
 extract motion from it, and build it into the same runtime objects the loaders
 produce). See [Scope](#scope) for what that covers and what still is not
 exposed.
+
+v0.3 is a breaking change from v0.2 and there is no compatibility layer: every
+job is now a struct with a `run` method, mirroring ozz's own shape, and the
+pre-v0.2 result spellings are gone. There is exactly one way to spell
+everything.
 
 ## Usage
 
