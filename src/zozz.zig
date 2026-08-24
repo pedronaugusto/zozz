@@ -35,6 +35,7 @@ const animation_mod = @import("animation.zig");
 const pose_mod = @import("pose.zig");
 const sampling_mod = @import("sampling.zig");
 const offline_mod = @import("offline.zig");
+const track_mod = @import("track.zig");
 
 //=============================================================================
 // Public surface
@@ -64,6 +65,14 @@ pub const localToModel = sampling_mod.localToModel;
 
 pub const RawSkeleton = offline_mod.RawSkeleton;
 pub const RawAnimation = offline_mod.RawAnimation;
+
+pub const FloatTrack = track_mod.FloatTrack;
+pub const Float2Track = track_mod.Float2Track;
+pub const Float3Track = track_mod.Float3Track;
+pub const Float4Track = track_mod.Float4Track;
+pub const QuaternionTrack = track_mod.QuaternionTrack;
+pub const TrackEdge = track_mod.TrackEdge;
+pub const TrackTriggering = track_mod.TrackTriggering;
 
 /// Build options the C library was actually compiled with, so a consumer can
 /// branch on them instead of assuming.
@@ -114,6 +123,7 @@ test {
     _ = animation_mod;
     _ = pose_mod;
     _ = sampling_mod;
+    _ = track_mod;
     // Only reachable in a test build, where the fixture library is linked.
     _ = @import("integration_test.zig");
     _ = @import("offline.zig");
