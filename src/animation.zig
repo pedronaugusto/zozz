@@ -46,4 +46,25 @@ pub const Animation = struct {
         if (!(total > 0)) return 0;
         return std.math.clamp(seconds / total, 0, 1);
     }
+
+    /// Number of SoA blocks matching `numTracks`: `(numTracks + 3) / 4`.
+    pub fn numSoaTracks(self: Animation) u32 {
+        return @intCast(c.zozzAnimationNumSoaTracks(self.handle));
+    }
+
+    /// Estimated size of the clip's compressed keyframe data, in bytes.
+    pub fn size(self: Animation) usize {
+        return c.zozzAnimationSize(self.handle);
+    }
+
+    /// Number of distinct time points shared across the clip's keyframes.
+    pub fn numTimepoints(self: Animation) u32 {
+        return @intCast(c.zozzAnimationNumTimepoints(self.handle));
+    }
+
+    /// Writes the clip's time points, in seconds and ascending order. `out`
+    /// must hold at least `numTimepoints` entries.
+    pub fn timepoints(self: Animation, out: []f32) err.Error!void {
+        try err.check(c.zozzAnimationTimepoints(self.handle, out.ptr, out.len));
+    }
 };

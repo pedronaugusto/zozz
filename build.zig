@@ -32,6 +32,9 @@ const ozz_runtime_sources = [_][]const u8{
     "libs/ozz/src/animation/runtime/track.cc",
     "libs/ozz/src/animation/runtime/track_sampling_job.cc",
     "libs/ozz/src/animation/runtime/track_triggering_job.cc",
+    "libs/ozz/src/animation/runtime/skeleton_utils.cc",
+    "libs/ozz/src/animation/runtime/animation_utils.cc",
+    "libs/ozz/src/animation/runtime/motion_blending_job.cc",
 };
 
 /// ozz's offline builders, needed only by the test fixture. They turn raw
@@ -56,6 +59,8 @@ const zozz_ffi_sources = [_][]const u8{
     "ffi/zozz_sampling.cpp",
     "ffi/zozz_track.cpp",
     "ffi/zozz_abi.cpp",
+    "ffi/zozz_utils.cpp",
+    "ffi/zozz_motion.cpp",
 };
 
 pub fn build(b: *std.Build) void {
@@ -179,6 +184,12 @@ pub fn build(b: *std.Build) void {
     // Consumers get the public headers without reaching into the source tree.
     lib.installHeader(b.path("ffi/zozz.h"), "zozz.h");
     lib.installHeader(b.path("ffi/zozz_track.h"), "zozz_track.h");
+    // Consumers get the public header without reaching into the source tree.
+    // zozz.h #includes zozz_utils.h and zozz_motion.h by relative path, so
+    // both must land next to it in the installed include directory too.
+    lib.installHeader(b.path("ffi/zozz.h"), "zozz.h");
+    lib.installHeader(b.path("ffi/zozz_utils.h"), "zozz_utils.h");
+    lib.installHeader(b.path("ffi/zozz_motion.h"), "zozz_motion.h");
 
     //=====================================================================
     // The Zig module.
