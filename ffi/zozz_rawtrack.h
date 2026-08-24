@@ -19,6 +19,7 @@
 #include <stdint.h>
 
 #include "zozz.h"
+#include "zozz_track.h"
 
 #ifdef __cplusplus
 extern "C" {
@@ -38,23 +39,13 @@ typedef enum ZozzTrackInterpolation {
 //===----------------------------------------------------------------------===//
 // Runtime track handles
 //
-// TrackBuilder's output. Opaque and otherwise inert here: sampling a built
-// track at runtime is out of scope for this surface (see BINDING.md — this is
-// the authoring side only). Destroying one is still zozz's job, since it was
-// allocated through zozz's installed allocator.
+// TrackBuilder's output. These are the exact same opaque types zozz_track.h
+// declares, which is what this header includes them from rather than
+// redeclaring: zozz_track.h is also where they get loaded, named, sampled and
+// edge-triggered. Destroying one built here is still zozz's job, since it was
+// allocated through zozz's installed allocator — see zozzFloatTrackDestroy
+// and friends there.
 //===----------------------------------------------------------------------===//
-
-typedef struct ZozzFloatTrack ZozzFloatTrack;
-typedef struct ZozzFloat2Track ZozzFloat2Track;
-typedef struct ZozzFloat3Track ZozzFloat3Track;
-typedef struct ZozzFloat4Track ZozzFloat4Track;
-typedef struct ZozzQuaternionTrack ZozzQuaternionTrack;
-
-ZOZZ_API void zozzFloatTrackDestroy(ZozzFloatTrack* track);
-ZOZZ_API void zozzFloat2TrackDestroy(ZozzFloat2Track* track);
-ZOZZ_API void zozzFloat3TrackDestroy(ZozzFloat3Track* track);
-ZOZZ_API void zozzFloat4TrackDestroy(ZozzFloat4Track* track);
-ZOZZ_API void zozzQuaternionTrackDestroy(ZozzQuaternionTrack* track);
 
 //===----------------------------------------------------------------------===//
 // RawFloatTrack
