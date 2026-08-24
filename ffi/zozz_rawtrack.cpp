@@ -18,6 +18,7 @@
 #include "ozz/animation/runtime/track.h"
 #include "ozz/base/memory/unique_ptr.h"
 #include "zozz_internal.h"
+#include "zozz_track_types.h"
 
 namespace {
 
@@ -72,31 +73,7 @@ ZozzResult CheckOptimize(const void* input, const void* output,
 // TrackBuilder produces them and only zozz*TrackDestroy consumes them.
 //===----------------------------------------------------------------------===//
 
-struct ZozzFloatTrack {
-  ozz::animation::FloatTrack impl;
-};
-struct ZozzFloat2Track {
-  ozz::animation::Float2Track impl;
-};
-struct ZozzFloat3Track {
-  ozz::animation::Float3Track impl;
-};
-struct ZozzFloat4Track {
-  ozz::animation::Float4Track impl;
-};
-struct ZozzQuaternionTrack {
-  ozz::animation::QuaternionTrack impl;
-};
-
 extern "C" {
-
-void zozzFloatTrackDestroy(ZozzFloatTrack* track) { zozz::Delete(track); }
-void zozzFloat2TrackDestroy(ZozzFloat2Track* track) { zozz::Delete(track); }
-void zozzFloat3TrackDestroy(ZozzFloat3Track* track) { zozz::Delete(track); }
-void zozzFloat4TrackDestroy(ZozzFloat4Track* track) { zozz::Delete(track); }
-void zozzQuaternionTrackDestroy(ZozzQuaternionTrack* track) {
-  zozz::Delete(track);
-}
 
 //===----------------------------------------------------------------------===//
 // RawFloatTrack

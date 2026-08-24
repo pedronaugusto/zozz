@@ -201,6 +201,7 @@ test {
     _ = @import("blending_test.zig");
     _ = @import("ik_test.zig");
     _ = @import("archive_test.zig");
+    _ = @import("track_test.zig");
 
     // Test-only: this one @cImport-s the C header. Reached from a test block
     // and nowhere else, so a normal build never analyses it and the shipped
