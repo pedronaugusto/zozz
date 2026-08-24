@@ -86,9 +86,9 @@ struct ZozzRawSkeleton {
   ozz::vector<FlatJoint> joints;
 };
 
-struct ZozzRawAnimation {
-  ozz::animation::offline::RawAnimation impl;
-};
+// ZozzRawAnimation is defined in zozz_internal.h: zozz_optimizer.cpp needs the
+// complete type too (the animation optimizer, additive builder and motion
+// extractor all read and write `impl` directly).
 
 extern "C" {
 
