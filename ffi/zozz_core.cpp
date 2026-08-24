@@ -58,25 +58,25 @@ uint32_t zozzOzzVersion(void) {
 
 const char* zozzResultName(ZozzResult result) {
   switch (result) {
-    case ZOZZ_OK:
+    case ZOZZ_RESULT_OK:
       return "ok";
-    case ZOZZ_ERR_FILE_NOT_FOUND:
+    case ZOZZ_RESULT_FILE_NOT_FOUND:
       return "file not found";
-    case ZOZZ_ERR_IO:
+    case ZOZZ_RESULT_IO:
       return "io error";
-    case ZOZZ_ERR_BAD_FORMAT:
+    case ZOZZ_RESULT_BAD_FORMAT:
       return "bad format";
-    case ZOZZ_ERR_OUT_OF_MEMORY:
+    case ZOZZ_RESULT_OUT_OF_MEMORY:
       return "out of memory";
-    case ZOZZ_ERR_INVALID_ARGUMENT:
+    case ZOZZ_RESULT_INVALID_ARGUMENT:
       return "invalid argument";
-    case ZOZZ_ERR_JOB_INVALID:
+    case ZOZZ_RESULT_JOB_INVALID:
       return "job invalid";
-    case ZOZZ_ERR_BUFFER_TOO_SMALL:
+    case ZOZZ_RESULT_BUFFER_TOO_SMALL:
       return "buffer too small";
-    case ZOZZ_ERR_SKELETON_MISMATCH:
+    case ZOZZ_RESULT_SKELETON_MISMATCH:
       return "skeleton mismatch";
-    case ZOZZ_ERR_INVALID_DATA:
+    case ZOZZ_RESULT_INVALID_DATA:
       return "invalid data";
   }
   return "unknown result";
@@ -88,11 +88,11 @@ ZozzResult zozzSetAllocator(const ZozzAllocator* alloc) {
       ozz::memory::SetDefaulAllocator(SavedDefault());
       SavedDefault() = nullptr;
     }
-    return ZOZZ_OK;
+    return ZOZZ_RESULT_OK;
   }
 
   if (alloc->allocate == nullptr || alloc->deallocate == nullptr) {
-    return ZOZZ_ERR_INVALID_ARGUMENT;
+    return ZOZZ_RESULT_INVALID_ARGUMENT;
   }
 
   Host().Install(*alloc);
@@ -102,7 +102,7 @@ ZozzResult zozzSetAllocator(const ZozzAllocator* alloc) {
   if (SavedDefault() == nullptr && previous != &Host()) {
     SavedDefault() = previous;
   }
-  return ZOZZ_OK;
+  return ZOZZ_RESULT_OK;
 }
 
 }  // extern "C"

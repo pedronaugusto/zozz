@@ -94,10 +94,10 @@ void AosToSoa(const ZozzTransform* aos, ozz::math::SoaTransform* soa,
 extern "C" {
 
 ZozzResult zozzSoaPoseCreate(int num_joints, ZozzSoaPose** out) {
-  if (out == nullptr) return ZOZZ_ERR_INVALID_ARGUMENT;
+  if (out == nullptr) return ZOZZ_RESULT_INVALID_ARGUMENT;
   *out = nullptr;
   if (num_joints <= 0 || num_joints > zozz::kMaxJoints) {
-    return ZOZZ_ERR_INVALID_ARGUMENT;
+    return ZOZZ_RESULT_INVALID_ARGUMENT;
   }
 
   const int blocks = zozz::SoaBlocks(num_joints);
@@ -105,12 +105,12 @@ ZozzResult zozzSoaPoseCreate(int num_joints, ZozzSoaPose** out) {
   void* storage =
       allocator->Allocate(sizeof(ozz::math::SoaTransform) * blocks,
                           alignof(ozz::math::SoaTransform));
-  if (storage == nullptr) return ZOZZ_ERR_OUT_OF_MEMORY;
+  if (storage == nullptr) return ZOZZ_RESULT_OUT_OF_MEMORY;
 
   ZozzSoaPose* pose = zozz::New<ZozzSoaPose>();
   if (pose == nullptr) {
     allocator->Deallocate(storage);
-    return ZOZZ_ERR_OUT_OF_MEMORY;
+    return ZOZZ_RESULT_OUT_OF_MEMORY;
   }
 
   pose->data = static_cast<ozz::math::SoaTransform*>(storage);
@@ -121,7 +121,7 @@ ZozzResult zozzSoaPoseCreate(int num_joints, ZozzSoaPose** out) {
   }
 
   *out = pose;
-  return ZOZZ_OK;
+  return ZOZZ_RESULT_OK;
 }
 
 void zozzSoaPoseDestroy(ZozzSoaPose* pose) {
@@ -135,46 +135,46 @@ int zozzSoaPoseNumJoints(const ZozzSoaPose* pose) {
 }
 
 ZozzResult zozzSoaPoseSetIdentity(ZozzSoaPose* pose) {
-  if (pose == nullptr) return ZOZZ_ERR_INVALID_ARGUMENT;
+  if (pose == nullptr) return ZOZZ_RESULT_INVALID_ARGUMENT;
   for (int b = 0; b < pose->num_soa_joints; ++b) {
     pose->data[b] = ozz::math::SoaTransform::identity();
   }
-  return ZOZZ_OK;
+  return ZOZZ_RESULT_OK;
 }
 
 ZozzResult zozzSoaPoseSetRestPose(ZozzSoaPose* pose,
                                   const ZozzSkeleton* skeleton) {
-  if (pose == nullptr || skeleton == nullptr) return ZOZZ_ERR_INVALID_ARGUMENT;
+  if (pose == nullptr || skeleton == nullptr) return ZOZZ_RESULT_INVALID_ARGUMENT;
   if (pose->num_joints != skeleton->impl.num_joints()) {
-    return ZOZZ_ERR_SKELETON_MISMATCH;
+    return ZOZZ_RESULT_SKELETON_MISMATCH;
   }
   const ozz::span<const ozz::math::SoaTransform> rest =
       skeleton->impl.joint_rest_poses();
   for (int b = 0; b < pose->num_soa_joints; ++b) {
     pose->data[b] = rest[b];
   }
-  return ZOZZ_OK;
+  return ZOZZ_RESULT_OK;
 }
 
 ZozzResult zozzSoaPoseToLocalTransforms(const ZozzSoaPose* pose,
                                         ZozzTransform* out, size_t count) {
-  if (pose == nullptr || out == nullptr) return ZOZZ_ERR_INVALID_ARGUMENT;
+  if (pose == nullptr || out == nullptr) return ZOZZ_RESULT_INVALID_ARGUMENT;
   if (count < static_cast<size_t>(pose->num_joints)) {
-    return ZOZZ_ERR_BUFFER_TOO_SMALL;
+    return ZOZZ_RESULT_BUFFER_TOO_SMALL;
   }
   zozz::SoaToAos(pose->data, out, pose->num_joints);
-  return ZOZZ_OK;
+  return ZOZZ_RESULT_OK;
 }
 
 ZozzResult zozzSoaPoseFromLocalTransforms(ZozzSoaPose* pose,
                                           const ZozzTransform* in,
                                           size_t count) {
-  if (pose == nullptr || in == nullptr) return ZOZZ_ERR_INVALID_ARGUMENT;
+  if (pose == nullptr || in == nullptr) return ZOZZ_RESULT_INVALID_ARGUMENT;
   if (count < static_cast<size_t>(pose->num_joints)) {
-    return ZOZZ_ERR_BUFFER_TOO_SMALL;
+    return ZOZZ_RESULT_BUFFER_TOO_SMALL;
   }
   zozz::AosToSoa(in, pose->data, pose->num_joints);
-  return ZOZZ_OK;
+  return ZOZZ_RESULT_OK;
 }
 
 }  // extern "C"
