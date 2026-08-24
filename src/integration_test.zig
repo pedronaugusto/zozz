@@ -332,3 +332,96 @@ test "a truncated archive is refused rather than trusted" {
     const whole_animation = try zozz.Animation.initFromMemory(animation_blob.bytes);
     whole_animation.deinit();
 }
+
+//=============================================================================
+// Archive write path
+//=============================================================================
+
+/// A growable in-memory destination implementing `zozz.Stream`, so the write
+/// path is exercised through the same host-bridge seam a real consumer would
+/// use — not through the file convenience, which never touches the bridge.
+const WriteBuffer = struct {
+    list: std.ArrayList(u8) = .empty,
+    gpa: std.mem.Allocator,
+
+    fn deinit(self: *WriteBuffer) void {
+        self.list.deinit(self.gpa);
+    }
+
+    fn opened(user: ?*anyopaque) callconv(.c) c_int {
+        _ = user;
+        return 1;
+    }
+
+    fn write(user: ?*anyopaque, data: ?*const anyopaque, size: usize) callconv(.c) usize {
+        const self: *WriteBuffer = @ptrCast(@alignCast(user orelse return 0));
+        const bytes: [*]const u8 = @ptrCast(data orelse return 0);
+        self.list.appendSlice(self.gpa, bytes[0..size]) catch return 0;
+        return size;
+    }
+
+    fn stream(self: *WriteBuffer) zozz.Stream {
+        return .{ .opened = &opened, .write = &write, .user = self };
+    }
+};
+
+test "an animation written through the archive and read back compares equal to the original" {
+    const gpa = std.testing.allocator;
+    try zozz.setAllocator(gpa);
+    defer zozz.resetAllocator();
+
+    const animation_blob = try FixtureBlob.init(zozzFixtureAnimation);
+    defer animation_blob.deinit();
+
+    const original = try zozz.Animation.initFromMemory(animation_blob.bytes);
+    defer original.deinit();
+
+    var buffer: WriteBuffer = .{ .gpa = gpa };
+    defer buffer.deinit();
+    const bridge = buffer.stream();
+
+    const archive = try zozz.OArchive.init(&bridge);
+    try archive.saveAnimation(original);
+    archive.deinit();
+
+    // The write path reproduces the exact archive ozz's own serialisation
+    // does: same tag, same version, same bytes, not merely a
+    // similarly-shaped one.
+    try std.testing.expectEqualSlices(u8, animation_blob.bytes, buffer.list.items);
+
+    const roundtripped = try zozz.Animation.initFromMemory(buffer.list.items);
+    defer roundtripped.deinit();
+
+    try std.testing.expectEqualStrings(original.name(), roundtripped.name());
+    try std.testing.expectEqual(original.duration(), roundtripped.duration());
+    try std.testing.expectEqual(original.numTracks(), roundtripped.numTracks());
+
+    // Sampling must behave identically too, not just report identical
+    // metadata. Two contexts, one per clip instance, sidestep the
+    // pointer-identity cache invalidation a single shared context would need
+    // on every swap between the two.
+    const context_a = try zozz.SamplingContext.init(original.numTracks());
+    defer context_a.deinit();
+    const context_b = try zozz.SamplingContext.init(roundtripped.numTracks());
+    defer context_b.deinit();
+    const pose_a = try zozz.SoaPose.init(original.numTracks());
+    defer pose_a.deinit();
+    const pose_b = try zozz.SoaPose.init(roundtripped.numTracks());
+    defer pose_b.deinit();
+
+    var locals_a: [fixture_joints]zozz.Transform = undefined;
+    var locals_b: [fixture_joints]zozz.Transform = undefined;
+    for ([_]f32{ 0.0, 0.3, 0.5, 0.75, 1.0 }) |ratio| {
+        try zozz.sample(original, context_a, ratio, pose_a);
+        try pose_a.toLocalTransforms(&locals_a);
+
+        try zozz.sample(roundtripped, context_b, ratio, pose_b);
+        try pose_b.toLocalTransforms(&locals_b);
+
+        for (locals_a, locals_b) |a, b| {
+            try std.testing.expectEqual(a.translation, b.translation);
+            try std.testing.expectEqual(a.rotation, b.rotation);
+            try std.testing.expectEqual(a.scale, b.scale);
+        }
+    }
+}
