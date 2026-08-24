@@ -70,7 +70,7 @@ test "two-bone IK moves the end effector toward the target, and reaches an in-ra
     try pose.setRestPose(skel);
 
     var models: [3]zozz.Mat4 = undefined;
-    try zozz.localToModel(skel, pose, null, &models);
+    try (zozz.LocalToModelJob{ .skeleton = skel, .locals = pose, .root = null, .out = &models }).run();
 
     // Case 1: a target beyond the chain's reach, off the chain's own axis so
     // reaching it actually requires bending. The end effector cannot reach
@@ -80,17 +80,17 @@ test "two-bone IK moves the end effector toward the target, and reaches an in-ra
         const target = [3]f32{ 2, 2, 0 };
         const before = distance(position(models[2]), target);
 
-        const result = try zozz.ik.runTwoBone(.{
+        const result = try (zozz.ik.TwoBoneJob{
             .target = target,
             .start_joint = &models[0],
             .mid_joint = &models[1],
             .end_joint = &models[2],
-        });
+        }).run();
         try std.testing.expect(!result.reached);
 
         try zozz.ik.applyCorrection(pose, start, result.start_joint_correction);
         try zozz.ik.applyCorrection(pose, mid, result.mid_joint_correction);
-        try zozz.localToModel(skel, pose, null, &models);
+        try (zozz.LocalToModelJob{ .skeleton = skel, .locals = pose, .root = null, .out = &models }).run();
         const after = distance(position(models[2]), target);
 
         try std.testing.expect(after < before);
@@ -98,22 +98,22 @@ test "two-bone IK moves the end effector toward the target, and reaches an in-ra
 
     // Reset to the rest pose for a clean second case.
     try pose.setRestPose(skel);
-    try zozz.localToModel(skel, pose, null, &models);
+    try (zozz.LocalToModelJob{ .skeleton = skel, .locals = pose, .root = null, .out = &models }).run();
 
     // Case 2: a target inside the chain's reach must actually be reached.
     {
         const target = [3]f32{ 1.5, 0.5, 0 };
-        const result = try zozz.ik.runTwoBone(.{
+        const result = try (zozz.ik.TwoBoneJob{
             .target = target,
             .start_joint = &models[0],
             .mid_joint = &models[1],
             .end_joint = &models[2],
-        });
+        }).run();
         try std.testing.expect(result.reached);
 
         try zozz.ik.applyCorrection(pose, start, result.start_joint_correction);
         try zozz.ik.applyCorrection(pose, mid, result.mid_joint_correction);
-        try zozz.localToModel(skel, pose, null, &models);
+        try (zozz.LocalToModelJob{ .skeleton = skel, .locals = pose, .root = null, .out = &models }).run();
         const reached_pos = position(models[2]);
 
         try std.testing.expectApproxEqAbs(target[0], reached_pos[0], 5e-3);
@@ -134,10 +134,10 @@ test "aim IK points the forward axis at the target" {
     // pose and the aimed direction read back directly.
     const joint_matrix = zozz.mat4_identity;
 
-    const result = try zozz.ik.runAim(.{
+    const result = try (zozz.ik.AimJob{
         .target = .{ 0, 0, 5 },
         .joint = &joint_matrix,
-    });
+    }).run();
 
     try zozz.ik.applyCorrection(pose, 0, result.joint_correction);
     var locals: [1]zozz.Transform = undefined;
@@ -166,15 +166,15 @@ test "weight = 0 is a no-op for both IK jobs" {
     defer pose.deinit();
     try pose.setRestPose(skel);
     var models: [3]zozz.Mat4 = undefined;
-    try zozz.localToModel(skel, pose, null, &models);
+    try (zozz.LocalToModelJob{ .skeleton = skel, .locals = pose, .root = null, .out = &models }).run();
 
-    const two_bone = try zozz.ik.runTwoBone(.{
+    const two_bone = try (zozz.ik.TwoBoneJob{
         .target = .{ 5, 5, 5 }, // wildly off-axis; would normally bend hard.
         .weight = 0,
         .start_joint = &models[0],
         .mid_joint = &models[1],
         .end_joint = &models[2],
-    });
+    }).run();
     for ([_][4]f32{ two_bone.start_joint_correction, two_bone.mid_joint_correction }) |c| {
         try std.testing.expectApproxEqAbs(@as(f32, 0), c[0], 1e-5);
         try std.testing.expectApproxEqAbs(@as(f32, 0), c[1], 1e-5);
@@ -183,11 +183,11 @@ test "weight = 0 is a no-op for both IK jobs" {
     }
 
     const joint_matrix = zozz.mat4_identity;
-    const aim = try zozz.ik.runAim(.{
+    const aim = try (zozz.ik.AimJob{
         .target = .{ 5, 5, 5 },
         .weight = 0,
         .joint = &joint_matrix,
-    });
+    }).run();
     try std.testing.expectApproxEqAbs(@as(f32, 0), aim.joint_correction[0], 1e-5);
     try std.testing.expectApproxEqAbs(@as(f32, 0), aim.joint_correction[1], 1e-5);
     try std.testing.expectApproxEqAbs(@as(f32, 0), aim.joint_correction[2], 1e-5);

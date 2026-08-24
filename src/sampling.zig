@@ -48,38 +48,68 @@ pub const SamplingContext = struct {
     }
 };
 
+/// Mirrors `ozz::animation::SamplingJob`.
+///
 /// Samples `animation` at `ratio` in the unit interval, writing local-space
 /// transforms into `out`.
 ///
 /// Values outside [0, 1] are clamped by ozz; NaN is rejected. Joints past the
 /// clip's track count are left untouched — seed `out` with the rest pose first
 /// when the clip is partial.
+pub const SamplingJob = struct {
+    animation: Animation,
+    context: SamplingContext,
+    ratio: f32,
+    out: SoaPose,
+
+    /// Runs the sampling job.
+    pub fn run(self: SamplingJob) err.Error!void {
+        try err.check(c.zozzSample(self.animation.handle, self.context.handle, self.ratio, self.out.handle));
+    }
+};
+
+/// Deprecated: call `SamplingJob.run` instead — `(job).run()`.
 pub fn sample(
     animation: Animation,
     context: SamplingContext,
     ratio: f32,
     out: SoaPose,
 ) err.Error!void {
-    try err.check(c.zozzSample(animation.handle, context.handle, ratio, out.handle));
+    return (SamplingJob{ .animation = animation, .context = context, .ratio = ratio, .out = out }).run();
 }
 
+/// Mirrors `ozz::animation::LocalToModelJob`.
+///
 /// Walks the joint hierarchy, turning local-space transforms into model-space
 /// matrices.
 ///
 /// `root` pre-multiplies the whole hierarchy; pass null for identity. `out`
 /// must hold at least the skeleton's joint count and, being an array of
 /// 16-byte-aligned matrices, must itself start on a 16-byte boundary.
+pub const LocalToModelJob = struct {
+    skeleton: Skeleton,
+    locals: SoaPose,
+    root: ?*const math.Mat4,
+    out: []math.Mat4,
+
+    /// Runs the local-to-model job.
+    pub fn run(self: LocalToModelJob) err.Error!void {
+        try err.check(c.zozzLocalToModel(
+            self.skeleton.handle,
+            self.locals.handle,
+            self.root,
+            self.out.ptr,
+            self.out.len,
+        ));
+    }
+};
+
+/// Deprecated: call `LocalToModelJob.run` instead — `(job).run()`.
 pub fn localToModel(
     skeleton: Skeleton,
     locals: SoaPose,
     root: ?*const math.Mat4,
     out: []math.Mat4,
 ) err.Error!void {
-    try err.check(c.zozzLocalToModel(
-        skeleton.handle,
-        locals.handle,
-        root,
-        out.ptr,
-        out.len,
-    ));
+    return (LocalToModelJob{ .skeleton = skeleton, .locals = locals, .root = root, .out = out }).run();
 }

@@ -28,6 +28,33 @@ pub const TwoBoneJob = struct {
     start_joint: *const math.Mat4,
     mid_joint: *const math.Mat4,
     end_joint: *const math.Mat4,
+
+    /// Runs a two-bone IK solve.
+    pub fn run(self: TwoBoneJob) err.Error!TwoBoneResult {
+        var start_correction: [4]f32 = undefined;
+        var mid_correction: [4]f32 = undefined;
+        var reached: bool = false;
+        var raw = c.IKTwoBoneJob{
+            .target = self.target,
+            .mid_axis = self.mid_axis,
+            .pole_vector = self.pole_vector,
+            .twist_angle = self.twist_angle,
+            .soften = self.soften,
+            .weight = self.weight,
+            .start_joint = self.start_joint,
+            .mid_joint = self.mid_joint,
+            .end_joint = self.end_joint,
+            .start_joint_correction = &start_correction,
+            .mid_joint_correction = &mid_correction,
+            .reached = &reached,
+        };
+        try err.check(c.zozzIKTwoBoneJobRun(&raw));
+        return .{
+            .start_joint_correction = start_correction,
+            .mid_joint_correction = mid_correction,
+            .reached = reached,
+        };
+    }
 };
 
 pub const TwoBoneResult = struct {
@@ -41,31 +68,9 @@ pub const TwoBoneResult = struct {
     reached: bool,
 };
 
-/// Runs a two-bone IK solve.
+/// Deprecated: call `TwoBoneJob.run` instead — `(job).run()`.
 pub fn runTwoBone(job: TwoBoneJob) err.Error!TwoBoneResult {
-    var start_correction: [4]f32 = undefined;
-    var mid_correction: [4]f32 = undefined;
-    var reached: bool = false;
-    var raw = c.IKTwoBoneJob{
-        .target = job.target,
-        .mid_axis = job.mid_axis,
-        .pole_vector = job.pole_vector,
-        .twist_angle = job.twist_angle,
-        .soften = job.soften,
-        .weight = job.weight,
-        .start_joint = job.start_joint,
-        .mid_joint = job.mid_joint,
-        .end_joint = job.end_joint,
-        .start_joint_correction = &start_correction,
-        .mid_joint_correction = &mid_correction,
-        .reached = &reached,
-    };
-    try err.check(c.zozzIKTwoBoneJobRun(&raw));
-    return .{
-        .start_joint_correction = start_correction,
-        .mid_joint_correction = mid_correction,
-        .reached = reached,
-    };
+    return job.run();
 }
 
 /// Rotates a single joint so `forward` (in the joint's local-space) aims at
@@ -83,6 +88,26 @@ pub const AimJob = struct {
     twist_angle: f32 = 0,
     weight: f32 = 1,
     joint: *const math.Mat4,
+
+    /// Runs an aim IK solve.
+    pub fn run(self: AimJob) err.Error!AimResult {
+        var correction: [4]f32 = undefined;
+        var reached: bool = false;
+        var raw = c.IKAimJob{
+            .target = self.target,
+            .forward = self.forward,
+            .offset = self.offset,
+            .up = self.up,
+            .pole_vector = self.pole_vector,
+            .twist_angle = self.twist_angle,
+            .weight = self.weight,
+            .joint = self.joint,
+            .joint_correction = &correction,
+            .reached = &reached,
+        };
+        try err.check(c.zozzIKAimJobRun(&raw));
+        return .{ .joint_correction = correction, .reached = reached };
+    }
 };
 
 pub const AimResult = struct {
@@ -91,24 +116,9 @@ pub const AimResult = struct {
     reached: bool,
 };
 
-/// Runs an aim IK solve.
+/// Deprecated: call `AimJob.run` instead — `(job).run()`.
 pub fn runAim(job: AimJob) err.Error!AimResult {
-    var correction: [4]f32 = undefined;
-    var reached: bool = false;
-    var raw = c.IKAimJob{
-        .target = job.target,
-        .forward = job.forward,
-        .offset = job.offset,
-        .up = job.up,
-        .pole_vector = job.pole_vector,
-        .twist_angle = job.twist_angle,
-        .weight = job.weight,
-        .joint = job.joint,
-        .joint_correction = &correction,
-        .reached = &reached,
-    };
-    try err.check(c.zozzIKAimJobRun(&raw));
-    return .{ .joint_correction = correction, .reached = reached };
+    return job.run();
 }
 
 /// Left-multiplies `correction` (xyzw, w LAST) onto `joint`'s current
