@@ -110,8 +110,8 @@ ZozzResult SampleTrack(const Handle* track, float ratio, float* out) {
   job.ratio = ratio;
   job.result = &value;
 
-  if (!job.Validate()) return ZOZZ_RESULT_INVALID_ARGUMENT;
-  if (!job.Run()) return ZOZZ_RESULT_INVALID_ARGUMENT;
+  if (!job.Validate()) return ZOZZ_RESULT_JOB_INVALID;
+  if (!job.Run()) return ZOZZ_RESULT_JOB_INVALID;
 
   std::memcpy(out, &value, static_cast<size_t>(N) * sizeof(float));
   return ZOZZ_RESULT_OK;
