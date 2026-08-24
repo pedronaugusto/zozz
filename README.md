@@ -235,7 +235,8 @@ results as `zozz.Error` values and its `c.Result` field names have not changed.
 zig build test
 ```
 
-The suite is self-contained: assets are built at test time through ozz's own
+52 tests, one skipped by default. The suite is self-contained: assets are
+built at test time through ozz's own
 offline builders and serialised in memory (`tests/fixture.cpp`), so it is always
 version-matched to the vendored runtime and ships no third-party clips. That
 fixture doubles as proof the offline builders compile and link — the foundation
@@ -267,6 +268,11 @@ a null pointer when a keyframe array has zero entries — the exact shape a
 zero-filled count produces. That is real, if benign, undefined behaviour *in
 ozz*, and being able to see it is worth more than switching the sanitizer off
 globally to silence it. See [UPSTREAM.md](UPSTREAM.md).
+
+Every number this README quotes comes from `ci/measurements.sh`, which
+recomputes them — entry points on each side of the ABI and whether they agree,
+tests as the build actually runs them, translation units, and the guard
+counts. Run it before editing one.
 
 To additionally check a real asset on disk:
 
@@ -320,8 +326,9 @@ whether it still passes on the commit you are reading.
 
 ## Scope
 
-Exposed today, one C header per concern (see `ffi/zozz.h`, the umbrella that
-pulls all of them in):
+164 C entry points across 18 headers, one per concern (see `ffi/zozz.h`, the
+umbrella that pulls all of them in). Every one is mirrored by a Zig wrapper
+that a reflective cross-check pairs at build time:
 
 - Skeleton and animation loading, from file or memory
 - Sampling with a frame-coherency context
