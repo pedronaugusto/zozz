@@ -89,7 +89,7 @@ test "a single-influence vertex lands exactly where its joint matrix puts it" {
     const indices = [_]u16{ 0, 1, 0 };
 
     var out_positions: [vertex_count * 3]f32 = undefined;
-    try zozz.skinning.run(.{
+    try (zozz.skinning.Job{
         .vertex_count = vertex_count,
         .influences_count = 1,
         .joint_matrices = &joints,
@@ -97,7 +97,7 @@ test "a single-influence vertex lands exactly where its joint matrix puts it" {
         .joint_indices_stride = 1 * @sizeOf(u16),
         .in_positions = .{ .data = &in_positions, .stride = float3_stride },
         .out_positions = .{ .data = &out_positions, .stride = float3_stride },
-    });
+    }).run();
 
     for (0..vertex_count) |v| {
         const source: [3]f32 = in_positions[v * 3 ..][0..3].*;
@@ -140,7 +140,7 @@ test "two influences summing to 1 interpolate between the two single-joint resul
     }
 
     var blended: [vertex_count * 3]f32 = undefined;
-    try zozz.skinning.run(.{
+    try (zozz.skinning.Job{
         .vertex_count = vertex_count,
         .influences_count = 2,
         .joint_matrices = &joints,
@@ -150,7 +150,7 @@ test "two influences summing to 1 interpolate between the two single-joint resul
         .joint_weights_stride = 1 * @sizeOf(f32),
         .in_positions = .{ .data = &in_positions, .stride = float3_stride },
         .out_positions = .{ .data = &blended, .stride = float3_stride },
-    });
+    }).run();
 
     for (0..vertex_count) |v| {
         const source: [3]f32 = in_positions[v * 3 ..][0..3].*;
@@ -188,7 +188,7 @@ fn skinPadded(
     if (influences > 1) weights[0] = 1;
 
     var out: [3]f32 = undefined;
-    try zozz.skinning.run(.{
+    try (zozz.skinning.Job{
         .vertex_count = 1,
         .influences_count = influences,
         .joint_matrices = joints,
@@ -198,7 +198,7 @@ fn skinPadded(
         .joint_weights_stride = if (influences > 1) (influences - 1) * @sizeOf(f32) else 0,
         .in_positions = .{ .data = &source, .stride = float3_stride },
         .out_positions = .{ .data = &out, .stride = float3_stride },
-    });
+    }).run();
     return out;
 }
 
@@ -240,7 +240,7 @@ test "normals are transformed as directions, and the inverse-transpose set is us
     var out_positions: [3]f32 = undefined;
     var out_normals: [3]f32 = undefined;
 
-    try zozz.skinning.run(.{
+    try (zozz.skinning.Job{
         .vertex_count = 1,
         .influences_count = 1,
         .joint_matrices = &rotating,
@@ -250,7 +250,7 @@ test "normals are transformed as directions, and the inverse-transpose set is us
         .in_normals = .{ .data = &in_normals, .stride = float3_stride },
         .out_positions = .{ .data = &out_positions, .stride = float3_stride },
         .out_normals = .{ .data = &out_normals, .stride = float3_stride },
-    });
+    }).run();
 
     // The position picks up the translation; the normal must not. A normal
     // that moved by (100, 200, 300) would be meaningless, and this is the
@@ -268,7 +268,7 @@ test "normals are transformed as directions, and the inverse-transpose set is us
     const diagonal_normal = [_]f32{ 1, 1, 0 };
 
     var without: [3]f32 = undefined;
-    try zozz.skinning.run(.{
+    try (zozz.skinning.Job{
         .vertex_count = 1,
         .influences_count = 1,
         .joint_matrices = &stretching,
@@ -278,10 +278,10 @@ test "normals are transformed as directions, and the inverse-transpose set is us
         .in_normals = .{ .data = &diagonal_normal, .stride = float3_stride },
         .out_positions = .{ .data = &out_positions, .stride = float3_stride },
         .out_normals = .{ .data = &without, .stride = float3_stride },
-    });
+    }).run();
 
     var with: [3]f32 = undefined;
-    try zozz.skinning.run(.{
+    try (zozz.skinning.Job{
         .vertex_count = 1,
         .influences_count = 1,
         .joint_matrices = &stretching,
@@ -292,7 +292,7 @@ test "normals are transformed as directions, and the inverse-transpose set is us
         .in_normals = .{ .data = &diagonal_normal, .stride = float3_stride },
         .out_positions = .{ .data = &out_positions, .stride = float3_stride },
         .out_normals = .{ .data = &with, .stride = float3_stride },
-    });
+    }).run();
 
     // Output normals are NOT normalized by the job (documented), so compare
     // directions rather than components.

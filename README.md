@@ -45,14 +45,24 @@ defer context.deinit();
 
 // Per frame:
 try pose.setRestPose(skeleton);
-try zozz.sample(clip, context, clip.ratioAt(time_seconds), pose);
+try (zozz.SamplingJob{
+    .animation = clip,
+    .context = context,
+    .ratio = clip.ratioAt(time_seconds),
+    .out = pose,
+}).run();
 
 // Either read local transforms out...
 try pose.toLocalTransforms(locals);
 
 // ...or flatten the hierarchy to model space. Note the 16-byte alignment.
 const models = try gpa.alignedAlloc(zozz.Mat4, .@"16", skeleton.numJoints());
-try zozz.localToModel(skeleton, pose, null, models);
+try (zozz.LocalToModelJob{
+    .skeleton = skeleton,
+    .locals = pose,
+    .root = null,
+    .out = models,
+}).run();
 ```
 
 Add it as a dependency and link the module:

@@ -53,6 +53,58 @@ pub const Job = struct {
     out_normals: ?MutChannel = null,
     /// Required iff `in_tangents` is set. Not normalized by this job.
     out_tangents: ?MutChannel = null,
+
+    /// Runs the skinning job.
+    pub fn run(self: Job) err.Error!void {
+        const in_normals = if (self.in_normals) |ch| ch.data else null;
+        const in_tangents = if (self.in_tangents) |ch| ch.data else null;
+        const out_normals = if (self.out_normals) |ch| ch.data else null;
+        const out_tangents = if (self.out_tangents) |ch| ch.data else null;
+
+        var raw = c.SkinningJob{
+            .vertex_count = @intCast(self.vertex_count),
+            .influences_count = @intCast(self.influences_count),
+
+            .joint_matrices = self.joint_matrices.ptr,
+            .joint_matrices_count = self.joint_matrices.len,
+
+            .joint_inverse_transpose_matrices = ptrOrNull(math.Mat4, self.joint_inverse_transpose_matrices),
+            .joint_inverse_transpose_matrices_count = lenOr0(math.Mat4, self.joint_inverse_transpose_matrices),
+
+            .joint_indices = self.joint_indices.ptr,
+            .joint_indices_count = self.joint_indices.len,
+            .joint_indices_stride = self.joint_indices_stride,
+
+            .joint_weights = ptrOrNull(f32, self.joint_weights),
+            .joint_weights_count = lenOr0(f32, self.joint_weights),
+            .joint_weights_stride = self.joint_weights_stride,
+
+            .in_positions = self.in_positions.data.ptr,
+            .in_positions_count = self.in_positions.data.len,
+            .in_positions_stride = self.in_positions.stride,
+
+            .in_normals = ptrOrNull(f32, in_normals),
+            .in_normals_count = lenOr0(f32, in_normals),
+            .in_normals_stride = if (self.in_normals) |ch| ch.stride else 0,
+
+            .in_tangents = ptrOrNull(f32, in_tangents),
+            .in_tangents_count = lenOr0(f32, in_tangents),
+            .in_tangents_stride = if (self.in_tangents) |ch| ch.stride else 0,
+
+            .out_positions = self.out_positions.data.ptr,
+            .out_positions_count = self.out_positions.data.len,
+            .out_positions_stride = self.out_positions.stride,
+
+            .out_normals = mutPtrOrNull(f32, out_normals),
+            .out_normals_count = mutLenOr0(f32, out_normals),
+            .out_normals_stride = if (self.out_normals) |ch| ch.stride else 0,
+
+            .out_tangents = mutPtrOrNull(f32, out_tangents),
+            .out_tangents_count = mutLenOr0(f32, out_tangents),
+            .out_tangents_stride = if (self.out_tangents) |ch| ch.stride else 0,
+        };
+        try err.check(c.zozzSkinningJobRun(&raw));
+    }
 };
 
 fn ptrOrNull(comptime T: type, slice: ?[]const T) ?[*]const T {
@@ -71,54 +123,7 @@ fn mutLenOr0(comptime T: type, slice: ?[]T) usize {
     return if (slice) |s| s.len else 0;
 }
 
-/// Runs the skinning job.
+/// Deprecated: call `Job.run` instead — `(job).run()`.
 pub fn run(job: Job) err.Error!void {
-    const in_normals = if (job.in_normals) |ch| ch.data else null;
-    const in_tangents = if (job.in_tangents) |ch| ch.data else null;
-    const out_normals = if (job.out_normals) |ch| ch.data else null;
-    const out_tangents = if (job.out_tangents) |ch| ch.data else null;
-
-    var raw = c.SkinningJob{
-        .vertex_count = @intCast(job.vertex_count),
-        .influences_count = @intCast(job.influences_count),
-
-        .joint_matrices = job.joint_matrices.ptr,
-        .joint_matrices_count = job.joint_matrices.len,
-
-        .joint_inverse_transpose_matrices = ptrOrNull(math.Mat4, job.joint_inverse_transpose_matrices),
-        .joint_inverse_transpose_matrices_count = lenOr0(math.Mat4, job.joint_inverse_transpose_matrices),
-
-        .joint_indices = job.joint_indices.ptr,
-        .joint_indices_count = job.joint_indices.len,
-        .joint_indices_stride = job.joint_indices_stride,
-
-        .joint_weights = ptrOrNull(f32, job.joint_weights),
-        .joint_weights_count = lenOr0(f32, job.joint_weights),
-        .joint_weights_stride = job.joint_weights_stride,
-
-        .in_positions = job.in_positions.data.ptr,
-        .in_positions_count = job.in_positions.data.len,
-        .in_positions_stride = job.in_positions.stride,
-
-        .in_normals = ptrOrNull(f32, in_normals),
-        .in_normals_count = lenOr0(f32, in_normals),
-        .in_normals_stride = if (job.in_normals) |ch| ch.stride else 0,
-
-        .in_tangents = ptrOrNull(f32, in_tangents),
-        .in_tangents_count = lenOr0(f32, in_tangents),
-        .in_tangents_stride = if (job.in_tangents) |ch| ch.stride else 0,
-
-        .out_positions = job.out_positions.data.ptr,
-        .out_positions_count = job.out_positions.data.len,
-        .out_positions_stride = job.out_positions.stride,
-
-        .out_normals = mutPtrOrNull(f32, out_normals),
-        .out_normals_count = mutLenOr0(f32, out_normals),
-        .out_normals_stride = if (job.out_normals) |ch| ch.stride else 0,
-
-        .out_tangents = mutPtrOrNull(f32, out_tangents),
-        .out_tangents_count = mutLenOr0(f32, out_tangents),
-        .out_tangents_stride = if (job.out_tangents) |ch| ch.stride else 0,
-    };
-    try err.check(c.zozzSkinningJobRun(&raw));
+    return job.run();
 }
