@@ -484,6 +484,27 @@ ZOZZ_API ZozzResult zozzAnimationBuild(const ZozzRawAnimation* raw,
                                        ZozzAnimation** out);
 
 //===----------------------------------------------------------------------===//
+// Offline animation processing and raw tracks — forward declarations
+//
+// Declared here, ahead of zozz_optimizer.h and zozz_rawtrack.h, rather than
+// inside either one: the motion extractor (zozz_optimizer.h) reads and writes
+// a RawFloat3Track and a RawQuaternionTrack (zozz_rawtrack.h) directly, so
+// whichever of the two headers is textually included second would otherwise
+// see an undeclared type. A forward-declared opaque tag may be repeated by
+// the header that actually owns the type without conflict, so this does not
+// make either header authoritative over the other.
+//===----------------------------------------------------------------------===//
+
+typedef struct ZozzRawFloatTrack ZozzRawFloatTrack;
+typedef struct ZozzRawFloat2Track ZozzRawFloat2Track;
+typedef struct ZozzRawFloat3Track ZozzRawFloat3Track;
+typedef struct ZozzRawFloat4Track ZozzRawFloat4Track;
+typedef struct ZozzRawQuaternionTrack ZozzRawQuaternionTrack;
+
+#include "zozz_optimizer.h"
+#include "zozz_rawtrack.h"
+
+//===----------------------------------------------------------------------===//
 // ABI layout guard
 //
 // The Zig wrapper hand-declares `extern struct`s mirroring the POD types

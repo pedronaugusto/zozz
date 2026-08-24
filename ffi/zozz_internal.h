@@ -11,6 +11,8 @@
 #include <new>
 #include <utility>
 
+#include "ozz/animation/offline/raw_animation.h"
+#include "ozz/animation/offline/raw_track.h"
 #include "ozz/animation/runtime/animation.h"
 #include "ozz/animation/runtime/sampling_job.h"
 #include "ozz/animation/runtime/skeleton.h"
@@ -256,6 +258,34 @@ struct ZozzSoaPose {
   ozz::math::SoaTransform* data;
   int num_joints;
   int num_soa_joints;
+};
+
+/// The raw-animation handle also lives here rather than beside
+/// zozzRawAnimationCreate in zozz_offline.cpp: zozz_optimizer.cpp (the
+/// animation optimizer, additive builder and motion extractor) reads and
+/// writes `impl` directly too, and a type only one translation unit can see
+/// cannot be shared by simply forward-declaring the opaque tag from zozz.h.
+struct ZozzRawAnimation {
+  ozz::animation::offline::RawAnimation impl;
+};
+
+/// Raw-track handles, shared for the same reason: zozz_rawtrack.cpp builds
+/// and optimizes them, zozz_optimizer.cpp's motion extractor reads and writes
+/// a RawFloat3Track and a RawQuaternionTrack directly.
+struct ZozzRawFloatTrack {
+  ozz::animation::offline::RawFloatTrack impl;
+};
+struct ZozzRawFloat2Track {
+  ozz::animation::offline::RawFloat2Track impl;
+};
+struct ZozzRawFloat3Track {
+  ozz::animation::offline::RawFloat3Track impl;
+};
+struct ZozzRawFloat4Track {
+  ozz::animation::offline::RawFloat4Track impl;
+};
+struct ZozzRawQuaternionTrack {
+  ozz::animation::offline::RawQuaternionTrack impl;
 };
 
 #endif  // ZOZZ_INTERNAL_H_
