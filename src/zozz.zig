@@ -35,6 +35,8 @@ const animation_mod = @import("animation.zig");
 const pose_mod = @import("pose.zig");
 const sampling_mod = @import("sampling.zig");
 const offline_mod = @import("offline.zig");
+const utils_mod = @import("utils.zig");
+const motion_mod = @import("motion.zig");
 
 //=============================================================================
 // Public surface
@@ -64,6 +66,20 @@ pub const localToModel = sampling_mod.localToModel;
 
 pub const RawSkeleton = offline_mod.RawSkeleton;
 pub const RawAnimation = offline_mod.RawAnimation;
+
+pub const jointRestPoseLocal = utils_mod.jointRestPoseLocal;
+pub const restPoseModelSpace = utils_mod.restPoseModelSpace;
+pub const jointIsLeaf = utils_mod.jointIsLeaf;
+pub const findJoint = utils_mod.findJoint;
+pub const iterateJointsDepthFirst = utils_mod.iterateJointsDepthFirst;
+pub const iterateJointsDepthFirstReverse = utils_mod.iterateJointsDepthFirstReverse;
+pub const TrackSelector = utils_mod.TrackSelector;
+pub const countTranslationKeys = utils_mod.countTranslationKeys;
+pub const countRotationKeys = utils_mod.countRotationKeys;
+pub const countScaleKeys = utils_mod.countScaleKeys;
+
+pub const BlendLayer = motion_mod.BlendLayer;
+pub const blendMotion = motion_mod.blend;
 
 /// Build options the C library was actually compiled with, so a consumer can
 /// branch on them instead of assuming.
@@ -114,6 +130,8 @@ test {
     _ = animation_mod;
     _ = pose_mod;
     _ = sampling_mod;
+    _ = utils_mod;
+    _ = motion_mod;
     // Only reachable in a test build, where the fixture library is linked.
     _ = @import("integration_test.zig");
     _ = @import("offline.zig");

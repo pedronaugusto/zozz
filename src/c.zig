@@ -67,6 +67,13 @@ pub const Allocator = extern struct {
     user: ?*anyopaque,
 };
 
+/// One weighted input to `zozzMotionBlend`.
+pub const MotionBlendLayer = extern struct {
+    weight: f32,
+    /// Borrowed for the call only; not retained afterward.
+    delta: *const Transform,
+};
+
 pub const AbiLayout = extern struct {
     layout_size: u32,
 
@@ -100,6 +107,17 @@ pub const AbiLayout = extern struct {
 /// independent literal that nothing compares against the header. `i16` because
 /// that is what `zozzSkeletonJointParent` returns.
 pub const no_parent: i16 = -1;
+
+//=============================================================================
+// Callback types
+//=============================================================================
+
+/// Visits one joint during `zozzSkeletonIterateJointsDepthFirst(Reverse)`.
+pub const JointVisitor = *const fn (
+    joint: c_int,
+    parent: c_int,
+    user: ?*anyopaque,
+) callconv(.c) void;
 
 //=============================================================================
 // Opaque handles
@@ -137,6 +155,10 @@ pub extern fn zozzAnimationDestroy(animation: ?*Animation) void;
 pub extern fn zozzAnimationDuration(animation: ?*const Animation) f32;
 pub extern fn zozzAnimationNumTracks(animation: ?*const Animation) c_int;
 pub extern fn zozzAnimationName(animation: ?*const Animation) [*:0]const u8;
+pub extern fn zozzAnimationNumSoaTracks(animation: ?*const Animation) c_int;
+pub extern fn zozzAnimationSize(animation: ?*const Animation) usize;
+pub extern fn zozzAnimationNumTimepoints(animation: ?*const Animation) c_int;
+pub extern fn zozzAnimationTimepoints(animation: ?*const Animation, out: [*]f32, count: usize) Result;
 
 pub extern fn zozzSoaPoseCreate(num_joints: c_int, out: **SoaPose) Result;
 pub extern fn zozzSoaPoseDestroy(pose: ?*SoaPose) void;
@@ -174,3 +196,16 @@ pub extern fn zozzLocalToModel(
     out: [*]Float4x4,
     count: usize,
 ) Result;
+
+pub extern fn zozzSkeletonJointRestPoseLocal(skeleton: ?*const Skeleton, joint: c_int, out: *Transform) Result;
+pub extern fn zozzSkeletonRestPoseModelSpace(skeleton: ?*const Skeleton, out: [*]Float4x4, count: usize) Result;
+pub extern fn zozzSkeletonJointIsLeaf(skeleton: ?*const Skeleton, joint: c_int, out: *c_int) Result;
+pub extern fn zozzSkeletonFindJoint(skeleton: ?*const Skeleton, name: ?[*:0]const u8) c_int;
+pub extern fn zozzSkeletonIterateJointsDepthFirst(skeleton: ?*const Skeleton, from: c_int, visitor: JointVisitor, user: ?*anyopaque) Result;
+pub extern fn zozzSkeletonIterateJointsDepthFirstReverse(skeleton: ?*const Skeleton, visitor: JointVisitor, user: ?*anyopaque) Result;
+
+pub extern fn zozzAnimationCountTranslationKeys(animation: ?*const Animation, track: c_int, out: *c_int) Result;
+pub extern fn zozzAnimationCountRotationKeys(animation: ?*const Animation, track: c_int, out: *c_int) Result;
+pub extern fn zozzAnimationCountScaleKeys(animation: ?*const Animation, track: c_int, out: *c_int) Result;
+
+pub extern fn zozzMotionBlend(layers: ?[*]const MotionBlendLayer, count: usize, out: *Transform) Result;

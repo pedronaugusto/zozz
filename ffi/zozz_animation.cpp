@@ -67,4 +67,29 @@ const char* zozzAnimationName(const ZozzAnimation* animation) {
   return animation == nullptr ? "" : animation->impl.name();
 }
 
+int zozzAnimationNumSoaTracks(const ZozzAnimation* animation) {
+  return animation == nullptr ? 0 : animation->impl.num_soa_tracks();
+}
+
+size_t zozzAnimationSize(const ZozzAnimation* animation) {
+  return animation == nullptr ? 0 : animation->impl.size();
+}
+
+int zozzAnimationNumTimepoints(const ZozzAnimation* animation) {
+  return animation == nullptr
+             ? 0
+             : static_cast<int>(animation->impl.timepoints().size());
+}
+
+ZozzResult zozzAnimationTimepoints(const ZozzAnimation* animation, float* out,
+                                   size_t count) {
+  if (animation == nullptr || out == nullptr) {
+    return ZOZZ_RESULT_INVALID_ARGUMENT;
+  }
+  const ozz::span<const float> timepoints = animation->impl.timepoints();
+  if (count < timepoints.size()) return ZOZZ_RESULT_BUFFER_TOO_SMALL;
+  std::memcpy(out, timepoints.data(), timepoints.size() * sizeof(float));
+  return ZOZZ_RESULT_OK;
+}
+
 }  // extern "C"
