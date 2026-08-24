@@ -1,3 +1,16 @@
 .zig-cache/
 zig-out/
 .claude/
+
+# Build artefacts from ad-hoc compiler invocations. Two of these were
+# committed by accident once; they carried absolute paths from the machine
+# that produced them, which is not something a public repository should be
+# handing out.
+*.o
+*.obj
+*.a
+*.lib
+*.so
+*.dylib
+*.dll
+*.bak
