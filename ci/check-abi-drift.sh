@@ -143,7 +143,7 @@ try "an extern deleted from c.zig" src/c.zig \
 ''
 
 # The other reverse direction: c.zig is missing a field the header has.
-try "a struct field added in the header only" ffi/zozz.h \
+try "a struct field added in the header only" ffi/zozz_core.h \
 'typedef struct ZozzAbiLayout {' \
 'typedef struct ZozzAbiLayout {
   uint32_t intruder;'
@@ -153,7 +153,7 @@ try "a struct field added in the header only" ffi/zozz.h \
 # negative. Mutated on the HEADER side so the Zig suite still type-checks —
 # flipping c.zig instead breaks an unrelated test first, which is not evidence
 # about this check.
-try "a field's signedness flipped in the header" ffi/zozz.h \
+try "a field's signedness flipped in the header" ffi/zozz_core.h \
 '  uint32_t transform_size;' \
 '  int32_t transform_size;'
 
@@ -161,7 +161,7 @@ try "a field's signedness flipped in the header" ffi/zozz.h \
 # blind to: a 32-bit integer and a 32-bit float are the same width, the same
 # alignment and the same offset, and every bit pattern that crosses means
 # something else entirely.
-try "a field retyped int -> float in the header" ffi/zozz.h \
+try "a field retyped int -> float in the header" ffi/zozz_core.h \
 '  uint32_t float4x4_align;' \
 '  float float4x4_align;'
 
