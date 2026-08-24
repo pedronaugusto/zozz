@@ -241,6 +241,19 @@ pub fn build(b: *std.Build) void {
     tests.root_module.linkLibrary(lib);
     tests.root_module.linkLibrary(fixture);
 
+    // The ABI cross-check @cImport-s ffi/zozz.h. It is wired here, on the test
+    // module, and deliberately not on the module above: the shipped module has
+    // no include path and never runs translate-c.
+    //
+    // No build macros go with it, and that is a property of the header rather
+    // than an oversight. Nothing in ffi/zozz.h changes shape with a `-D` flag —
+    // ZOZZ_API expands to a linkage attribute and nothing else, and no type's
+    // width moves — so this build's preprocessor renders the same declarations
+    // in every configuration. A header that did vary would have to be
+    // preprocessed here with the same macros the library was compiled with, or
+    // the check would be comparing against something nobody ships.
+    tests.root_module.addIncludePath(b.path("ffi"));
+
     const test_step = b.step("test", "Run zozz tests");
     test_step.dependOn(&b.addRunArtifact(tests).step);
 
