@@ -205,22 +205,6 @@ leaves an enum's underlying type to the implementation and the implementations
 disagree, and every value being non-negative is what makes that unobservable.
 The guard enforces both.
 
-#### Deprecated: the v0.2.0 result spellings
-
-That convention required renaming every `ZozzResult` enumerator, which is a
-source-breaking change to a published C API. Every old spelling therefore
-remains in `ffi/zozz.h` as a macro alias:
-
-| v0.2.0, deprecated | current |
-|---|---|
-| `ZOZZ_OK` | `ZOZZ_RESULT_OK` |
-| `ZOZZ_ERR_<WHAT>` | `ZOZZ_RESULT_<WHAT>` |
-
-The values did not move, so existing C code keeps compiling and keeps meaning
-what it meant. **The aliases will be removed in v0.4.0** — port at your
-convenience before then. Zig consumers are unaffected: the wrapper spells
-results as `zozz.Error` values and its `c.Result` field names have not changed.
-
 ### Build hygiene
 
 - Source lists are explicit, never globs — a re-vendor cannot silently change
