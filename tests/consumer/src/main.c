@@ -6,7 +6,7 @@
  * is on the include path.
  *
  * It also spells the result enumerators the way a consumer written today
- * should: ZOZZ_RESULT_OK, not the deprecated ZOZZ_OK. */
+ * should: ZOZZ_RESULT_OK. */
 #include <stdio.h>
 
 #include <zozz.h>
