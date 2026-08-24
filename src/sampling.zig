@@ -68,16 +68,6 @@ pub const SamplingJob = struct {
     }
 };
 
-/// Deprecated: call `SamplingJob.run` instead — `(job).run()`.
-pub fn sample(
-    animation: Animation,
-    context: SamplingContext,
-    ratio: f32,
-    out: SoaPose,
-) err.Error!void {
-    return (SamplingJob{ .animation = animation, .context = context, .ratio = ratio, .out = out }).run();
-}
-
 /// Mirrors `ozz::animation::LocalToModelJob`.
 ///
 /// Walks the joint hierarchy, turning local-space transforms into model-space
@@ -103,13 +93,3 @@ pub const LocalToModelJob = struct {
         ));
     }
 };
-
-/// Deprecated: call `LocalToModelJob.run` instead — `(job).run()`.
-pub fn localToModel(
-    skeleton: Skeleton,
-    locals: SoaPose,
-    root: ?*const math.Mat4,
-    out: []math.Mat4,
-) err.Error!void {
-    return (LocalToModelJob{ .skeleton = skeleton, .locals = locals, .root = root, .out = out }).run();
-}

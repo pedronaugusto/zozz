@@ -68,11 +68,6 @@ pub const TwoBoneResult = struct {
     reached: bool,
 };
 
-/// Deprecated: call `TwoBoneJob.run` instead — `(job).run()`.
-pub fn runTwoBone(job: TwoBoneJob) err.Error!TwoBoneResult {
-    return job.run();
-}
-
 /// Rotates a single joint so `forward` (in the joint's local-space) aims at
 /// `target` (in model-space).
 ///
@@ -115,11 +110,6 @@ pub const AimResult = struct {
     joint_correction: [4]f32,
     reached: bool,
 };
-
-/// Deprecated: call `AimJob.run` instead — `(job).run()`.
-pub fn runAim(job: AimJob) err.Error!AimResult {
-    return job.run();
-}
 
 /// Left-multiplies `correction` (xyzw, w LAST) onto `joint`'s current
 /// local-space rotation in `pose`, in place. This is how a `TwoBoneResult`'s
