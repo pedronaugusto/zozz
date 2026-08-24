@@ -17,10 +17,23 @@ const math = @import("math.zig");
 /// for the rest of the package.
 pub const BlendLayer = c.MotionBlendLayer;
 
+/// Mirrors `ozz::animation::MotionBlendingJob`.
+///
 /// Blends `layers` into a single normalized root-motion delta:
 /// direction-and-length-separated lerp for translation, shortest-arc NLerp
 /// for rotation, identity scale. An empty `layers` yields the identity
 /// transform.
+pub const MotionBlendingJob = struct {
+    layers: []const BlendLayer,
+    out: *math.Transform,
+
+    /// Runs the motion-blending job.
+    pub fn run(self: MotionBlendingJob) err.Error!void {
+        try err.check(c.zozzMotionBlend(self.layers.ptr, self.layers.len, self.out));
+    }
+};
+
+/// Deprecated: call `MotionBlendingJob.run` instead — `(job).run()`.
 pub fn blend(layers: []const BlendLayer, out: *math.Transform) err.Error!void {
-    try err.check(c.zozzMotionBlend(layers.ptr, layers.len, out));
+    return (MotionBlendingJob{ .layers = layers, .out = out }).run();
 }
