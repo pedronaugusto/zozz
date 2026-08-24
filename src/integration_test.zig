@@ -114,7 +114,7 @@ fn expectPipelineWorks(
     var moved = false;
     for ([_]f32{ 0.0, 0.25, 0.5, 0.75, 1.0 }, 0..) |ratio, step| {
         try pose.setRestPose(skeleton);
-        try zozz.sample(clip, context, ratio, pose);
+        try (zozz.SamplingJob{ .animation = clip, .context = context, .ratio = ratio, .out = pose }).run();
         try pose.toLocalTransforms(locals);
         for (locals) |t| try expectSaneTransform(t);
 
@@ -130,7 +130,7 @@ fn expectPipelineWorks(
             }
         }
 
-        try zozz.localToModel(skeleton, pose, null, models);
+        try (zozz.LocalToModelJob{ .skeleton = skeleton, .locals = pose, .root = null, .out = models }).run();
         for (models) |m| {
             for (m.m) |value| try std.testing.expect(std.math.isFinite(value));
         }
@@ -153,7 +153,7 @@ fn expectPipelineWorks(
     // NaN must be refused rather than poisoning the pose.
     try std.testing.expectError(
         zozz.Error.InvalidArgument,
-        zozz.sample(clip, context, std.math.nan(f32), pose),
+        (zozz.SamplingJob{ .animation = clip, .context = context, .ratio = std.math.nan(f32), .out = pose }).run(),
     );
 }
 
@@ -214,7 +214,7 @@ test "a sampling context can be reused across clips after invalidation" {
 
         context.invalidate();
         try pose.setRestPose(skeleton);
-        try zozz.sample(clip, context, 0.5, pose);
+        try (zozz.SamplingJob{ .animation = clip, .context = context, .ratio = 0.5, .out = pose }).run();
 
         var locals: [fixture_joints]zozz.Transform = undefined;
         try pose.toLocalTransforms(&locals);
@@ -245,7 +245,7 @@ test "a pose smaller than the animation is refused" {
 
     try std.testing.expectError(
         zozz.Error.BufferTooSmall,
-        zozz.sample(clip, context, 0.5, too_small),
+        (zozz.SamplingJob{ .animation = clip, .context = context, .ratio = 0.5, .out = too_small }).run(),
     );
     try std.testing.expectError(
         zozz.Error.SkeletonMismatch,
@@ -412,10 +412,10 @@ test "an animation written through the archive and read back compares equal to t
     var locals_a: [fixture_joints]zozz.Transform = undefined;
     var locals_b: [fixture_joints]zozz.Transform = undefined;
     for ([_]f32{ 0.0, 0.3, 0.5, 0.75, 1.0 }) |ratio| {
-        try zozz.sample(original, context_a, ratio, pose_a);
+        try (zozz.SamplingJob{ .animation = original, .context = context_a, .ratio = ratio, .out = pose_a }).run();
         try pose_a.toLocalTransforms(&locals_a);
 
-        try zozz.sample(roundtripped, context_b, ratio, pose_b);
+        try (zozz.SamplingJob{ .animation = roundtripped, .context = context_b, .ratio = ratio, .out = pose_b }).run();
         try pose_b.toLocalTransforms(&locals_b);
 
         for (locals_a, locals_b) |a, b| {

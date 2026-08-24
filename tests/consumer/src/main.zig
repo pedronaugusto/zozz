@@ -60,7 +60,12 @@ pub fn main() !void {
     defer context.deinit();
 
     try pose.setRestPose(skeleton);
-    try zozz.sample(clip, context, clip.ratioAt(1.0), pose);
+    try (zozz.SamplingJob{
+        .animation = clip,
+        .context = context,
+        .ratio = clip.ratioAt(1.0),
+        .out = pose,
+    }).run();
 
     var locals: [2]zozz.Transform = undefined;
     try pose.toLocalTransforms(&locals);
@@ -72,7 +77,7 @@ pub fn main() !void {
         return error.RootDidNotMove;
     }
 
-    // localToModel needs a 16-byte-aligned destination, which an array of
+    // LocalToModelJob needs a 16-byte-aligned destination, which an array of
     // zozz.Mat4 is by construction — a consumer that gets this wrong is
     // refused rather than faulting inside ozz.
     //
@@ -80,7 +85,12 @@ pub fn main() !void {
     // inherited the root's x while keeping its own y, which is the hierarchy
     // walk actually having happened rather than a memcpy of the locals.
     var models: [2]zozz.Mat4 = undefined;
-    try zozz.localToModel(skeleton, pose, null, &models);
+    try (zozz.LocalToModelJob{
+        .skeleton = skeleton,
+        .locals = pose,
+        .root = null,
+        .out = &models,
+    }).run();
     if (!std.math.approxEqAbs(f32, models[1].m[12], 2, 1e-2) or
         !std.math.approxEqAbs(f32, models[1].m[13], 1, 1e-2))
     {

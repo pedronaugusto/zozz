@@ -168,9 +168,9 @@ test "an animation written and read back compares equal, in metadata and in samp
     var locals_a: [2]zozz.Transform = undefined;
     var locals_b: [2]zozz.Transform = undefined;
     for ([_]f32{ 0.0, 0.3, 0.5, 0.75, 1.0 }) |ratio| {
-        try zozz.sample(original, context_a, ratio, pose_a);
+        try (zozz.SamplingJob{ .animation = original, .context = context_a, .ratio = ratio, .out = pose_a }).run();
         try pose_a.toLocalTransforms(&locals_a);
-        try zozz.sample(roundtripped, context_b, ratio, pose_b);
+        try (zozz.SamplingJob{ .animation = roundtripped, .context = context_b, .ratio = ratio, .out = pose_b }).run();
         try pose_b.toLocalTransforms(&locals_b);
 
         for (locals_a, locals_b) |a, b| {

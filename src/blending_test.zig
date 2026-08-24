@@ -44,10 +44,16 @@ test "two layers blended at 0.5 land between them, per joint" {
     const out = try zozz.SoaPose.init(n);
     defer out.deinit();
 
-    try zozz.blend(gpa, &[_]zozz.BlendingLayer{
-        .{ .weight = 0.5, .transform = pose_a },
-        .{ .weight = 0.5, .transform = pose_b },
-    }, &[_]zozz.BlendingLayer{}, rest, 0.1, out);
+    try (zozz.BlendingJob{
+        .layers = &[_]zozz.BlendingLayer{
+            .{ .weight = 0.5, .transform = pose_a },
+            .{ .weight = 0.5, .transform = pose_b },
+        },
+        .additive_layers = &[_]zozz.BlendingLayer{},
+        .rest_pose = rest,
+        .threshold = 0.1,
+        .out = out,
+    }).run(gpa);
 
     var result: [n]zozz.Transform = undefined;
     try out.toLocalTransforms(&result);
@@ -90,10 +96,16 @@ test "weight 0 on a layer yields exactly the other layer" {
     const out = try zozz.SoaPose.init(n);
     defer out.deinit();
 
-    try zozz.blend(gpa, &[_]zozz.BlendingLayer{
-        .{ .weight = 1, .transform = pose_a },
-        .{ .weight = 0, .transform = pose_b },
-    }, &[_]zozz.BlendingLayer{}, rest, 0.1, out);
+    try (zozz.BlendingJob{
+        .layers = &[_]zozz.BlendingLayer{
+            .{ .weight = 1, .transform = pose_a },
+            .{ .weight = 0, .transform = pose_b },
+        },
+        .additive_layers = &[_]zozz.BlendingLayer{},
+        .rest_pose = rest,
+        .threshold = 0.1,
+        .out = out,
+    }).run(gpa);
 
     var result: [n]zozz.Transform = undefined;
     try out.toLocalTransforms(&result);
@@ -142,9 +154,15 @@ test "an additive layer at weight 0 changes nothing, and at weight 1 applies ful
     // Empty `layers`: every joint's accumulated weight is 0, below any
     // positive threshold, so the base comes from `rest_pose` alone — this is
     // the documented fallback, used here to isolate the additive pass.
-    try zozz.blend(gpa, &[_]zozz.BlendingLayer{}, &[_]zozz.BlendingLayer{
-        .{ .weight = 0, .transform = delta_pose },
-    }, rest, 0.1, out);
+    try (zozz.BlendingJob{
+        .layers = &[_]zozz.BlendingLayer{},
+        .additive_layers = &[_]zozz.BlendingLayer{
+            .{ .weight = 0, .transform = delta_pose },
+        },
+        .rest_pose = rest,
+        .threshold = 0.1,
+        .out = out,
+    }).run(gpa);
     var result: [n]zozz.Transform = undefined;
     try out.toLocalTransforms(&result);
     for (result) |t| {
@@ -155,9 +173,15 @@ test "an additive layer at weight 0 changes nothing, and at weight 1 applies ful
         try std.testing.expectApproxEqAbs(@as(f32, 1), t.rotation[3], 1e-4);
     }
 
-    try zozz.blend(gpa, &[_]zozz.BlendingLayer{}, &[_]zozz.BlendingLayer{
-        .{ .weight = 1, .transform = delta_pose },
-    }, rest, 0.1, out);
+    try (zozz.BlendingJob{
+        .layers = &[_]zozz.BlendingLayer{},
+        .additive_layers = &[_]zozz.BlendingLayer{
+            .{ .weight = 1, .transform = delta_pose },
+        },
+        .rest_pose = rest,
+        .threshold = 0.1,
+        .out = out,
+    }).run(gpa);
     try out.toLocalTransforms(&result);
     for (result) |t| {
         // Translation adds.
@@ -207,10 +231,16 @@ test "a partial blend with per-joint weights affects only the weighted joints" {
     // 1 only where the mask says so. Where the mask is 0, layer B's combined
     // weight for that joint is 0 and normalisation leaves A as the whole
     // answer — the joint must come out exactly unchanged.
-    try zozz.blend(gpa, &[_]zozz.BlendingLayer{
-        .{ .weight = 1, .transform = pose_a },
-        .{ .weight = 1, .transform = pose_b, .joint_weights = weights },
-    }, &[_]zozz.BlendingLayer{}, rest, 0.1, out);
+    try (zozz.BlendingJob{
+        .layers = &[_]zozz.BlendingLayer{
+            .{ .weight = 1, .transform = pose_a },
+            .{ .weight = 1, .transform = pose_b, .joint_weights = weights },
+        },
+        .additive_layers = &[_]zozz.BlendingLayer{},
+        .rest_pose = rest,
+        .threshold = 0.1,
+        .out = out,
+    }).run(gpa);
 
     var result: [n]zozz.Transform = undefined;
     try out.toLocalTransforms(&result);

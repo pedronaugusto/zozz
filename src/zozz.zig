@@ -2,7 +2,7 @@
 //!
 //! The package is a thin, allocation-transparent layer over ozz's sampling
 //! pipeline. It owns no policy: no clock, no blend tree, no asset system. A
-//! host drives it as `sample -> (its own blending) -> localToModel`.
+//! host drives it as `SamplingJob -> (its own blending) -> LocalToModelJob`.
 //!
 //! ```zig
 //! try zozz.setAllocator(gpa);
@@ -19,7 +19,12 @@
 //! defer context.deinit();
 //!
 //! try pose.setRestPose(skeleton);
-//! try zozz.sample(clip, context, clip.ratioAt(time_seconds), pose);
+//! try (zozz.SamplingJob{
+//!     .animation = clip,
+//!     .context = context,
+//!     .ratio = clip.ratioAt(time_seconds),
+//!     .out = pose,
+//! }).run();
 //! try pose.toLocalTransforms(locals);
 //! ```
 
@@ -68,7 +73,11 @@ pub const Animation = animation_mod.Animation;
 pub const SoaPose = pose_mod.SoaPose;
 
 pub const SamplingContext = sampling_mod.SamplingContext;
+pub const SamplingJob = sampling_mod.SamplingJob;
+pub const LocalToModelJob = sampling_mod.LocalToModelJob;
+/// Deprecated: use `SamplingJob.run` instead.
 pub const sample = sampling_mod.sample;
+/// Deprecated: use `LocalToModelJob.run` instead.
 pub const localToModel = sampling_mod.localToModel;
 
 pub const RawSkeleton = offline_mod.RawSkeleton;
@@ -93,10 +102,14 @@ pub const countRotationKeys = utils_mod.countRotationKeys;
 pub const countScaleKeys = utils_mod.countScaleKeys;
 
 pub const BlendLayer = motion_mod.BlendLayer;
+pub const MotionBlendingJob = motion_mod.MotionBlendingJob;
+/// Deprecated: use `MotionBlendingJob.run` instead.
 pub const blendMotion = motion_mod.blend;
 
 pub const SoaWeights = blending_mod.SoaWeights;
 pub const BlendingLayer = blending_mod.Layer;
+pub const BlendingJob = blending_mod.BlendingJob;
+/// Deprecated: use `BlendingJob.run` instead.
 pub const blend = blending_mod.run;
 
 pub const Stream = archive_mod.Stream;
@@ -357,4 +370,32 @@ test "buffer size and joint count mismatches are refused" {
     try std.testing.expectError(Error.BufferTooSmall, pose.fromLocalTransforms(&too_small));
 
     try std.testing.expectError(Error.InvalidArgument, SoaPose.init(0));
+}
+
+test "a deprecated free-function alias agrees with its job-struct replacement" {
+    // Every job spells the same shape now — a struct with a `run` method —
+    // and every old free function is kept as a thin alias that just calls
+    // it. `blendMotion`/`MotionBlendingJob` is the cheapest of the seven to
+    // set up standalone, but the wiring it exercises (old name forwarding to
+    // `Type.run`) is identical for all seven.
+    const gpa = std.testing.allocator;
+    try setAllocator(gpa);
+    defer resetAllocator();
+
+    const delta: Transform = .{
+        .translation = .{ 3, 0, 4 },
+        .rotation = .{ 0, 0, 0, 1 },
+        .scale = .{ 2, 2, 2 },
+    };
+    const layers = [_]BlendLayer{.{ .weight = 1, .delta = &delta }};
+
+    var via_deprecated: Transform = undefined;
+    try blendMotion(&layers, &via_deprecated);
+
+    var via_current: Transform = undefined;
+    try (MotionBlendingJob{ .layers = &layers, .out = &via_current }).run();
+
+    try std.testing.expectEqual(via_deprecated.translation, via_current.translation);
+    try std.testing.expectEqual(via_deprecated.rotation, via_current.rotation);
+    try std.testing.expectEqual(via_deprecated.scale, via_current.scale);
 }

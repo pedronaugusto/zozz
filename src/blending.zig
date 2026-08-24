@@ -51,15 +51,47 @@ pub const Layer = struct {
     }
 };
 
+/// Mirrors `ozz::animation::BlendingJob`.
+///
 /// Blends `layers` and adds `additive_layers` on top, into `out` — ozz's own
 /// two-pass split, not a second pass this wrapper adds.
 ///
 /// A joint whose accumulated `layers` weight falls below `threshold` (finite,
 /// > 0) is taken from `rest_pose` instead, so `rest_pose` also sets the
 /// joint count every buffer here is measured against.
-///
-/// `gpa` backs a scratch conversion from `layers`/`additive_layers` into the
-/// flat C form the job actually takes; freed before this returns.
+pub const BlendingJob = struct {
+    layers: []const Layer,
+    additive_layers: []const Layer,
+    rest_pose: SoaPose,
+    threshold: f32,
+    out: SoaPose,
+
+    /// Runs the blending job.
+    ///
+    /// `gpa` backs a scratch conversion from `layers`/`additive_layers` into
+    /// the flat C form the job actually takes; freed before this returns.
+    pub fn run(self: BlendingJob, gpa: std.mem.Allocator) (std.mem.Allocator.Error || err.Error)!void {
+        const c_layers = try gpa.alloc(c.BlendingLayer, self.layers.len);
+        defer gpa.free(c_layers);
+        for (self.layers, c_layers) |layer, *dst| dst.* = layer.toC();
+
+        const c_additive = try gpa.alloc(c.BlendingLayer, self.additive_layers.len);
+        defer gpa.free(c_additive);
+        for (self.additive_layers, c_additive) |layer, *dst| dst.* = layer.toC();
+
+        try err.check(c.zozzBlendingRun(
+            c_layers.ptr,
+            c_layers.len,
+            c_additive.ptr,
+            c_additive.len,
+            self.rest_pose.handle,
+            self.threshold,
+            self.out.handle,
+        ));
+    }
+};
+
+/// Deprecated: call `BlendingJob.run` instead — `(job).run(gpa)`.
 pub fn run(
     gpa: std.mem.Allocator,
     layers: []const Layer,
@@ -68,21 +100,11 @@ pub fn run(
     threshold: f32,
     out: SoaPose,
 ) (std.mem.Allocator.Error || err.Error)!void {
-    const c_layers = try gpa.alloc(c.BlendingLayer, layers.len);
-    defer gpa.free(c_layers);
-    for (layers, c_layers) |layer, *dst| dst.* = layer.toC();
-
-    const c_additive = try gpa.alloc(c.BlendingLayer, additive_layers.len);
-    defer gpa.free(c_additive);
-    for (additive_layers, c_additive) |layer, *dst| dst.* = layer.toC();
-
-    try err.check(c.zozzBlendingRun(
-        c_layers.ptr,
-        c_layers.len,
-        c_additive.ptr,
-        c_additive.len,
-        rest_pose.handle,
-        threshold,
-        out.handle,
-    ));
+    return (BlendingJob{
+        .layers = layers,
+        .additive_layers = additive_layers,
+        .rest_pose = rest_pose,
+        .threshold = threshold,
+        .out = out,
+    }).run(gpa);
 }

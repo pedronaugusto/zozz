@@ -1,6 +1,6 @@
 //! Behavioural tests for root motion: pulling it out of a clip offline with
 //! `MotionExtractor`, and combining per-clip deltas at runtime with
-//! `blendMotion`.
+//! `MotionBlendingJob`.
 //!
 //! The extraction contract has two sides and a test that checks one without
 //! the other proves nothing: the motion track must carry the movement the
@@ -246,7 +246,7 @@ test "blending root-motion deltas preserves distance travelled, and never scale"
     // No layers is the identity — a host with every clip weighted off gets a
     // character that stands still, not one that jumps to the origin with a
     // zero scale.
-    try zozz.blendMotion(&[_]zozz.BlendLayer{}, &out);
+    try (zozz.MotionBlendingJob{ .layers = &[_]zozz.BlendLayer{}, .out = &out }).run();
     try expectVec3(.{ 0, 0, 0 }, out.translation, 1e-6);
     try expectVec3(.{ 1, 1, 1 }, out.scale, 1e-6);
     try std.testing.expectApproxEqAbs(@as(f32, 1), out.rotation[3], 1e-6);
@@ -261,9 +261,9 @@ test "blending root-motion deltas preserves distance travelled, and never scale"
         .scale = .{ 7, 7, 7 },
     };
     for ([_]f32{ 0.1, 1.0, 25.0 }) |weight| {
-        try zozz.blendMotion(&[_]zozz.BlendLayer{
+        try (zozz.MotionBlendingJob{ .layers = &[_]zozz.BlendLayer{
             .{ .weight = weight, .delta = &single },
-        }, &out);
+        }, .out = &out }).run();
         try expectVec3(.{ 3, 0, 4 }, out.translation, 1e-4);
         try expectVec3(.{ 1, 1, 1 }, out.scale, 1e-6);
     }
@@ -284,10 +284,10 @@ test "blending root-motion deltas preserves distance travelled, and never scale"
         .rotation = .{ 0, 0, 0, 1 },
         .scale = .{ 1, 1, 1 },
     };
-    try zozz.blendMotion(&[_]zozz.BlendLayer{
+    try (zozz.MotionBlendingJob{ .layers = &[_]zozz.BlendLayer{
         .{ .weight = 0.5, .delta = &east },
         .{ .weight = 0.5, .delta = &north },
-    }, &out);
+    }, .out = &out }).run();
     const half_root_two = @sqrt(2.0) / 2.0;
     try expectVec3(.{ half_root_two, 0, half_root_two }, out.translation, 1e-4);
     const length = @sqrt(
@@ -299,26 +299,26 @@ test "blending root-motion deltas preserves distance travelled, and never scale"
     // Weights are relative, not absolute: scaling every weight by the same
     // factor changes nothing.
     var scaled_weights: zozz.Transform = undefined;
-    try zozz.blendMotion(&[_]zozz.BlendLayer{
+    try (zozz.MotionBlendingJob{ .layers = &[_]zozz.BlendLayer{
         .{ .weight = 5, .delta = &east },
         .{ .weight = 5, .delta = &north },
-    }, &scaled_weights);
+    }, .out = &scaled_weights }).run();
     try expectVec3(out.translation, scaled_weights.translation, 1e-5);
 
     // A layer at weight 0 (or below) drops out entirely rather than dragging
     // the result toward its delta.
-    try zozz.blendMotion(&[_]zozz.BlendLayer{
+    try (zozz.MotionBlendingJob{ .layers = &[_]zozz.BlendLayer{
         .{ .weight = 1, .delta = &east },
         .{ .weight = 0, .delta = &north },
         .{ .weight = -3, .delta = &north },
-    }, &out);
+    }, .out = &out }).run();
     try expectVec3(.{ 1, 0, 0 }, out.translation, 1e-5);
 
     // A NaN weight is refused rather than poisoning the whole blend: ozz's
     // own "negative counts as zero" clamp never catches it, because NaN is
     // neither <= 0 nor > 0.
-    try std.testing.expectError(zozz.Error.InvalidArgument, zozz.blendMotion(
-        &[_]zozz.BlendLayer{.{ .weight = std.math.nan(f32), .delta = &east }},
-        &out,
-    ));
+    try std.testing.expectError(zozz.Error.InvalidArgument, (zozz.MotionBlendingJob{
+        .layers = &[_]zozz.BlendLayer{.{ .weight = std.math.nan(f32), .delta = &east }},
+        .out = &out,
+    }).run());
 }
