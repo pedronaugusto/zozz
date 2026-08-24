@@ -45,6 +45,24 @@ void zozzSamplingContextDestroy(ZozzSamplingContext* context) {
   zozz::Delete(context);
 }
 
+ZozzResult zozzSamplingContextResize(ZozzSamplingContext* context,
+                                     int max_tracks) {
+  if (context == nullptr) return ZOZZ_RESULT_INVALID_ARGUMENT;
+  if (max_tracks <= 0 || max_tracks > zozz::kMaxJoints) {
+    return ZOZZ_RESULT_INVALID_ARGUMENT;
+  }
+
+  context->impl.Resize(max_tracks);
+  if (context->impl.max_tracks() < max_tracks) {
+    // See zozzSamplingContextCreate: Resize allocates internally and cannot
+    // report failure, so an undersized context after the call is the only
+    // observable symptom.
+    return ZOZZ_RESULT_OUT_OF_MEMORY;
+  }
+
+  return ZOZZ_RESULT_OK;
+}
+
 void zozzSamplingContextInvalidate(ZozzSamplingContext* context) {
   if (context == nullptr) return;
   context->impl.Invalidate();

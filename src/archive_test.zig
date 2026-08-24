@@ -212,3 +212,64 @@ test "a short write is reported as an error, not a truncated file that loads" {
         return error.TestUnexpectedResult;
     } else |_| {}
 }
+
+test "a float track written and read back samples identically to the original" {
+    const gpa = std.testing.allocator;
+    try zozz.setAllocator(gpa);
+    defer zozz.resetAllocator();
+
+    const raw = try zozz.RawFloatTrack.init();
+    defer raw.deinit();
+    try raw.pushKeyframe(.linear, 0.0, 0.0);
+    try raw.pushKeyframe(.linear, 0.5, 10.0);
+    try raw.pushKeyframe(.linear, 1.0, -4.0);
+    const original = try raw.build();
+    defer original.deinit();
+
+    var sink: MemorySink = .{ .gpa = gpa };
+    defer sink.deinit();
+    const bridge = sink.stream();
+    const archive = try zozz.OArchive.init(&bridge);
+    try archive.saveFloatTrack(original);
+    archive.deinit();
+
+    const roundtripped = try zozz.FloatTrack.initFromMemory(sink.list.items);
+    defer roundtripped.deinit();
+
+    var ratio: f32 = 0.0;
+    while (ratio <= 1.0) : (ratio += 0.1) {
+        const a = try original.sample(ratio);
+        const b = try roundtripped.sample(ratio);
+        try std.testing.expectApproxEqAbs(a, b, 1e-4);
+    }
+}
+
+test "a quaternion track written and read back samples identically to the original" {
+    const gpa = std.testing.allocator;
+    try zozz.setAllocator(gpa);
+    defer zozz.resetAllocator();
+
+    const raw = try zozz.RawQuaternionTrack.init();
+    defer raw.deinit();
+    try raw.pushKeyframe(.linear, 0.0, .{ 0, 0, 0, 1 });
+    try raw.pushKeyframe(.linear, 1.0, .{ 0, 0, 0.7071068, 0.7071068 });
+    const original = try raw.build();
+    defer original.deinit();
+
+    var sink: MemorySink = .{ .gpa = gpa };
+    defer sink.deinit();
+    const bridge = sink.stream();
+    const archive = try zozz.OArchive.init(&bridge);
+    try archive.saveQuaternionTrack(original);
+    archive.deinit();
+
+    const roundtripped = try zozz.QuaternionTrack.initFromMemory(sink.list.items);
+    defer roundtripped.deinit();
+
+    var ratio: f32 = 0.0;
+    while (ratio <= 1.0) : (ratio += 0.1) {
+        const a = try original.sample(ratio);
+        const b = try roundtripped.sample(ratio);
+        for (a, b) |x, y| try std.testing.expectApproxEqAbs(x, y, 1e-4);
+    }
+}

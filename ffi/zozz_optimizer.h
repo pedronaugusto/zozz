@@ -129,6 +129,33 @@ ZOZZ_API ZozzResult zozzRawAnimationExtractTimePoints(const ZozzRawAnimation* ra
                                                       float* out, size_t count,
                                                       size_t* out_count);
 
+/// One keyframe of a MODEL-space sample: `time` in the animation's own
+/// seconds, `transform` the sampled joint's model-space matrix at that time.
+typedef struct ZozzModelSpaceSample {
+  float time;
+  ZozzFloat4x4 transform;
+} ZozzModelSpaceSample;
+
+/// Samples `raw`'s `joint`, in MODEL space, across the union of keyframe
+/// times that affect it — every key on `joint` itself plus every key on an
+/// ancestor, since a parent's motion moves `joint` even at an instant where
+/// `joint` carries no key of its own. `skeleton` supplies the hierarchy
+/// `raw` itself does not know (a RawAnimation's tracks pair with joints only
+/// by index).
+///
+/// `skeleton` must describe the same joint count as `raw` has tracks, else
+/// ZOZZ_RESULT_SKELETON_MISMATCH; `joint` must be a valid index into it,
+/// else ZOZZ_RESULT_INVALID_ARGUMENT. Fails with ZOZZ_RESULT_INVALID_DATA if
+/// `raw` does not pass validation.
+///
+/// Two-call convention, as zozzRawAnimationExtractTimePoints: pass `out` as
+/// NULL to learn the count without writing anything. Pass a buffer of at
+/// least that many ZozzModelSpaceSample once the count is known, else
+/// ZOZZ_RESULT_BUFFER_TOO_SMALL.
+ZOZZ_API ZozzResult zozzRawAnimationSampleTrackModelSpace(
+    const ZozzRawAnimation* raw, const ZozzSkeleton* skeleton, int32_t joint,
+    ZozzModelSpaceSample* out, size_t count, size_t* out_count);
+
 /// Fixed-period sample times over `[0, duration]`: `num_keys` keys spaced
 /// `1/frequency` apart, with the last key clamped to `duration` exactly
 /// rather than drifting past it from accumulated floating-point error.

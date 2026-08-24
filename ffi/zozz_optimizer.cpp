@@ -16,6 +16,7 @@
 
 #include <cmath>
 #include <cstdint>
+#include <cstring>
 
 #include "ozz/animation/offline/additive_animation_builder.h"
 #include "ozz/animation/offline/animation_optimizer.h"
@@ -277,6 +278,44 @@ ZozzResult zozzRawAnimationExtractTimePoints(const ZozzRawAnimation* raw,
   }
   if (count < n) return ZOZZ_RESULT_BUFFER_TOO_SMALL;
   for (size_t i = 0; i < n; ++i) out[i] = result.second[i];
+  *out_count = n;
+  return ZOZZ_RESULT_OK;
+}
+
+ZozzResult zozzRawAnimationSampleTrackModelSpace(
+    const ZozzRawAnimation* raw, const ZozzSkeleton* skeleton, int32_t joint,
+    ZozzModelSpaceSample* out, size_t count, size_t* out_count) {
+  if (raw == nullptr || skeleton == nullptr || out_count == nullptr) {
+    return ZOZZ_RESULT_INVALID_ARGUMENT;
+  }
+  *out_count = 0;
+  if (joint < 0) return ZOZZ_RESULT_INVALID_ARGUMENT;
+  // Checked eagerly, ahead of the call below, for the same reason the file
+  // header explains for zozzAnimationOptimizerRun: the more specific
+  // SKELETON_MISMATCH beats letting a joint-count disagreement fall through
+  // to the generic INVALID_DATA that ozz's own bool would otherwise collapse
+  // it into alongside "the animation itself is malformed".
+  if (raw->impl.num_tracks() != skeleton->impl.num_joints()) {
+    return ZOZZ_RESULT_SKELETON_MISMATCH;
+  }
+  if (joint >= skeleton->impl.num_joints()) return ZOZZ_RESULT_INVALID_ARGUMENT;
+
+  const std::pair<bool, ozz::vector<std::pair<float, ozz::math::Float4x4>>>
+      result = ozz::animation::offline::SampleTrackModelSpace(
+          raw->impl, skeleton->impl, joint);
+  if (!result.first) return ZOZZ_RESULT_INVALID_DATA;
+
+  const size_t n = result.second.size();
+  if (out == nullptr) {
+    *out_count = n;
+    return ZOZZ_RESULT_OK;
+  }
+  if (count < n) return ZOZZ_RESULT_BUFFER_TOO_SMALL;
+  for (size_t i = 0; i < n; ++i) {
+    out[i].time = result.second[i].first;
+    std::memcpy(out[i].transform.m, &result.second[i].second,
+               sizeof(out[i].transform.m));
+  }
   *out_count = n;
   return ZOZZ_RESULT_OK;
 }

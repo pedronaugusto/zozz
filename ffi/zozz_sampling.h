@@ -31,6 +31,20 @@ ZOZZ_API ZozzResult zozzSamplingContextCreate(int max_tracks,
 
 ZOZZ_API void zozzSamplingContextDestroy(ZozzSamplingContext* context);
 
+/// Resizes `context` in place to support at most `max_tracks` tracks,
+/// discarding whatever allocation it already held — the effect of
+/// zozzSamplingContextDestroy + zozzSamplingContextCreate without giving up
+/// the handle, for a host that cycles one context across differently-sized
+/// skeletons instead of destroying and recreating it each time. Also
+/// invalidates the context, exactly like zozzSamplingContextInvalidate.
+///
+/// ozz's own Resize has no way to report an allocation failure (it is void),
+/// so as with zozzSamplingContextCreate, ZOZZ_RESULT_OUT_OF_MEMORY here is
+/// best-effort: an undersized context afterwards is the only observable
+/// symptom the underlying call leaves to check.
+ZOZZ_API ZozzResult zozzSamplingContextResize(ZozzSamplingContext* context,
+                                              int max_tracks);
+
 /// Drops cached keyframe state. Required before reusing a context with a
 /// different animation that may have been allocated at a recycled address.
 ZOZZ_API void zozzSamplingContextInvalidate(ZozzSamplingContext* context);

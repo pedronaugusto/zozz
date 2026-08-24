@@ -241,6 +241,59 @@ test "fixed-rate sample times are evenly spaced and the last never runs past the
     );
 }
 
+test "model-space sampling accounts for a parent joint's motion, not just the joint's own keys" {
+    const gpa = std.testing.allocator;
+    try zozz.setAllocator(gpa);
+    defer zozz.resetAllocator();
+
+    const skel = try buildSkeleton(); // root -> child, child at rest (0, 1, 0)
+    defer skel.deinit();
+
+    const raw = try zozz.RawAnimation.init(2, duration, "model-space");
+    defer raw.deinit();
+    // Root translates 0 -> (4, 0, 0). The child track is left completely
+    // empty — no key on any channel — so none of the motion below comes
+    // from the child's own local keys.
+    try raw.pushTranslation(0, 0.0, .{ 0, 0, 0 });
+    try raw.pushTranslation(0, duration, .{ 4, 0, 0 });
+    try raw.pushRotation(0, 0.0, .{ 0, 0, 0, 1 });
+    try raw.pushScale(0, 0.0, .{ 1, 1, 1 });
+
+    const samples = try raw.sampleTrackModelSpace(skel, 1, gpa);
+    defer gpa.free(samples);
+
+    // The only keyframe times anywhere in the joint's ancestry are the
+    // root's two translation keys — the empty child track contributes none
+    // of its own — so the union is exactly {0, duration}.
+    try std.testing.expectEqual(@as(usize, 2), samples.len);
+    try std.testing.expectApproxEqAbs(@as(f32, 0.0), samples[0].time, 1e-6);
+    try std.testing.expectApproxEqAbs(@as(f32, duration), samples[1].time, 1e-6);
+
+    // The child never moves in ITS OWN local space; every bit of motion in
+    // its MODEL-space matrix (m[12..15) is the translation column) is the
+    // root's, carried down through the hierarchy.
+    try std.testing.expectApproxEqAbs(@as(f32, 0.0), samples[0].transform.m[12], 1e-4);
+    try std.testing.expectApproxEqAbs(@as(f32, 0.0), samples[0].transform.m[13], 1e-4);
+    try std.testing.expectApproxEqAbs(@as(f32, 0.0), samples[0].transform.m[14], 1e-4);
+
+    try std.testing.expectApproxEqAbs(@as(f32, 4.0), samples[1].transform.m[12], 1e-4);
+    try std.testing.expectApproxEqAbs(@as(f32, 0.0), samples[1].transform.m[13], 1e-4);
+    try std.testing.expectApproxEqAbs(@as(f32, 0.0), samples[1].transform.m[14], 1e-4);
+
+    // An out-of-range joint and a skeleton/track-count mismatch are refused,
+    // not silently sampled against garbage.
+    try std.testing.expectError(
+        zozz.Error.InvalidArgument,
+        raw.sampleTrackModelSpace(skel, 2, gpa),
+    );
+    const mismatched = try zozz.RawAnimation.init(1, duration, null);
+    defer mismatched.deinit();
+    try std.testing.expectError(
+        zozz.Error.SkeletonMismatch,
+        mismatched.sampleTrackModelSpace(skel, 0, gpa),
+    );
+}
+
 test "the additive builder turns a clip into deltas from its own first frame" {
     const gpa = std.testing.allocator;
     try zozz.setAllocator(gpa);

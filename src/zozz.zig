@@ -78,6 +78,7 @@ pub const LocalToModelJob = sampling_mod.LocalToModelJob;
 
 pub const RawSkeleton = offline_mod.RawSkeleton;
 pub const RawAnimation = offline_mod.RawAnimation;
+pub const ModelSpaceSample = offline_mod.ModelSpaceSample;
 
 pub const FloatTrack = track_mod.FloatTrack;
 pub const Float2Track = track_mod.Float2Track;
@@ -108,6 +109,11 @@ pub const Stream = archive_mod.Stream;
 pub const OArchive = archive_mod.OArchive;
 pub const saveSkeletonToFile = archive_mod.saveSkeletonToFile;
 pub const saveAnimationToFile = archive_mod.saveAnimationToFile;
+pub const saveFloatTrackToFile = archive_mod.saveFloatTrackToFile;
+pub const saveFloat2TrackToFile = archive_mod.saveFloat2TrackToFile;
+pub const saveFloat3TrackToFile = archive_mod.saveFloat3TrackToFile;
+pub const saveFloat4TrackToFile = archive_mod.saveFloat4TrackToFile;
+pub const saveQuaternionTrackToFile = archive_mod.saveQuaternionTrackToFile;
 pub const ik = ik_mod;
 pub const skinning = skinning_mod;
 pub const AnimationOptimizer = optimizer_mod.AnimationOptimizer;
