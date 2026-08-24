@@ -107,4 +107,37 @@ ZozzResult zozzLocalToModel(const ZozzSkeleton* skeleton,
   return ZOZZ_RESULT_OK;
 }
 
+ZozzResult zozzLocalToModelRange(const ZozzSkeleton* skeleton,
+                                 const ZozzSoaPose* locals,
+                                 const ZozzFloat4x4* root, int from, int to,
+                                 int from_excluded, ZozzFloat4x4* out,
+                                 size_t count) {
+  if (skeleton == nullptr || locals == nullptr || out == nullptr) {
+    return ZOZZ_RESULT_INVALID_ARGUMENT;
+  }
+  if (!IsAligned16(out)) return ZOZZ_RESULT_INVALID_ARGUMENT;
+  if (root != nullptr && !IsAligned16(root)) return ZOZZ_RESULT_INVALID_ARGUMENT;
+
+  const int joints = skeleton->impl.num_joints();
+  if (locals->num_joints != joints) return ZOZZ_RESULT_SKELETON_MISMATCH;
+  if (count < static_cast<size_t>(joints)) return ZOZZ_RESULT_BUFFER_TOO_SMALL;
+
+  // ZozzFloat4x4 is layout- and alignment-compatible with ozz's Float4x4;
+  // zozz_abi.cpp static_asserts both properties.
+  ozz::animation::LocalToModelJob job;
+  job.skeleton = &skeleton->impl;
+  job.root = reinterpret_cast<const ozz::math::Float4x4*>(root);
+  job.from = from;
+  job.to = to;
+  job.from_excluded = from_excluded != 0;
+  job.input = ozz::span<const ozz::math::SoaTransform>(
+      locals->data, static_cast<size_t>(locals->num_soa_joints));
+  job.output = ozz::span<ozz::math::Float4x4>(
+      reinterpret_cast<ozz::math::Float4x4*>(out), static_cast<size_t>(joints));
+
+  if (!job.Validate()) return ZOZZ_RESULT_JOB_INVALID;
+  if (!job.Run()) return ZOZZ_RESULT_JOB_INVALID;
+  return ZOZZ_RESULT_OK;
+}
+
 }  // extern "C"
