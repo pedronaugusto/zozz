@@ -8,13 +8,15 @@
 //! shape: push keyframes, then either `build` (compress into a runtime track)
 //! or `optimize` (key-frame reduction into another raw track).
 //!
-//! The runtime track types (`FloatTrack`, ...) are opaque handles here on
-//! purpose: sampling one is out of scope for this package (see BINDING.md —
-//! this is the authoring side only). `deinit` is still required, since
-//! `build` allocates through zozz's installed allocator.
+//! `build` produces the same sampleable runtime track types `track.zig`
+//! defines — `FloatTrack`, `Float2Track`, `Float3Track`, `Float4Track` and
+//! `QuaternionTrack` are re-exported here rather than redefined, so a track
+//! built offline is immediately usable with `track.zig`'s `initFromFile`-style
+//! API without a second import.
 
 const c = @import("c.zig");
 const err = @import("error.zig");
+const track = @import("track.zig");
 
 pub const Interpolation = c.TrackInterpolation;
 
@@ -22,13 +24,7 @@ pub const Interpolation = c.TrackInterpolation;
 // FloatTrack
 //=============================================================================
 
-pub const FloatTrack = struct {
-    handle: *c.FloatTrack,
-
-    pub fn deinit(self: FloatTrack) void {
-        c.zozzFloatTrackDestroy(self.handle);
-    }
-};
+pub const FloatTrack = track.FloatTrack;
 
 pub const RawFloatTrack = struct {
     handle: *c.RawFloatTrack,
@@ -72,13 +68,7 @@ pub const RawFloatTrack = struct {
 // Float2Track
 //=============================================================================
 
-pub const Float2Track = struct {
-    handle: *c.Float2Track,
-
-    pub fn deinit(self: Float2Track) void {
-        c.zozzFloat2TrackDestroy(self.handle);
-    }
-};
+pub const Float2Track = track.Float2Track;
 
 pub const RawFloat2Track = struct {
     handle: *c.RawFloat2Track,
@@ -116,13 +106,7 @@ pub const RawFloat2Track = struct {
 // Float3Track
 //=============================================================================
 
-pub const Float3Track = struct {
-    handle: *c.Float3Track,
-
-    pub fn deinit(self: Float3Track) void {
-        c.zozzFloat3TrackDestroy(self.handle);
-    }
-};
+pub const Float3Track = track.Float3Track;
 
 pub const RawFloat3Track = struct {
     handle: *c.RawFloat3Track,
@@ -160,13 +144,7 @@ pub const RawFloat3Track = struct {
 // Float4Track
 //=============================================================================
 
-pub const Float4Track = struct {
-    handle: *c.Float4Track,
-
-    pub fn deinit(self: Float4Track) void {
-        c.zozzFloat4TrackDestroy(self.handle);
-    }
-};
+pub const Float4Track = track.Float4Track;
 
 pub const RawFloat4Track = struct {
     handle: *c.RawFloat4Track,
@@ -204,13 +182,7 @@ pub const RawFloat4Track = struct {
 // QuaternionTrack
 //=============================================================================
 
-pub const QuaternionTrack = struct {
-    handle: *c.QuaternionTrack,
-
-    pub fn deinit(self: QuaternionTrack) void {
-        c.zozzQuaternionTrackDestroy(self.handle);
-    }
-};
+pub const QuaternionTrack = track.QuaternionTrack;
 
 pub const RawQuaternionTrack = struct {
     handle: *c.RawQuaternionTrack,
