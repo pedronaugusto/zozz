@@ -99,6 +99,15 @@ if [ $QUICK -eq 0 ]; then
 
   # The C boundary on its own, with no Zig in the picture.
   run 'test-c (C ABI standalone)' zig build test-c
+
+  #---------------------------------------------------------------------------
+  section 'ABI'
+  #---------------------------------------------------------------------------
+
+  # Mutation test for the ABI cross-check itself — see the script's own header
+  # for why a check that guards everything else needs one. It rebuilds once per
+  # mutation, which is why it is out of the --quick loop.
+  run 'abi drift (12 mutations)' ci/check-abi-drift.sh
 fi
 
 #-----------------------------------------------------------------------------

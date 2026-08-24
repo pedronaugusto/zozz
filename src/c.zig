@@ -3,10 +3,30 @@
 //! These are written by hand rather than produced by `@cImport` so the package
 //! stays translate-c-free and every type is exactly the shape the rest of the
 //! wrapper wants. The cost of hand-writing is drift: nothing in either
-//! compiler checks that this file still agrees with the header. That gap is
-//! closed by `zozzAbiLayout`, asserted in the test at the bottom of
-//! `zozz.zig` — if a field moves on either side, the test fails loudly instead
-//! of corrupting memory quietly.
+//! compiler notices when this file stops agreeing with the header.
+//!
+//! Two checks close that, on two different axes, and neither replaces the
+//! other:
+//!
+//!   * `abi_check.zig` compares this file against the real header at comptime
+//!     — every type, every function signature, every enumerator, every
+//!     constant, discovered by reflection with no hand-kept list. It runs
+//!     translate-c in a test only, so the shipped module never sees it.
+//!   * `zozzAbiLayout`, asserted in the test at the bottom of `zozz.zig`,
+//!     compares this file against the COMPILED LIBRARY. The header is a
+//!     source file; the library is a binary, and the two can disagree when
+//!     the library was compiled with different macros than the header is
+//!     being read with.
+//!
+//! Names are load-bearing rather than cosmetic, because `abi_check.zig` pairs
+//! the two sides by computing the C spelling from the Zig one:
+//!
+//!   * a type `Foo`                pairs with `ZozzFoo`
+//!   * a function `zozzFoo`        pairs with itself
+//!   * a constant `foo_bar`        pairs with `ZOZZ_FOO_BAR`
+//!   * an enum `Foo`'s field `bar` pairs with `ZOZZ_FOO_BAR`
+//!
+//! A declaration that breaks the convention fails the build.
 
 const std = @import("std");
 
@@ -67,6 +87,19 @@ pub const AbiLayout = extern struct {
 
     result_count: u32,
 };
+
+//=============================================================================
+// Constants
+//=============================================================================
+
+/// The parent index a root joint reports, and the one to pass to
+/// `zozzRawSkeletonAddJoint` for a root. Mirrors `ZOZZ_NO_PARENT`.
+///
+/// It lives here rather than beside the skeleton wrapper because this is the
+/// file `abi_check.zig` sweeps: a constant declared anywhere else is a second
+/// independent literal that nothing compares against the header. `i16` because
+/// that is what `zozzSkeletonJointParent` returns.
+pub const no_parent: i16 = -1;
 
 //=============================================================================
 // Opaque handles

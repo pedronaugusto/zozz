@@ -117,12 +117,23 @@ test {
     // Only reachable in a test build, where the fixture library is linked.
     _ = @import("integration_test.zig");
     _ = @import("offline.zig");
+
+    // Test-only: this one @cImport-s the C header. Reached from a test block
+    // and nowhere else, so a normal build never analyses it and the shipped
+    // module stays translate-c-free.
+    _ = @import("abi_check.zig");
 }
 
 test "the C library agrees with the extern declarations in c.zig" {
-    // This is the guard that makes hand-written externs safe. Every field the
-    // Zig side believes in is checked against what the C++ translation unit
-    // compiled to. A reordered field fails here rather than in production.
+    // What abi_check.zig cannot see, and the reason both checks exist.
+    //
+    // abi_check.zig compares c.zig against ffi/zozz.h — two SOURCE files, as
+    // this build's preprocessor renders them. It says nothing about the
+    // library actually linked here, which is a binary that was compiled at
+    // some other time, possibly from a different header. This test asks the
+    // compiled translation unit what it really laid out, and compares that.
+    // Neither check replaces the other: one guards header-vs-declarations,
+    // this one guards library-vs-declarations.
     var layout: c.AbiLayout = undefined;
     c.zozzAbiLayout(&layout);
 

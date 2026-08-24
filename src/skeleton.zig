@@ -5,7 +5,11 @@ const c = @import("c.zig");
 const err = @import("error.zig");
 const math = @import("math.zig");
 
-pub const no_parent: i16 = -1;
+/// The parent index a root joint reports. Re-exported from `c.zig`, where
+/// the literal lives so that `abi_check.zig` compares it against the
+/// header's `ZOZZ_NO_PARENT` — a second literal here would be a second
+/// thing to get wrong.
+pub const no_parent = c.no_parent;
 
 pub const Skeleton = struct {
     handle: *c.Skeleton,
