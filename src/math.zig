@@ -1030,13 +1030,11 @@ pub const mat4 = struct {
     }
 
     /// If `invertible` is non-null, its target is set to whether `m` was
-    /// invertible (result is zeroed, not garbage, when it was not). If it is
-    /// null, asserts instead — matching ozz exactly.
-    ///
-    /// The adjugate/cofactor computation here is ozz's non-SSE reference
-    /// backend, which divides by the exact determinant. ozz's SSE backend
-    /// instead divides by an SSE `rcp` hardware estimate (refined once); with no
-    /// such estimate in Zig, this port always takes the exact-division path.
+    /// invertible (result is zeroed, not garbage, when it was not). If null,
+    /// asserts instead. The adjugate/cofactor computation here is ozz's non-SSE
+    /// reference backend (exact-determinant division); ozz's SSE backend
+    /// instead uses a refined `rcp` estimate, which Zig lacks, so this port
+    /// always divides exactly.
     pub fn invert(m: Mat4, invertible: ?*SimdInt4) Mat4 {
         const c0 = col4(m, 0);
         const c1 = col4(m, 1);
@@ -1348,7 +1346,7 @@ pub fn Rect(comptime T: type) type {
         width: T = 0,
         height: T = 0,
 
-        /// Right and top are exclusive, which is why `isInside` uses `<`.
+        /// Right and top are exclusive; `isInside` uses `<` against them.
         pub fn right(self: Self) T {
             return self.left + self.width;
         }

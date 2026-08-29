@@ -1,27 +1,16 @@
 //===----------------------------------------------------------------------===//
-// zozz — offline builders: RawSkeleton -> Skeleton, RawAnimation -> Animation.
+// zozz — offline builders: RawSkeleton -> Skeleton, RawAnimation -> Animation:
+// ozz's offline pipeline, behind the same handle rules as everywhere else,
+// and the seam a cook tool uses for .ozz archives from source data.
 //
-// Author a skeleton or an animation at runtime and build it into the same
-// runtime objects the loaders produce. This is ozz's offline pipeline
-// (RawSkeleton -> SkeletonBuilder, RawAnimation -> AnimationBuilder) behind
-// the same handle rules as everything else; it is also the seam a cook tool
-// uses to produce .ozz archives from source data.
-//
-// Joint order: the built skeleton stores joints in DEPTH-FIRST order of the
-// authored hierarchy. If zozzRawSkeletonAddJoint is called in an order that is
-// itself a depth-first traversal (every joint immediately after its subtree
-// predecessor), built joint indices equal insertion indices; otherwise they
-// are reindexed and zozzSkeletonJointName is the mapping. A raw animation
-// knows no skeleton: track i pairs with built-skeleton joint i by convention,
-// and the caller owns that correspondence.
-//
-// Empty tracks: a track with no keys bakes IDENTITY keys (ozz's
-// AnimationBuilder behaviour) — not the skeleton's rest pose, which the
-// builder never sees. A consumer whose contract is "unanimated joints hold
-// the rest pose" must author rest-pose keys, or seed the output pose and
-// sample a fully-authored clip. Pinned by test.
-//
-// Conventions, ownership and thread safety are documented in zozz_core.h.
+// Joint order: built skeletons store joints DEPTH-FIRST. Adding joints
+// depth-first (each right after its subtree predecessor) makes built index
+// equal insertion index; otherwise zozzSkeletonJointName maps one to the
+// other. A raw animation knows no skeleton: track i pairs with built joint i
+// by convention, caller-owned. Empty tracks bake IDENTITY keys (ozz's
+// AnimationBuilder), never the rest pose, which the builder never sees;
+// "unanimated = rest pose" needs authored rest-pose keys or a seeded output
+// pose. Pinned by test. Conventions/ownership/thread safety: zozz_core.h.
 //===----------------------------------------------------------------------===//
 
 #ifndef ZOZZ_OFFLINE_H_
@@ -48,7 +37,7 @@ ZOZZ_API ZozzResult zozzRawSkeletonCreate(ZozzRawSkeleton** out);
 ZOZZ_API void zozzRawSkeletonDestroy(ZozzRawSkeleton* raw);
 
 /// Appends a joint. `parent` is ZOZZ_NO_PARENT for a root, else the insertion
-/// index of a previously added joint. `name` must be non-NULL (ozz requires
+/// index of an already-added joint. `name` must be non-NULL (ozz requires
 /// unique names for retargeting; zozz does not enforce uniqueness). `rest` is
 /// the joint's local rest transform; all components must be finite. On
 /// success writes the joint's insertion index to `out_index` (may be NULL).
@@ -86,20 +75,12 @@ ZOZZ_API int32_t zozzRawSkeletonJointParent(const ZozzRawSkeleton* raw,
 ZOZZ_API ZozzResult zozzRawSkeletonJointRest(const ZozzRawSkeleton* raw,
                                              int32_t joint, ZozzTransform* out);
 
-/// Breadth-first traversal of the authored hierarchy, reusing
-/// ZozzJointVisitor (zozz_utils.h) — `joint` and `parent` are insertion
-/// indices here, the same convention as the read-back accessors above, rather
-/// than the built joint indices zozzSkeletonIterateJointsDepthFirst reports.
-/// `parent` is ZOZZ_NO_PARENT when `joint` is one of the skeleton's roots.
-/// Matches raw_skeleton.h's IterateJointsBF.
-///
-/// With more than one root, or subtrees of different depths, this is NOT a
-/// single global level order: ozz's own algorithm visits every child of a
-/// node, then recurses into each of those children's own subtrees fully,
-/// before moving on to the next root. A grandchild of the first root can
-/// therefore visit before a child of the second one.
-/// zozzSkeletonIterateJointsDepthFirst has no equivalent surprise, because
-/// depth-first has only one reasonable meaning to begin with.
+/// Breadth-first traversal of the authored hierarchy (ZozzJointVisitor,
+/// zozz_utils.h); `joint`/`parent` are insertion indices, not the built
+/// indices zozzSkeletonIterateJointsDepthFirst reports. `parent` is
+/// ZOZZ_NO_PARENT for a root. NOT a single global level order with
+/// multiple roots or uneven depths: a grandchild of the first root can
+/// visit before a child of the second.
 ZOZZ_API ZozzResult zozzRawSkeletonIterateJointsBreadthFirst(
     const ZozzRawSkeleton* raw, ZozzJointVisitor visitor, void* user);
 

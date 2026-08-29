@@ -245,14 +245,11 @@ pub const TrackTriggering = struct {
     handle: *c.TrackTriggeringIterator,
 
     /// Runs edge-triggering over the ratio range [from, to] of `track`,
-    /// detecting crossings of `threshold`. `from`, `to` and `threshold` may
-    /// be any finite values, in any order and any range: a `to` before `from`
-    /// scans the track backward, and a range wider than 1 loops over the
-    /// track more than once.
-    ///
-    /// The returned iterator is already positioned at the first edge, or
-    /// past the end if `from == to` or no edge exists — check `valid` before
-    /// calling `get`.
+    /// detecting crossings of `threshold`. `from`, `to` and `threshold` may be
+    /// any finite values, in any order: a `to` before `from` scans backward,
+    /// and a range wider than 1 loops over the track more than once. The
+    /// returned iterator is already positioned at the first edge, or past the
+    /// end if `from == to` or no edge exists — check `valid` before `get`.
     pub fn init(track: FloatTrack, from: f32, to: f32, threshold: f32) err.Error!TrackTriggering {
         var handle: *c.TrackTriggeringIterator = undefined;
         try err.check(c.zozzFloatTrackTriggeringJobRun(track.handle, from, to, threshold, &handle));

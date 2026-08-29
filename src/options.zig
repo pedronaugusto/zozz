@@ -1,19 +1,14 @@
 //! ozz's command-line option parser (ozz/options/options.h), behind
 //! `-Doptions`. Every function here returns `error.Unsupported` when the
-//! library was built without it.
-//!
-//! ozz's own API is macro-driven (`OZZ_OPTIONS_DECLARE_INT` and friends
-//! declare options with static storage duration), which has no Zig
-//! equivalent either. This binds the runtime classes those macros drive
-//! instead: create an option, register it with a parser, parse a command
-//! line.
-//!
-//! A parser here is a caller-owned instance, not ozz's own hidden
-//! process-global one — `ozz::options::ParseCommandLine()` only ever reaches
-//! a `Parser` private to `options.cc`, through the macros a Zig host cannot
-//! use. `OptionsParser.parseCommandLine` does what that free function does
-//! (set usage/version, then parse), against a parser this package's caller
-//! creates and owns.
+//! library was built without it. ozz's own API is macro-driven
+//! (`OZZ_OPTIONS_DECLARE_INT` and friends declare options with static storage
+//! duration), which has no Zig equivalent; this binds the runtime classes those
+//! macros drive instead: create an option, register it with a parser, parse a
+//! command line. A parser here is a caller-owned instance, not ozz's hidden
+//! process-global one — `ozz::options::ParseCommandLine()` only reaches a
+//! `Parser` private to `options.cc`, through macros a Zig host cannot use.
+//! `OptionsParser.parseCommandLine` does what that free function does (set
+//! usage/version, then parse), against a caller-owned parser.
 
 const std = @import("std");
 const c = @import("c.zig");

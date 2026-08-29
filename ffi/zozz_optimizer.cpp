@@ -9,9 +9,8 @@
 // ZOZZ_RESULT_INVALID_DATA. A joint-count disagreement between an animation
 // and a skeleton gets the more specific ZOZZ_RESULT_SKELETON_MISMATCH instead
 // of falling through to INVALID_DATA — checked eagerly here even where ozz's
-// own operator() would also catch it internally, both for the clearer result
-// code and so the caller-controllable case never reaches ozz's assert on the
-// same condition (animation_optimizer.cc's HierarchyBuilder constructor).
+// own operator() would also catch it internally, for the clearer result code
+// and so the caller-controllable case never reaches ozz's internal assert.
 //===----------------------------------------------------------------------===//
 
 #include <cmath>

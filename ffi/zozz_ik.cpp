@@ -14,14 +14,11 @@ namespace {
 namespace m = ozz::math;
 
 /// Builds the ozz job's fixed inputs from the C descriptor, pointing its
-/// three output fields at caller-supplied scratch. Returns false (without
-/// touching `out`) if a required pointer is NULL.
-///
-/// This is the one precondition ozz's own Validate() cannot see: it checks
-/// that start_joint_correction/mid_joint_correction are non-NULL, but only
-/// after this function would already have pointed them at valid scratch
-/// regardless of what the caller passed in ZozzIKTwoBoneJob. The check has to
-/// happen here, against the caller's own pointers, before that substitution.
+/// three output fields at caller-supplied scratch; returns false, `out`
+/// untouched, if a required pointer is NULL. Ozz's own Validate() cannot
+/// catch a NULL here: it checks start_joint_correction/mid_joint_correction
+/// only after this function has already pointed them at scratch, so this
+/// function must reject NULL first, against the caller's own pointers.
 bool BuildTwoBone(const ZozzIKTwoBoneJob& in, ozz::animation::IKTwoBoneJob* out,
                   m::SimdQuaternion* start_scratch,
                   m::SimdQuaternion* mid_scratch, bool* reached_scratch) {

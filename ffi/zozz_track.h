@@ -2,18 +2,15 @@
 // zozz — runtime user tracks.
 //
 // A track is a keyframed curve over a single value (float, a 2/3/4-component
-// vector, or a quaternion), independent of the skeletal animation pipeline —
-// the shape ozz uses for game-authored signals like "footstep intensity" or
-// "look-at weight" that ride alongside a clip but are not a joint transform.
-// ozz templates the runtime type over five value types; this header declares
-// one concrete set of entry points per type; there is no generic "Track"
-// handle.
+// vector, or quaternion) for game-authored signals like "footstep intensity"
+// that ride alongside a clip but are not a joint transform. ozz templates the
+// runtime type over five value types; this header declares one entry-point set
+// per type, with no generic "Track" handle.
 //
-// Edge triggering (below) detects where a FloatTrack crosses a threshold and
-// is the one piece here that is not a plain call: ozz's own iterator is a
-// stateful C++ object with a private constructor, so it crosses this
-// boundary as an opaque, explicitly-destroyed handle stepped with `next` /
-// `valid` / `get` rather than as a value.
+// Edge triggering (below) is the one piece here that is not a plain call:
+// ozz's own iterator is a stateful C++ object with a private constructor, so
+// it crosses this boundary as an opaque, explicitly-destroyed handle stepped
+// with `next` / `valid` / `get` rather than as a value.
 //===----------------------------------------------------------------------===//
 
 #ifndef ZOZZ_TRACK_H_
@@ -239,29 +236,15 @@ ZOZZ_API ZozzResult zozzQuaternionTrackSteps(const ZozzQuaternionTrack* track,
 // Track edge triggering
 //
 // Detects where a FloatTrack's value crosses a threshold over a [from, to]
-// ratio range (only FloatTrack is supported — comparing other value types to
-// a scalar threshold isn't meaningful). Evaluation is lazy: each edge is
-// computed the first time the iterator reaches it.
+// ratio range (FloatTrack only — a scalar threshold isn't meaningful for
+// other value types). Evaluation is lazy: each edge is computed the first time
+// the iterator reaches it.
 //
 // zozzFloatTrackTriggeringJobRun allocates the iterator through the installed
-// allocator; it is a handle like any other and must be destroyed explicitly.
-// It borrows `track` — `track` must stay alive and unchanged for as long as
-// the iterator is used, including every call to
-// zozzTrackTriggeringIteratorNext.
-//
-// Usage:
-//   ZozzTrackTriggeringIterator* it;
-//   ZozzResult result =
-//       zozzFloatTrackTriggeringJobRun(track, 0.f, 1.f, 0.5f, &it);
-//   if (result == ZOZZ_RESULT_OK) {
-//     while (zozzTrackTriggeringIteratorValid(it)) {
-//       ZozzTrackEdge edge;
-//       zozzTrackTriggeringIteratorGet(it, &edge);
-//       // ... use edge ...
-//       zozzTrackTriggeringIteratorNext(it);
-//     }
-//     zozzTrackTriggeringIteratorDestroy(it);
-//   }
+// allocator; it must be destroyed explicitly, like any other handle. It
+// borrows `track`, which must stay alive and unchanged for as long as the
+// iterator is used, including every Next call. Usage: Run to get an iterator,
+// loop while Valid, Get each edge, Next to advance, then Destroy.
 //===----------------------------------------------------------------------===//
 
 typedef struct ZozzTrackTriggeringIterator ZozzTrackTriggeringIterator;
@@ -275,24 +258,12 @@ typedef struct ZozzTrackEdge {
   bool rising;
 } ZozzTrackEdge;
 
-/// Runs edge-triggering over the ratio range [from, to] of `track`, detecting
-/// crossings of `threshold`. `from`, `to` and `threshold` may be any finite
-/// values, in any order and any range; see TrackTriggeringJob in ozz for the
-/// looping/reversal rules that follow from that. On success, `*out` is a new
-/// iterator already positioned at the first edge (or already past the end if
-/// `from == to` or no edge exists) — step it with
-/// zozzTrackTriggeringIteratorNext.
-///
-/// **A track is cyclic, and the loop seam is an edge like any other.** The
-/// value at ratio 1 wraps to the value at ratio 0, so a wave that ends on the
-/// far side of `threshold` from where it starts fires one more edge — and that
-/// edge lands at the START of the range, not the end, because the wrap happens
-/// at `from`. Over [0, 1] a square wave that begins low and ends high yields
-/// four edges, not three, and the first is at ratio 0.
-///
-/// A host driving a footstep or a gunshot off a looping clip gets that trigger
-/// on every lap, at the moment the clip restarts. It is correct, and it is not
-/// what counting the keyframes suggests.
+/// Runs edge-triggering over [from, to] of `track` for `threshold`
+/// crossings; any finite range/order works. `*out` is a new iterator at the
+/// first edge on success, or past-end if `from == to` or none exists; step
+/// with zozzTrackTriggeringIteratorNext. **Cyclic: the loop seam is an edge
+/// too** — ratio 1 wraps to ratio 0, so a value still off-threshold at the
+/// end fires one more edge, landing at `from`, not the end.
 ZOZZ_API ZozzResult zozzFloatTrackTriggeringJobRun(
     const ZozzFloatTrack* track, float from, float to, float threshold,
     ZozzTrackTriggeringIterator** out);

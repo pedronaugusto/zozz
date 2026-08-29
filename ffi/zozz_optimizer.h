@@ -1,23 +1,14 @@
 //===----------------------------------------------------------------------===//
 // zozz — offline animation processing: optimization, sampling utilities,
-// additive delta animations, and root-motion extraction.
-//
-// This is ozz's animation-offline toolbox layered on top of the RawAnimation
-// authored through zozz_offline.cpp: AnimationOptimizer decimates a clip
-// within an error tolerance, raw_animation_utils samples one for preview or
-// re-timing, AdditiveAnimationBuilder turns a clip into per-joint deltas for
-// additive blending, and MotionExtractor pulls root motion out of a clip into
-// separate tracks.
-//
-// Included from zozz.h; not meant to be included on its own, though its own
-// `#include "zozz.h"` makes that safe too (header guards make the include a
-// no-op the second time through).
+// additive delta animations, and root-motion extraction, layered on the
+// RawAnimation authored through zozz_offline.cpp. Included from zozz.h;
+// safe to include directly too (header guards no-op it).
 //
 // ZozzOptimizerSetting and ZozzMotionSettings are passed by CONST POINTER,
-// never by value, at every entry point below — including the setters, where a
-// value would fit in one register on some ABIs. Small-aggregate-by-value is
-// exactly where SysV and the Windows x64 ABI disagree on whether the caller
-// passes registers or a hidden reference; a pointer is unambiguous on both.
+// never by value, at every entry point below, including setters where a
+// value would fit in one register: SysV and the Windows x64 ABI disagree on
+// whether such an aggregate passes in registers or by hidden reference, and
+// a pointer is unambiguous on both.
 //===----------------------------------------------------------------------===//
 
 #ifndef ZOZZ_OPTIMIZER_H_
@@ -83,14 +74,12 @@ ZOZZ_API ZozzResult zozzAnimationOptimizerSetJointOverride(
 ZOZZ_API ZozzResult zozzAnimationOptimizerClearJointOverride(
     ZozzAnimationOptimizer* optimizer, int32_t joint);
 
-/// Runs the optimizer over `input`, writing the decimated clip to `output`.
-/// `output` must be a distinct, already-created raw animation (from
-/// zozzRawAnimationCreate); its previous contents are discarded even on
-/// failure. `skeleton` must describe the same joint count as `input` has
-/// tracks, else ZOZZ_RESULT_SKELETON_MISMATCH.
-///
-/// Fails with ZOZZ_RESULT_INVALID_DATA if `input` does not itself pass
-/// RawAnimation validation (see zozzAnimationBuild).
+/// Runs the optimizer over `input`, writing the decimated clip to
+/// `output`; `output` must be a distinct, already-created raw animation
+/// (from zozzRawAnimationCreate) whose contents are discarded even on
+/// failure. `skeleton` must match `input`'s joint/track count, else
+/// ZOZZ_RESULT_SKELETON_MISMATCH; fails ZOZZ_RESULT_INVALID_DATA if `input`
+/// fails RawAnimation validation (zozzAnimationBuild).
 ZOZZ_API ZozzResult zozzAnimationOptimizerRun(
     const ZozzAnimationOptimizer* optimizer, const ZozzRawAnimation* input,
     const ZozzSkeleton* skeleton, ZozzRawAnimation* output);
@@ -118,13 +107,11 @@ ZOZZ_API ZozzResult zozzRawAnimationSample(const ZozzRawAnimation* raw,
                                            size_t count);
 
 /// Writes the sorted, de-duplicated union of every keyframe time across all
-/// tracks of `raw`.
-///
-/// Two-call convention: pass `out` as NULL to learn the count without writing
-/// anything — `*out_count` is filled and the call succeeds. Pass a real
-/// buffer once `count` is known to be at least that large, else
-/// ZOZZ_RESULT_BUFFER_TOO_SMALL. Fails with ZOZZ_RESULT_INVALID_DATA if `raw`
-/// does not pass validation.
+/// tracks of `raw`. Two-call convention: pass `out` as NULL to learn the count
+/// without writing anything (`*out_count` is filled, and the call succeeds);
+/// pass a real buffer once `count` is known to be at least that large, else
+/// ZOZZ_RESULT_BUFFER_TOO_SMALL. Fails ZOZZ_RESULT_INVALID_DATA if `raw` does
+/// not pass validation.
 ZOZZ_API ZozzResult zozzRawAnimationExtractTimePoints(const ZozzRawAnimation* raw,
                                                       float* out, size_t count,
                                                       size_t* out_count);
@@ -136,22 +123,12 @@ typedef struct ZozzModelSpaceSample {
   ZozzFloat4x4 transform;
 } ZozzModelSpaceSample;
 
-/// Samples `raw`'s `joint`, in MODEL space, across the union of keyframe
-/// times that affect it — every key on `joint` itself plus every key on an
-/// ancestor, since a parent's motion moves `joint` even at an instant where
-/// `joint` carries no key of its own. `skeleton` supplies the hierarchy
-/// `raw` itself does not know (a RawAnimation's tracks pair with joints only
-/// by index).
-///
-/// `skeleton` must describe the same joint count as `raw` has tracks, else
-/// ZOZZ_RESULT_SKELETON_MISMATCH; `joint` must be a valid index into it,
-/// else ZOZZ_RESULT_INVALID_ARGUMENT. Fails with ZOZZ_RESULT_INVALID_DATA if
-/// `raw` does not pass validation.
-///
-/// Two-call convention, as zozzRawAnimationExtractTimePoints: pass `out` as
-/// NULL to learn the count without writing anything. Pass a buffer of at
-/// least that many ZozzModelSpaceSample once the count is known, else
-/// ZOZZ_RESULT_BUFFER_TOO_SMALL.
+/// Samples `raw`'s `joint` in MODEL space, at every keyframe on it or an
+/// ancestor. `skeleton` must match `raw`'s track count, else
+/// ZOZZ_RESULT_SKELETON_MISMATCH; `joint` must be a valid index into it, else
+/// ZOZZ_RESULT_INVALID_ARGUMENT; `raw` must pass validation, else
+/// ZOZZ_RESULT_INVALID_DATA. Two-call: `out` NULL to learn the count, else a
+/// buffer of that many ZozzModelSpaceSample, or ZOZZ_RESULT_BUFFER_TOO_SMALL.
 ZOZZ_API ZozzResult zozzRawAnimationSampleTrackModelSpace(
     const ZozzRawAnimation* raw, const ZozzSkeleton* skeleton, int32_t joint,
     ZozzModelSpaceSample* out, size_t count, size_t* out_count);
@@ -193,10 +170,8 @@ ZOZZ_API ZozzResult zozzAdditiveAnimationBuilderRun(const ZozzRawAnimation* inpu
 
 /// As above, but the reference pose is supplied explicitly: one transform per
 /// track of `input`. `reference_pose_count` must be at least
-/// zozzRawAnimationNumTracks(input), else ZOZZ_RESULT_INVALID_DATA (ozz
-/// treats a short reference pose as a data problem, not an argument-shape
-/// one, so it is mapped the same way here for consistency with the failure
-/// `input` validation already reports through this same result).
+/// zozzRawAnimationNumTracks(input), else ZOZZ_RESULT_INVALID_DATA (a short
+/// reference pose is treated as a data problem, not an argument-shape one).
 /// `reference_pose` is read only for the duration of the call.
 ZOZZ_API ZozzResult zozzAdditiveAnimationBuilderRunWithReference(
     const ZozzRawAnimation* input, const ZozzTransform* reference_pose,
@@ -265,18 +240,12 @@ ZOZZ_API ZozzResult zozzMotionExtractorSetRotationSettings(
 ZOZZ_API ZozzResult zozzMotionExtractorGetRotationSettings(
     const ZozzMotionExtractor* extractor, ZozzMotionSettings* out);
 
-/// Extracts motion from `input`'s root joint into `motion_position` (a
-/// RawFloat3Track) and `motion_rotation` (a RawQuaternionTrack), and writes
-/// the (optionally motion-baked) remainder to `output`. `output` must be a
-/// distinct, already-created raw animation from `input` (checked: the two
-/// cannot otherwise alias, being of the same handle type); `motion_position`
-/// and `motion_rotation` must already be created too. All three outputs'
-/// previous contents are discarded even on failure.
-///
-/// `skeleton` must describe the same joint count as `input` has tracks, else
-/// ZOZZ_RESULT_SKELETON_MISMATCH. Fails with ZOZZ_RESULT_INVALID_DATA if
-/// `input` does not pass validation, or the configured root joint is out of
-/// range for `skeleton`.
+/// Extracts motion from `input`'s root joint into `motion_position` and
+/// `motion_rotation`, writing the optionally-baked remainder to `output`. All
+/// three must be distinct, pre-created (`output` != `input`, checked); prior
+/// contents are discarded on failure. `skeleton` must match `input`'s track
+/// count, else ZOZZ_RESULT_SKELETON_MISMATCH; else ZOZZ_RESULT_INVALID_DATA if
+/// `input` fails validation or the root joint is out of range.
 ZOZZ_API ZozzResult zozzMotionExtractorRun(
     const ZozzMotionExtractor* extractor, const ZozzRawAnimation* input,
     const ZozzSkeleton* skeleton, ZozzRawFloat3Track* motion_position,

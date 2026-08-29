@@ -108,7 +108,7 @@ ZozzResult zozzSetAllocator(const ZozzAllocator* alloc) {
   Host().Install(*alloc);
   ozz::memory::Allocator* previous = ozz::memory::SetDefaulAllocator(&Host());
   // Only record the first swap: swapping twice must still restore the
-  // allocator ozz shipped with, not our own adapter.
+  // allocator ozz shipped with, not the installed host adapter.
   if (SavedDefault() == nullptr && previous != &Host()) {
     SavedDefault() = previous;
   }
@@ -132,20 +132,12 @@ ZozzResult zozzGetAllocator(ZozzAllocator* out, bool* installed) {
 }
 
 ZozzResult zozzSetLogLevel(ZozzLogLevel level) {
-  // Read the parameter's bytes, not its value.
-  //
-  // A C caller can put any int through this parameter — `(ZozzLogLevel)99` is
-  // a legal thing to write — and reading an enum object holding a value no
-  // enumerator names is undefined behaviour. It is not a theoretical one: the
-  // obvious `switch (level)` aborts under UBSan with "load of value 99, which
-  // is not valid for type 'ZozzLogLevel'", which is exactly the abort a host
-  // would get in a sanitised build for passing a value this ABI is supposed
-  // to reject cleanly.
-  //
-  // Copying the object representation into an integer is not a load of the
-  // enum, so the value can be validated as what it really is: a number that
-  // arrived from outside. The enum stays in the signature because it is the
-  // documented interface — what it cannot be is trusted.
+  // Reads the parameter's bytes, not its value: a C caller can pass any int
+  // through this parameter (`(ZozzLogLevel)99` is legal), and reading an enum
+  // object holding a value no enumerator names is undefined behaviour — a
+  // `switch (level)` aborts under UBSan for exactly the value this ABI must
+  // reject cleanly. Copying the bits into an integer sidesteps that load, so
+  // the value can be validated as the untrusted number it actually is.
   const int32_t raw = zozz::RawEnum(level);
   switch (raw) {
     case ZOZZ_LOG_LEVEL_SILENT:

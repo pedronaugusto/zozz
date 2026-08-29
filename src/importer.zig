@@ -1,21 +1,17 @@
 //! ozz::animation::offline::OzzImporter, ozz's converter interface, in both
-//! directions:
+//! directions: a concrete glTF-backed importer (`Importer.initFromGltf`,
+//! `-Dgltf`), and a host-implementable `ImporterInterface` so a Zig host with
+//! its own source format can plug into the same pipeline (`-Doptions`, ozz's
+//! `ozz_animation_tools`).
 //!
-//!  * a concrete glTF-backed importer (`Importer.initFromGltf`, `-Dgltf`);
-//!  * a host-implementable `ImporterInterface`, so a Zig host with its own
-//!    source format can plug into the same pipeline (`-Doptions`, ozz's
-//!    `ozz_animation_tools`).
-//!
-//! Every method returns `error.Unsupported` when the option its
-//! implementation needs is off. `run` (`OzzImporter::operator()`, the CLI
-//! driver) always returns `error.Unsupported`: its dependency chain needs
-//! jsoncpp, which UPSTREAM.md records as deliberately excluded from the
-//! vendored tree. It is kept so the interface stays complete.
+//! Every method returns `error.Unsupported` when the option its implementation
+//! needs is off. `run` (`OzzImporter::operator()`, the CLI driver) always
+//! returns it: its dependency chain needs jsoncpp, deliberately excluded per
+//! UPSTREAM.md; kept only so the interface stays complete.
 //!
 //! An `Importer` is opaque regardless of which side created it: every method
-//! below drives it through `OzzImporter`'s own virtual interface, so a
-//! host-implemented importer gets the exact same accessors a glTF import
-//! does.
+//! drives it through `OzzImporter`'s own virtual interface, so a
+//! host-implemented importer gets the same accessors a glTF import does.
 
 const std = @import("std");
 const c = @import("c.zig");
@@ -35,13 +31,12 @@ pub const NodePropertyType = c.NodePropertyType;
 /// valid only for the duration of the visit call it is passed to.
 pub const NodeProperty = c.NodeProperty;
 
-/// A host's own `ImporterInterface`, reused verbatim rather than wrapped —
-/// the same shape `archive.zig`'s `Stream` takes from `ZozzStream`. `load`,
+/// A host's own `ImporterInterface`, reused verbatim rather than wrapped — the
+/// same shape `archive.zig`'s `Stream` takes from `ZozzStream`. `load`,
 /// `import_skeleton` and `import_animation` are required: `Importer.init`
-/// rejects a NULL one with `error.InvalidArgument` at the call, rather than
-/// on the first use that would have needed it. The rest are optional; leave
-/// `null` to report "nothing here" the way `GltfImporter` itself does for
-/// tracks and properties, which it does not support.
+/// rejects a NULL one with `error.InvalidArgument` at the call, not on first
+/// use. The rest are optional; leave `null` to report "nothing here", as
+/// `GltfImporter` itself does for tracks and properties.
 pub const ImporterInterface = c.ImporterInterface;
 
 /// A skeleton or animation import, glTF-backed or host-backed.

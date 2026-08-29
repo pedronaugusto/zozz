@@ -2,31 +2,8 @@
 //!
 //! The package is a thin, allocation-transparent layer over ozz's sampling
 //! pipeline. It owns no policy: no clock, no blend tree, no asset system. A
-//! host drives it as `SamplingJob -> (its own blending) -> LocalToModelJob`.
-//!
-//! ```zig
-//! try zozz.setAllocator(gpa);
-//! defer zozz.resetAllocator();
-//!
-//! const skeleton = try zozz.Skeleton.initFromFile("skeleton.ozz");
-//! defer skeleton.deinit();
-//! const clip = try zozz.Animation.initFromFile("walk.ozz");
-//! defer clip.deinit();
-//!
-//! const pose = try zozz.SoaPose.initForSkeleton(skeleton);
-//! defer pose.deinit();
-//! var context = try zozz.SamplingContext.initForSkeleton(skeleton);
-//! defer context.deinit();
-//!
-//! try pose.setRestPose(skeleton);
-//! try (zozz.SamplingJob{
-//!     .animation = clip,
-//!     .context = context,
-//!     .ratio = clip.ratioAt(time_seconds),
-//!     .out = pose,
-//! }).run();
-//! try pose.toLocalTransforms(locals);
-//! ```
+//! host drives it as `SamplingJob -> (its own blending) -> LocalToModelJob`;
+//! see `integration_test.zig` for a complete load -> sample -> convert example.
 
 const std = @import("std");
 
@@ -286,15 +263,12 @@ test {
 }
 
 test "the C library agrees with the extern declarations in c.zig" {
-    // What abi_check.zig cannot see, and the reason both checks exist.
-    //
-    // abi_check.zig compares c.zig against ffi/zozz.h — two SOURCE files, as
-    // this build's preprocessor renders them. It says nothing about the
-    // library actually linked here, which is a binary that was compiled at
-    // some other time, possibly from a different header. This test asks the
-    // compiled translation unit what it really laid out, and compares that.
-    // Neither check replaces the other: one guards header-vs-declarations,
-    // this one guards library-vs-declarations.
+    // What abi_check.zig cannot see, and why both checks exist: abi_check.zig
+    // compares c.zig against ffi/zozz.h -- two SOURCE files -- saying nothing
+    // about the library actually linked, a binary compiled at some other time,
+    // possibly from a different header. This test asks the compiled translation
+    // unit what it really laid out. Neither check replaces the other: one
+    // guards header-vs-declarations, this one guards library-vs-declarations.
     var layout: c.AbiLayout = undefined;
     c.zozzAbiLayout(&layout);
 

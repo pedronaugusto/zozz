@@ -1,23 +1,16 @@
-//! Offline builders: author a skeleton or an animation at runtime.
+//! Offline builders: author a skeleton or an animation at runtime, ozz's
+//! offline pipeline (`RawSkeleton` -> `SkeletonBuilder`, `RawAnimation` ->
+//! `AnimationBuilder`) behind the package's usual handle rules. Building yields
+//! the same runtime `Skeleton` / `Animation` the loaders produce, so everything
+//! downstream (sampling, local-to-model) is shared.
 //!
-//! This is ozz's offline pipeline (`RawSkeleton` -> `SkeletonBuilder`,
-//! `RawAnimation` -> `AnimationBuilder`) behind the package's usual handle
-//! rules. Building yields the same runtime `Skeleton` / `Animation` the
-//! loaders produce, so everything downstream (sampling, local-to-model) is
-//! shared.
-//!
-//! Two contracts worth reading twice:
-//!
-//! * **Joint order.** The built skeleton stores joints in DEPTH-FIRST order
-//!   of the authored hierarchy. Add joints in an order that is itself a
-//!   depth-first traversal and built indices equal insertion indices;
-//!   otherwise map through `Skeleton.jointName`. Animation tracks pair with
-//!   BUILT joint indices by convention — the raw animation never sees a
-//!   skeleton.
-//! * **Empty tracks bake IDENTITY.** A track with no keys samples as the
-//!   identity transform, not the skeleton's rest pose, which the builder
-//!   never sees. A consumer whose contract is "unanimated joints hold the
-//!   rest pose" must author rest-pose keys itself. Pinned by test below.
+//! Joint order: built skeletons store joints DEPTH-FIRST. Add joints
+//! depth-first and built indices equal insertion indices; otherwise map through
+//! `Skeleton.jointName`. Animation tracks pair with BUILT joint indices by
+//! convention — the raw animation never sees a skeleton. Empty tracks bake
+//! IDENTITY, never the skeleton's rest pose, which the builder never sees; a
+//! consumer needing "unanimated = rest pose" must author rest-pose keys itself.
+//! Pinned by test below.
 
 const std = @import("std");
 const c = @import("c.zig");
@@ -41,7 +34,7 @@ pub const RawSkeleton = struct {
     }
 
     /// Appends a joint and returns its insertion index. `parent` is null for
-    /// a root, else the insertion index of a previously added joint. `name`
+    /// a root, else the insertion index of an already-added joint. `name`
     /// is borrowed for the duration of the call only.
     pub fn addJoint(
         self: RawSkeleton,
@@ -84,16 +77,11 @@ pub const RawSkeleton = struct {
     }
 
     /// Breadth-first traversal of the authored hierarchy, addressed by
-    /// insertion index rather than by the built index `build` would assign.
-    /// `context` must be a pointer; it is handed back to `visit` unchanged,
-    /// which is infallible — nothing that could unwind crosses the C
-    /// boundary this walks through.
-    ///
-    /// With more than one root, or subtrees of different depths, this is NOT
-    /// a single global level order: ozz visits every child of a joint, then
-    /// recurses fully into each of those children's own subtrees, before
-    /// moving on to the next root — so a grandchild of the first root can
-    /// visit before a child of the second one.
+    /// insertion index, not the built index `build` assigns. `context` must be
+    /// a pointer, handed back to `visit` unchanged; `visit` must be infallible
+    /// -- nothing may unwind across this boundary. With multiple roots, or
+    /// subtrees of different depths, this is NOT one global level order: a
+    /// grandchild of the first root can visit before a child of the second.
     pub fn iterateJointsBreadthFirst(
         self: RawSkeleton,
         context: anytype,
@@ -205,12 +193,7 @@ pub const RawAnimation = struct {
         return out;
     }
 
-    /// Samples `joint`, in MODEL space, across the union of keyframe times
-    /// that affect it — its own keys plus every ancestor's, since a
-    /// parent's motion moves `joint` even at an instant where `joint` itself
-    /// carries no key. `skeleton` supplies the hierarchy a `RawAnimation`
-    /// does not otherwise know: its tracks pair with joints only by index.
-    ///
+    /// Samples `joint` in MODEL space, at every keyframe on it or an ancestor.
     /// For offline use only (preview, re-timing, cooking) — `zozz.SamplingJob`
     /// plus `zozz.LocalToModelJob` are the runtime path over a built
     /// `Animation` and `Skeleton`. `skeleton` must have as many joints as

@@ -1,20 +1,16 @@
 //===----------------------------------------------------------------------===//
 // zozz — offline builders: RawSkeleton -> Skeleton, RawAnimation -> Animation.
-//
-// The raw-skeleton handle is deliberately NOT ozz's RawSkeleton. ozz stores
+// The raw-skeleton handle is deliberately NOT ozz's RawSkeleton: ozz stores
 // the hierarchy as nested child vectors, so a stable C API over it would hand
 // out pointers that die on the next sibling insertion. The handle keeps a
-// flat (parent, name, rest) list instead — the shape a host's own skeleton
-// data is already in — and materialises the nested tree once, at build time.
-//
-// The raw-animation handle wraps ozz's RawAnimation directly: its track
-// vectors are sized once at creation and only ever appended to, so no
-// borrowed pointer is at risk.
-//
+// flat (parent, name, rest) list instead, materialising the nested tree once
+// at build time. The raw-animation handle wraps ozz's RawAnimation directly:
+// its track vectors are sized once at creation and only ever appended to, so
+// no borrowed pointer is at risk.
 // Validation split, uniformly: argument-shape problems (range, NaN, NULL)
-// fail at the call that receives them with ZOZZ_RESULT_INVALID_ARGUMENT;
-// data-shape problems only ozz can judge (hierarchy depth, key ordering)
-// fail at build time with ZOZZ_RESULT_INVALID_DATA. Nothing asserts.
+// fail at the call with ZOZZ_RESULT_INVALID_ARGUMENT; data-shape problems
+// only ozz can judge (hierarchy depth, key ordering) fail at build time with
+// ZOZZ_RESULT_INVALID_DATA. Nothing asserts.
 //===----------------------------------------------------------------------===//
 
 #include <cmath>

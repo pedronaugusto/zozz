@@ -196,12 +196,11 @@ test "weight = 0 is a no-op for both IK jobs" {
 
 test "IK job defaults match ozz's own" {
     // `TwoBoneJob` and `AimJob` document their field defaults as ozz's
-    // defaults, and they are written out as literals — which is the ergonomic
-    // spelling in Zig and the one that rots. ozz ships the values through
-    // `zozzIKTwoBoneJobDefaults` and `zozzIKAimJobDefaults` precisely so a
-    // binding does not have to copy them; this is what makes the copy an
-    // assertion rather than a hope, and what fails the next time a re-vendor
-    // retunes one.
+    // defaults, written out as literals — the ergonomic Zig spelling, and the
+    // one that rots. ozz ships the values through `zozzIKTwoBoneJobDefaults`
+    // and `zozzIKAimJobDefaults` so a binding need not copy them; this test
+    // makes that copy an assertion rather than a hope, failing the next time
+    // a re-vendor retunes one.
     const c = @import("c.zig");
     const dummy = zozz.mat4_identity;
 

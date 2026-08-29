@@ -3,9 +3,9 @@
 // units that need them.
 //
 // `zozz_track.cpp` samples these and `zozz_rawtrack.cpp` builds them, so both
-// need the layout. They used to be defined separately in each file, which is an
-// ODR violation that happened to be benign because the two definitions were
-// identical — and it stops being benign the moment either one is edited.
+// need the layout. Separate per-file definitions were an ODR violation that
+// happened to be benign only because the two definitions were identical, and
+// unsafe the moment either one was edited.
 //
 // The destroy entry points live in `zozz_track.cpp` alone. Defining them in
 // both was a latent duplicate-symbol error: a static archive pulls in one

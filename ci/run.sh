@@ -84,6 +84,11 @@ run 'installed headers cover every include' bash -c '
 # verdict that says "reachable" names a symbol the headers really declare. It
 # is here rather than behind a flag because it takes under a second and because
 # a gap is the kind of thing that should stop a push, not wait for a nightly.
+# Comment blocks stay short and stay out of the narrative register. The script
+# existed before this line did, which is how a package ends up with a standard
+# nothing enforces.
+run 'comment standard' ci/check-comments.sh
+
 run 'coverage (every name has a verdict)' ci/check-coverage.sh
 
 #-----------------------------------------------------------------------------

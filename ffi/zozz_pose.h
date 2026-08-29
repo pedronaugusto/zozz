@@ -15,13 +15,11 @@
 extern "C" {
 #endif
 
-/// A pose held in ozz's native structure-of-arrays layout.
-///
-/// SoA is the currency of ozz's job pipeline: sampling writes it, blending
-/// consumes and produces it, local-to-model reads it. Keeping it opaque means
-/// consumers never depend on the SIMD layout, while still being able to chain
-/// jobs without a conversion per step. Convert to AoS only at the edges, with
-/// zozzSoaPoseToLocalTransforms.
+/// A pose held in ozz's native structure-of-arrays layout: the currency of
+/// ozz's job pipeline (sampling writes it, blending consumes and produces it,
+/// local-to-model reads it). Keeping it opaque means consumers never depend on
+/// the SIMD layout while still chaining jobs without a conversion per step;
+/// convert to AoS only at the edges, with zozzSoaPoseToLocalTransforms.
 typedef struct ZozzSoaPose ZozzSoaPose;
 
 /// Allocates a pose buffer sized for `num_joints` (rounded up to a SoA block).

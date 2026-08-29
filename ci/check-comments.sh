@@ -38,7 +38,7 @@ for f in ffi/*.h ffi/*.cpp src/*.zig src/c/*.zig; do
   ' "$f" >> "$work/long"
 
   # Narrative register. These read as a person talking, not as documentation.
-  grep -nEi '^[[:space:]]*(//|///|//!).*(\bwe\b|\bour\b|\bus\b|note that|worth (stating|noting|saying)|used to|previously|the reason (is|it)|which is why|that is why|turns out|in practice this|do not be|you might (think|expect)|it is tempting)' "$f" |
+  grep -nEi '^[[:space:]]*(//|///|//!).*(\bwe\b|\bour\b|\bus\b|\bnote that\b|\bworth (stating|noting|saying)\b|\bused to be\b|\bthey used to\b|\bit used to\b|\bthe reason (is|it)\b|\bwhich is why\b|\bthat is why\b|\bturns out\b|\bin practice this\b|\bdo not be\b|\byou might (think|expect)\b|\bit is tempting\b)' "$f" |
     sed "s|^|$f:|" >> "$work/voice"
 done
 

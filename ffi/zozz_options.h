@@ -1,31 +1,16 @@
 //===----------------------------------------------------------------------===//
-// zozz — ozz's command-line option parser (ozz/options/options.h).
-//
-// Behind -Doptions, off by default: options.cc writes to <iostream> in about
-// twenty places and zozz otherwise never pulls that header in. Every entry
-// point below is declared unconditionally and returns ZOZZ_RESULT_UNSUPPORTED
-// when the library was built with -Doptions=false.
-//
-// ozz's own API is macro-driven (OZZ_OPTIONS_DECLARE_INT and friends declare
-// options with static storage duration), which cannot cross a C ABI. This
-// binds the runtime classes those macros drive instead — Option, its four
-// typed subclasses, and Parser — which is equivalent in capability.
-//
-// A caller-owned ZozzOptionsParser, not ozz's own hidden process-global one.
-// ozz::options::ParseCommandLine() and the free ParsedExecutable* functions
-// only ever operate on a Parser instance private to options.cc, reached
-// through the OZZ_OPTIONS_DECLARE_* macros a C host cannot use; there is no
-// public accessor for it. zozzOptionsParserParseCommandLine below does what
-// that free function does (set_usage, set_version, then parse), against a
-// parser the caller creates and owns, which is the only Parser instance this
-// ABI has any way to reach.
-//
-// A ZozzOption is ref-counted: creating one starts a count of 1, registering
-// it with a parser adds 1, and destroying or unregistering it removes 1 —
-// the object is freed only once nothing (caller or parser) still references
-// it. Destroying a ZozzOptionsParser releases its own references to whatever
-// is still registered. Without this, a caller destroying an option it forgot
-// to unregister first would leave the parser holding a dangling pointer.
+// zozz — ozz's command-line option parser. Behind -Doptions, off by default:
+// every entry point is declared unconditionally and returns
+// ZOZZ_RESULT_UNSUPPORTED when it is off. ozz's own macro-driven option API
+// cannot cross a C ABI; this binds the runtime classes those macros drive
+// instead: Option, its typed subclasses, and Parser. A ZozzOptionsParser is
+// caller-owned, not ozz's hidden process-global one —
+// zozzOptionsParserParseCommandLine mirrors ozz's own ParseCommandLine()
+// against a parser the caller creates and owns. A ZozzOption is ref-counted
+// (create: +1, register: +1, unregister/destroy: -1), freed only once nothing
+// references it; destroying a ZozzOptionsParser releases its own references to
+// whatever is still registered, so an unregistered-but-forgotten option does
+// not dangle.
 //===----------------------------------------------------------------------===//
 
 #ifndef ZOZZ_OPTIONS_H_
@@ -64,15 +49,11 @@ typedef enum ZozzOptionsParseResult {
 } ZozzOptionsParseResult;
 
 /// Sets `parser`'s usage/version strings, then parses `argv[1..argc)` against
-/// every option currently registered with it — argv[0] is taken as the
-/// executable path, matching ozz::options::ParseCommandLine. `version` and
-/// `usage` are borrowed, not copied; they must outlive `parser` or the next
-/// call to this function or zozzOptionsParserSetUsage/SetVersion.
-///
-/// Writes the outcome to `*out`; ZOZZ_RESULT_OK means the parse machinery ran
-/// without an ABI-level argument error, regardless of what `*out` says.
-/// EXIT_SUCCESS and EXIT_FAILURE both write the help/usage screen to stdout
-/// (see zozzOptionsParserHelp).
+/// every registered option. `version` and `usage` are borrowed, not copied;
+/// they must outlive `parser`, the next call to this function, or the next
+/// SetUsage/SetVersion call. Writes the outcome to `*out`; ZOZZ_RESULT_OK means
+/// the parse machinery ran without an ABI-level argument error, regardless of
+/// `*out`. EXIT_SUCCESS/FAILURE both write the help screen to stdout.
 ZOZZ_API ZozzResult zozzOptionsParserParseCommandLine(
     ZozzOptionsParser* parser, int argc, const char* const* argv,
     const char* version, const char* usage, ZozzOptionsParseResult* out);

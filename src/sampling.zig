@@ -58,14 +58,11 @@ pub const SamplingContext = struct {
     }
 };
 
-/// Mirrors `ozz::animation::SamplingJob`.
-///
-/// Samples `animation` at `ratio` in the unit interval, writing local-space
-/// transforms into `out`.
-///
-/// Values outside [0, 1] are clamped by ozz; NaN is rejected. Joints past the
-/// clip's track count are left untouched — seed `out` with the rest pose first
-/// when the clip is partial.
+/// Mirrors `ozz::animation::SamplingJob`. Samples `animation` at `ratio` in
+/// the unit interval, writing local-space transforms into `out`. Values
+/// outside [0, 1] are clamped by ozz; NaN is rejected. Joints past the clip's
+/// track count are left untouched — seed `out` with the rest pose first when
+/// the clip is partial.
 pub const SamplingJob = struct {
     animation: Animation,
     context: SamplingContext,
@@ -78,18 +75,12 @@ pub const SamplingJob = struct {
     }
 };
 
-/// Mirrors `ozz::animation::LocalToModelJob`.
-///
-/// Walks the joint hierarchy, turning local-space transforms into model-space
-/// matrices.
-///
-/// `root` pre-multiplies the whole hierarchy; pass null for identity. `out`
-/// must hold at least the skeleton's joint count and, being an array of
-/// 16-byte-aligned matrices, must itself start on a 16-byte boundary.
-///
-/// `from`, `to` and `from_excluded` narrow the walk to one chain, which is
-/// what an IK correction wants: re-running the whole skeleton to move three
-/// joints is the expensive way to do it. They default to the whole hierarchy.
+/// Mirrors `ozz::animation::LocalToModelJob`: walks the joint hierarchy,
+/// turning local-space transforms into model-space matrices. `root`
+/// pre-multiplies the whole hierarchy; pass null for identity. `out` must
+/// hold at least the skeleton's joint count and, being 16-byte-aligned
+/// matrices, must itself start on a 16-byte boundary. `from`/`to`/
+/// `from_excluded` narrow the walk to one chain (default: whole hierarchy).
 pub const LocalToModelJob = struct {
     skeleton: Skeleton,
     locals: SoaPose,

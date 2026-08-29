@@ -195,16 +195,11 @@ test "the reference setting decides what the extracted motion is measured from" 
     defer extractor.deinit();
     try extractor.setRotationSettings(no_rotation);
 
-    // The clip starts at x = 5; the skeleton's rest root sits at x = 1. Each
-    // reference subtracts something different, and the value at ratio 0 is
-    // where they separate:
-    //
-    //   absolute  -> 5, the raw component
-    //   skeleton  -> 4, measured from the rest pose
-    //   animation -> 0, measured from the clip's own first frame
-    //
-    // A host that picks the wrong one gets a character that teleports by the
-    // difference on the first frame of the clip.
+    // The clip starts at x = 5; the skeleton's rest root sits at x = 1. At
+    // ratio 0: absolute -> 5 (raw component), skeleton -> 4 (from rest pose),
+    // animation -> 0 (from the clip's own first frame). A host picking the
+    // wrong reference gets a character that teleports by the difference on
+    // the clip's first frame.
     const cases = [_]struct { reference: zozz.MotionReference, at_zero: f32 }{
         .{ .reference = .absolute, .at_zero = 5 },
         .{ .reference = .skeleton, .at_zero = 4 },

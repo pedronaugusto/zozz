@@ -3,15 +3,12 @@
 const std = @import("std");
 const zozz = @import("zozz.zig");
 
-/// ozz's Parser writes error/help/version text straight to stdout (see
-/// zozz_options.h's module comment) — every path through Parse() that does
-/// not cleanly succeed, and every direct Help() call, reaches it. Zig's own
-/// test runner ALSO uses stdout (fd 1) as its framed IPC channel back to
-/// `zig build test`; unframed text arriving there desyncs that protocol and
-/// hangs the runner instead of failing loudly. Every call below that can
-/// reach one of those writes is routed through this redirect first, so the
-/// C++ behaviour is still exercised for real without corrupting the channel
-/// this process is itself being driven through.
+/// ozz's Parser writes error/help/version text straight to stdout. Zig's test
+/// runner also treats stdout as a framed IPC channel to `zig build test`;
+/// unframed text there desyncs the protocol and hangs the runner rather than
+/// failing cleanly. Every call below that can reach one of those writes goes
+/// through this redirect first, so C++ still runs for real without corrupting
+/// that channel.
 fn silencingStdout(comptime Result: type, comptime func: anytype, args: anytype) Result {
     const devnull = std.c.open("/dev/null", .{ .ACCMODE = .WRONLY });
     if (devnull < 0) return @call(.auto, func, args);

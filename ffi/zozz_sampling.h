@@ -32,16 +32,11 @@ ZOZZ_API ZozzResult zozzSamplingContextCreate(int max_tracks,
 ZOZZ_API void zozzSamplingContextDestroy(ZozzSamplingContext* context);
 
 /// Resizes `context` in place to support at most `max_tracks` tracks,
-/// discarding whatever allocation it already held — the effect of
-/// zozzSamplingContextDestroy + zozzSamplingContextCreate without giving up
-/// the handle, for a host that cycles one context across differently-sized
-/// skeletons instead of destroying and recreating it each time. Also
-/// invalidates the context, exactly like zozzSamplingContextInvalidate.
-///
-/// ozz's own Resize has no way to report an allocation failure (it is void),
-/// so as with zozzSamplingContextCreate, ZOZZ_RESULT_OUT_OF_MEMORY here is
-/// best-effort: an undersized context afterwards is the only observable
-/// symptom the underlying call leaves to check.
+/// discarding any prior allocation without giving up the handle, and
+/// invalidating it like zozzSamplingContextInvalidate. ozz's own Resize cannot
+/// report an allocation failure (it is void), so ZOZZ_RESULT_OUT_OF_MEMORY here
+/// is best-effort: an undersized context afterwards is the only observable
+/// symptom.
 ZOZZ_API ZozzResult zozzSamplingContextResize(ZozzSamplingContext* context,
                                               int max_tracks);
 
@@ -72,19 +67,12 @@ ZOZZ_API ZozzResult zozzLocalToModel(const ZozzSkeleton* skeleton,
                                      const ZozzFloat4x4* root,
                                      ZozzFloat4x4* out, size_t count);
 
-/// Same as zozzLocalToModel, but restricted to the joint range [from, to]
-/// ("to" included), which lets a host re-run only the chain an IK correction
-/// touched instead of the whole skeleton. `input` and `out` must still cover
-/// every joint regardless of the range — ancestors outside it are read, not
-/// written, and a descendant's parent may be one of them.
-///
-/// `from` is ZOZZ_NO_PARENT to start at the root, and any joint index
-/// otherwise; pass zozzSkeletonNumJoints (or larger) as `to` to update
-/// through the last joint. If `from_excluded` is non-zero, `from` itself is
-/// left untouched in `out` and must already hold a valid model-space matrix
-/// there, since its children are expressed relative to it — this is the
-/// combination that updates a corrected chain without recomputing the joint
-/// the correction was already applied to.
+/// Same as zozzLocalToModel, restricted to joint range [from, to] (`to`
+/// included). `input`/`out` must cover every joint: ancestors outside the range
+/// are read, not written. `from` is ZOZZ_NO_PARENT for the root, else a joint
+/// index; `to` may be zozzSkeletonNumJoints or larger, for the last joint. With
+/// `from_excluded` non-zero, `from` is left untouched in `out` and must already
+/// hold a valid matrix (children are relative to it).
 ZOZZ_API ZozzResult zozzLocalToModelRange(const ZozzSkeleton* skeleton,
                                           const ZozzSoaPose* locals,
                                           const ZozzFloat4x4* root, int from,

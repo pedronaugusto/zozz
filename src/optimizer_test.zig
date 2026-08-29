@@ -99,14 +99,12 @@ test "optimising drops redundant keys while staying inside the tolerance asked f
     try std.testing.expect(kept < dense_keys);
     try std.testing.expect(kept < dense_keys / 2);
 
-    // Half two, and the one that makes half one mean anything: the decimated
-    // clip still reproduces the original everywhere, not merely at the keys
-    // that survived. Both clips are piecewise-linear over a subset of the
-    // same key times, so a fine sweep sees the worst case.
-    //
-    // The bound is the tolerance itself — ozz's decimation is Douglas-Peucker
-    // over the original keys, and the root's model-space transform IS its
-    // local one, so the tolerance is a plain distance here.
+    // Half two: the decimated clip must still reproduce the original
+    // everywhere, not merely at the keys that survived. Both clips are
+    // piecewise-linear over a subset of the same key times, so a fine sweep
+    // sees the worst case. The bound is the tolerance itself: ozz's decimation
+    // is Douglas-Peucker over the original keys, and the root's model-space
+    // transform IS its local one, so the tolerance is a plain distance here.
     const sweep = 500;
     var worst: f32 = 0;
     for (0..sweep + 1) |i| {

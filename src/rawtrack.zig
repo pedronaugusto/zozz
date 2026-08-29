@@ -1,6 +1,6 @@
-//! Raw tracks: the authoring side of ozz's five user-channel track value
-//! types (float, float2, float3, float4, quaternion), plus building them into
-//! runtime tracks and optimizing them.
+//! Raw tracks: the authoring side of ozz's five user-channel track value types
+//! (float, float2, float3, float4, quaternion), plus building them into runtime
+//! tracks and optimizing them.
 //!
 //! A track animates a single variable that is not a joint transform — a blend
 //! weight, a light intensity, a custom float4 — over a track-local `[0, 1]`
@@ -8,11 +8,10 @@
 //! shape: push keyframes, then either `build` (compress into a runtime track)
 //! or `optimize` (key-frame reduction into another raw track).
 //!
-//! `build` produces the same sampleable runtime track types `track.zig`
-//! defines — `FloatTrack`, `Float2Track`, `Float3Track`, `Float4Track` and
-//! `QuaternionTrack` are re-exported here rather than redefined, so a track
-//! built offline is immediately usable with `track.zig`'s `initFromFile`-style
-//! API without a second import.
+//! `build` produces the same sampleable runtime track types `track.zig` defines
+//! — `FloatTrack`, `Float2Track`, `Float3Track`, `Float4Track` and
+//! `QuaternionTrack` are re-exported here, not redefined, so offline-built
+//! tracks work directly with `track.zig`'s `initFromFile`-style API.
 
 const c = @import("c.zig");
 const err = @import("error.zig");
