@@ -6,6 +6,8 @@
 
 #include <cstdlib>
 #include <cstring>
+#include <iostream>
+#include <sstream>
 
 #include "ozz/animation/offline/animation_builder.h"
 #include "ozz/animation/offline/raw_animation.h"
@@ -148,5 +150,21 @@ ZozzResult zozzFixtureAnimation(void** out_data, size_t* out_size) {
 }
 
 void zozzFixtureFree(void* data) { std::free(data); }
+
+size_t zozzFixtureCapturedSkeletonLoadBytes(const void* data, size_t size) {
+  // std::cerr is what ozz::log::Err() actually writes through at the
+  // STANDARD level (log.cc). Swapping its stream buffer for the duration of
+  // one call is the only portable way to observe that from here -- no OS
+  // stdio redirection needed, and nothing that survives past this function.
+  std::ostringstream capture;
+  std::streambuf* original = std::cerr.rdbuf(capture.rdbuf());
+
+  ZozzSkeleton* skeleton = nullptr;
+  zozzSkeletonLoadMemory(data, size, &skeleton);
+  zozzSkeletonDestroy(skeleton);
+
+  std::cerr.rdbuf(original);
+  return capture.str().size();
+}
 
 }  // extern "C"

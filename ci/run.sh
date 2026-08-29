@@ -71,6 +71,21 @@ section 'Hygiene'
 run 'zig fmt (src, tests, build.zig)' \
   zig fmt --check src tests/consumer build.zig
 
+# Every header ffi/zozz.h pulls in has to be installed with the library, or a C
+# consumer gets an umbrella header that does not resolve. The consumer test
+# catches this too, but only after a full build.
+run 'installed headers cover every include' bash -c '
+  comm -23 \
+    <(grep -hoE "#include \"zozz_[a-z_]+\.h\"" ffi/*.h | sed "s/#include \"//; s/\"//" | sort -u) \
+    <(grep -oE "ffi/zozz_[a-z_]+\.h" build.zig | sed "s|ffi/||" | sort -u) |
+  grep . && { echo "not in build.zig'"'"'s installHeader list"; exit 1; }; exit 0'
+
+# Every public ozz name in the areas this ABI claims has a verdict, and every
+# verdict that says "reachable" names a symbol the headers really declare. It
+# is here rather than behind a flag because it takes under a second and because
+# a gap is the kind of thing that should stop a push, not wait for a nightly.
+run 'coverage (every name has a verdict)' ci/check-coverage.sh
+
 #-----------------------------------------------------------------------------
 section 'Tests — native'
 #-----------------------------------------------------------------------------
@@ -116,7 +131,7 @@ if [ $QUICK -eq 0 ]; then
   # Mutation test for the ABI cross-check itself — see the script's own header
   # for why a check that guards everything else needs one. It rebuilds once per
   # mutation, which is why it is out of the --quick loop.
-  run 'abi drift (12 mutations)' ci/check-abi-drift.sh
+  run 'abi drift (17 mutations)' ci/check-abi-drift.sh
 fi
 
 #-----------------------------------------------------------------------------

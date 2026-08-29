@@ -59,6 +59,50 @@ ZOZZ_API ZozzResult zozzRawSkeletonAddJoint(ZozzRawSkeleton* raw,
 
 ZOZZ_API int zozzRawSkeletonNumJoints(const ZozzRawSkeleton* raw);
 
+//===----------------------------------------------------------------------===//
+// Raw skeleton read-back
+//
+// A joint here is addressed by INSERTION index — the index
+// zozzRawSkeletonAddJoint returned through `out_index` — never by a position
+// in the depth-first tree zozzSkeletonBuild produces. The two coincide only
+// when joints were added in depth-first order to begin with (see the module
+// comment above); otherwise a built skeleton's own zozzSkeletonJointName is
+// what maps a built index back to a name.
+//===----------------------------------------------------------------------===//
+
+/// Borrowed, NUL-terminated name of the joint at insertion index `joint`, or
+/// NULL if `raw` is NULL or `joint` is out of range.
+ZOZZ_API const char* zozzRawSkeletonJointName(const ZozzRawSkeleton* raw,
+                                              int32_t joint);
+
+/// Parent's insertion index, or ZOZZ_NO_PARENT for a root. Returns
+/// ZOZZ_NO_PARENT for an out-of-range `joint` too — check against
+/// zozzRawSkeletonNumJoints first if the distinction matters.
+ZOZZ_API int32_t zozzRawSkeletonJointParent(const ZozzRawSkeleton* raw,
+                                            int32_t joint);
+
+/// The local-space rest transform authored for the joint at insertion index
+/// `joint` — exactly the `rest` last passed to zozzRawSkeletonAddJoint for it.
+ZOZZ_API ZozzResult zozzRawSkeletonJointRest(const ZozzRawSkeleton* raw,
+                                             int32_t joint, ZozzTransform* out);
+
+/// Breadth-first traversal of the authored hierarchy, reusing
+/// ZozzJointVisitor (zozz_utils.h) — `joint` and `parent` are insertion
+/// indices here, the same convention as the read-back accessors above, rather
+/// than the built joint indices zozzSkeletonIterateJointsDepthFirst reports.
+/// `parent` is ZOZZ_NO_PARENT when `joint` is one of the skeleton's roots.
+/// Matches raw_skeleton.h's IterateJointsBF.
+///
+/// With more than one root, or subtrees of different depths, this is NOT a
+/// single global level order: ozz's own algorithm visits every child of a
+/// node, then recurses into each of those children's own subtrees fully,
+/// before moving on to the next root. A grandchild of the first root can
+/// therefore visit before a child of the second one.
+/// zozzSkeletonIterateJointsDepthFirst has no equivalent surprise, because
+/// depth-first has only one reasonable meaning to begin with.
+ZOZZ_API ZozzResult zozzRawSkeletonIterateJointsBreadthFirst(
+    const ZozzRawSkeleton* raw, ZozzJointVisitor visitor, void* user);
+
 /// Validates and builds a runtime skeleton. The raw skeleton is not consumed
 /// and may be built again or extended further.
 ZOZZ_API ZozzResult zozzSkeletonBuild(const ZozzRawSkeleton* raw,

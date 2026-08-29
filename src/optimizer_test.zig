@@ -360,3 +360,66 @@ test "the additive builder turns a clip into deltas from its own first frame" {
         zozz.AdditiveAnimationBuilder.runWithReference(input, &[_]zozz.Transform{}, from_last),
     );
 }
+
+test "the compressed control streams size and read back for every channel" {
+    const gpa = std.testing.allocator;
+    try zozz.setAllocator(gpa);
+    defer zozz.resetAllocator();
+
+    const raw = try buildDenseAnimation();
+    defer raw.deinit();
+    const animation = try raw.build();
+    defer animation.deinit();
+
+    for ([_]zozz.Animation.Channel{ .translation, .rotation, .scale }) |channel| {
+        const ctrl = try animation.keyframesCtrl(channel);
+        try std.testing.expect(ctrl.num_ratio_bytes > 0);
+        try std.testing.expect(ctrl.num_previouses > 0);
+        try std.testing.expect(ctrl.iframe_interval >= 0);
+
+        const ratios = try gpa.alloc(u8, ctrl.num_ratio_bytes);
+        defer gpa.free(ratios);
+        try animation.keyframeRatios(channel, ratios);
+
+        const previouses = try gpa.alloc(u16, ctrl.num_previouses);
+        defer gpa.free(previouses);
+        try animation.keyframePreviouses(channel, previouses);
+
+        const entries = try gpa.alloc(u8, ctrl.num_iframe_entry_bytes);
+        defer gpa.free(entries);
+        try animation.keyframeIframeEntries(channel, entries);
+
+        const desc = try gpa.alloc(u32, ctrl.num_iframe_desc);
+        defer gpa.free(desc);
+        try animation.keyframeIframeDesc(channel, desc);
+
+        // Ratios index the clip's time points, so none may run past them.
+        const timepoint_count = animation.numTimepoints();
+        if (timepoint_count <= 256) {
+            for (ratios) |r| try std.testing.expect(r < timepoint_count);
+        }
+
+        // Two uint32 per iframe, and every offset lands inside the entries.
+        try std.testing.expectEqual(@as(usize, 0), ctrl.num_iframe_desc % 2);
+        var i: usize = 0;
+        while (i < desc.len) : (i += 2) {
+            try std.testing.expect(desc[i] <= entries.len);
+        }
+    }
+
+    // A channel value the host made up is rejected, not read out of bounds.
+    try std.testing.expectError(
+        error.InvalidArgument,
+        animation.keyframesCtrl(@enumFromInt(99)),
+    );
+
+    // A buffer that is too small is refused rather than overrun.
+    const ctrl = try animation.keyframesCtrl(.translation);
+    var tiny: [1]u8 = undefined;
+    if (ctrl.num_ratio_bytes > 1) {
+        try std.testing.expectError(
+            error.BufferTooSmall,
+            animation.keyframeRatios(.translation, &tiny),
+        );
+    }
+}

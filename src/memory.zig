@@ -120,6 +120,24 @@ pub fn resetAllocator() void {
     _ = c.zozzSetAllocator(null);
 }
 
+/// Reads back the raw `c.Allocator` `setAllocator` most recently installed —
+/// `null` if none currently is: `setAllocator` has never been called, or
+/// `resetAllocator` undid the last call. There is deliberately no equivalent
+/// taking a `std.mem.Allocator` back out of the raw struct: `user` only ever
+/// points at the module-level `installed` above while a Zig host is driving
+/// this seam, so a Zig caller already has the `std.mem.Allocator` it passed
+/// in and never needs to reconstruct one from this. What this is for is the
+/// same save-and-restore `zozzGetAllocator` documents in zozz_core.h: read
+/// the allocator here before installing a temporary one (through
+/// `c.zozzSetAllocator` directly, for a non-Zig allocator), then pass the
+/// returned struct back to `c.zozzSetAllocator` afterward.
+pub fn getAllocator() err.Error!?c.Allocator {
+    var out: c.Allocator = undefined;
+    var is_installed: bool = undefined;
+    try err.check(c.zozzGetAllocator(&out, &is_installed));
+    return if (is_installed) out else null;
+}
+
 test "allocator bridge round-trips every alignment ozz may ask for" {
     const gpa = std.testing.allocator;
     try setAllocator(gpa);
@@ -159,4 +177,25 @@ test "allocator bridge rejects a non-power-of-two alignment" {
 
     try std.testing.expect(allocate(@ptrCast(&installed), 32, 3) == null);
     try std.testing.expect(allocate(@ptrCast(&installed), 32, 0) == null);
+}
+
+test "getAllocator distinguishes a never-installed state from the exact allocator installed" {
+    // Restore to a known baseline first: another test earlier in this file
+    // may have left an allocator installed.
+    resetAllocator();
+    try std.testing.expect((try getAllocator()) == null);
+
+    const gpa = std.testing.allocator;
+    try setAllocator(gpa);
+    defer resetAllocator();
+
+    const got = (try getAllocator()) orelse return error.TestUnexpectedResult;
+    try std.testing.expect(got.allocate != null);
+    try std.testing.expect(got.allocate.? == &allocate);
+    try std.testing.expect(got.deallocate != null);
+    try std.testing.expect(got.deallocate.? == &deallocate);
+    try std.testing.expectEqual(@as(?*anyopaque, @ptrCast(&installed)), got.user);
+
+    resetAllocator();
+    try std.testing.expect((try getAllocator()) == null);
 }

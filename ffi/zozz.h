@@ -19,6 +19,38 @@
 #define ZOZZ_H_
 
 #include "zozz_core.h"
+
+//===----------------------------------------------------------------------===//
+// Joint-visitor callback — forward declared here, ahead of every header that
+// uses it, rather than in the one that first happens to need it.
+//
+// zozz_utils.h's runtime-skeleton traversal and zozz_offline.h's raw-skeleton
+// traversal (below) share this one callback shape. Whichever of the two a
+// translation unit includes directly is the file whose own header guard
+// blocks the umbrella's later attempt to include it again, so the OTHER
+// header — reached first through this umbrella, before control ever returns
+// to the directly-included one's own body — would otherwise see an
+// undeclared type. Declaring it here, ahead of both, is what the
+// ZozzRawFloatTrack forward declarations further down do for the
+// optimizer/rawtrack pair, applied before the hazard can occur rather than
+// after.
+//===----------------------------------------------------------------------===//
+
+#ifdef __cplusplus
+extern "C" {
+#endif
+
+/// Visits one joint of a hierarchy traversal. `parent` is ZOZZ_NO_PARENT when
+/// `joint` is a root of the traversal. Must not throw or unwind: nothing on
+/// this side of the call can propagate an exception across it, and a Zig
+/// implementation must stash any error in `user` and re-raise it after the
+/// call returns rather than crossing the boundary with it.
+typedef void (*ZozzJointVisitor)(int joint, int parent, void* user);
+
+#ifdef __cplusplus
+}  // extern "C"
+#endif
+
 #include "zozz_skeleton.h"
 #include "zozz_animation.h"
 #include "zozz_pose.h"
@@ -80,5 +112,22 @@ typedef struct ZozzRawQuaternionTrack ZozzRawQuaternionTrack;
 //===----------------------------------------------------------------------===//
 
 #include "zozz_archive.h"
+
+//===----------------------------------------------------------------------===//
+// GV4 group-varint codec — the wire format zozzAnimationKeyframeIframeEntries'
+// buffer is encoded with.
+//===----------------------------------------------------------------------===//
+
+#include "zozz_encode.h"
+
+//===----------------------------------------------------------------------===//
+// ozz's command-line option parser (-Doptions) and the OzzImporter converter
+// interface (generic accessors always available; the concrete glTF backend
+// behind -Dgltf, the host-implementable side and the CLI driver behind
+// -Doptions).
+//===----------------------------------------------------------------------===//
+
+#include "zozz_options.h"
+#include "zozz_gltf.h"
 
 #endif  // ZOZZ_H_

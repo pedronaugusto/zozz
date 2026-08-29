@@ -1,0 +1,212 @@
+# AREA<TAB>NAME<TAB>VERDICT<TAB>EVIDENCE — one line per name tools/coverage.sh
+# reports unbound, keyed by the area it was found in.
+#
+#   BOUND      crosses the ABI; evidence names the zozz entry points.
+#   EXTENSION  a C++ virtual delivered as a C callback; evidence names it.
+#   LANGUAGE   Zig provides it; evidence names the facility.
+#   ZIG        zozz provides it in Zig without crossing the ABI; evidence is
+#              src/FILE.zig:decl.
+#   INTERNAL   upstream marks it internal, it has no public declaration, or
+#              this build compiles no source for it. tools/classify.sh
+#              computes this; nothing else may claim it.
+#   GAP        work. ci/check-coverage.sh fails while any remain.
+base/maths	ACos	ZIG	src/math.zig:aCos
+base/maths	ACosX	ZIG	src/math.zig:aCosX
+base/maths	ASin	ZIG	src/math.zig:aSin
+base/maths	ASinX	ZIG	src/math.zig:aSinX
+base/maths	ATan	ZIG	src/math.zig:aTan
+base/maths	ATanX	ZIG	src/math.zig:aTanX
+base/maths	Abs	ZIG	src/math.zig:abs
+base/maths	And	ZIG	src/math.zig:@"and"
+base/maths	AndNot	ZIG	src/math.zig:andNot
+base/maths	AreAllFalse	ZIG	src/math.zig:areAllFalse
+base/maths	AreAllFalse1	ZIG	src/math.zig:areAllFalse1
+base/maths	AreAllFalse2	ZIG	src/math.zig:areAllFalse2
+base/maths	AreAllFalse3	ZIG	src/math.zig:areAllFalse3
+base/maths	AreAllTrue	ZIG	src/math.zig:areAllTrue
+base/maths	AreAllTrue1	ZIG	src/math.zig:areAllTrue1
+base/maths	AreAllTrue2	ZIG	src/math.zig:areAllTrue2
+base/maths	AreAllTrue3	ZIG	src/math.zig:areAllTrue3
+base/maths	Clamp	LANGUAGE	std.mem and std.math
+base/maths	CmpEq	ZIG	src/math.zig:cmpEq
+base/maths	CmpGe	ZIG	src/math.zig:cmpGe
+base/maths	CmpGt	ZIG	src/math.zig:cmpGt
+base/maths	CmpLe	ZIG	src/math.zig:cmpLe
+base/maths	CmpLt	ZIG	src/math.zig:cmpLt
+base/maths	CmpNe	ZIG	src/math.zig:cmpNe
+base/maths	ColumnMultiply	ZIG	src/math.zig:columnMultiply
+base/maths	Compare	LANGUAGE	std.mem and std.math
+base/maths	Conjugate	ZIG	src/math.zig:conjugate
+base/maths	Cos	ZIG	src/math.zig:cos
+base/maths	CosX	ZIG	src/math.zig:cosX
+base/maths	Cross	ZIG	src/math.zig:cross3
+base/maths	Cross3	ZIG	src/math.zig:cross3
+base/maths	DivX	ZIG	src/math.zig:divX
+base/maths	Dot	ZIG	src/math.zig:dot3
+base/maths	Dot2	ZIG	src/math.zig:dot2
+base/maths	Dot3	ZIG	src/math.zig:dot3
+base/maths	Dot4	ZIG	src/math.zig:dot4
+base/maths	FloatToHalf	LANGUAGE	@floatCast between f16 and f32; Zig has IEEE half natively
+base/maths	FromAffine	ZIG	src/math.zig:fromAffine
+base/maths	FromAxisAngle	ZIG	src/math.zig:fromAxisAngle
+base/maths	FromAxisCosAngle	ZIG	src/math.zig:fromAxisCosAngle
+base/maths	FromEuler	ZIG	src/math.zig:fromEuler
+base/maths	FromFloatRound	ZIG	src/math.zig:fromFloatRound
+base/maths	FromFloatTrunc	ZIG	src/math.zig:fromFloatTrunc
+base/maths	FromInt	ZIG	src/math.zig:fromInt
+base/maths	FromQuaternion	ZIG	src/math.zig:fromQuaternion
+base/maths	FromUnitVectors	ZIG	src/math.zig:fromUnitVectors
+base/maths	FromVectors	ZIG	src/math.zig:fromVectors
+base/maths	GetW	ZIG	src/math.zig:w
+base/maths	GetX	ZIG	src/math.zig:x
+base/maths	GetY	ZIG	src/math.zig:y
+base/maths	GetZ	ZIG	src/math.zig:z
+base/maths	HAdd	ZIG	src/math.zig:hAdd3
+base/maths	HAdd2	ZIG	src/math.zig:hAdd2
+base/maths	HAdd3	ZIG	src/math.zig:hAdd3
+base/maths	HAdd4	ZIG	src/math.zig:hAdd4
+base/maths	HalfToFloat	LANGUAGE	@floatCast between f16 and f32; Zig has IEEE half natively
+base/maths	Invert	ZIG	src/math.zig:invert
+base/maths	IsNormalized	ZIG	src/math.zig:isNormalized3
+base/maths	IsNormalized2	ZIG	src/math.zig:isNormalized2
+base/maths	IsNormalized3	ZIG	src/math.zig:isNormalized3
+base/maths	IsNormalized4	ZIG	src/math.zig:isNormalized4
+base/maths	IsNormalizedEst	ZIG	src/math.zig:isNormalizedEst3
+base/maths	IsNormalizedEst2	ZIG	src/math.zig:isNormalizedEst2
+base/maths	IsNormalizedEst3	ZIG	src/math.zig:isNormalizedEst3
+base/maths	IsNormalizedEst4	ZIG	src/math.zig:isNormalizedEst4
+base/maths	IsOrthogonal	ZIG	src/math.zig:isOrthogonal
+base/maths	Length	ZIG	src/math.zig:length3
+base/maths	Length2	ZIG	src/math.zig:length2
+base/maths	Length2Sqr	ZIG	src/math.zig:length2Sqr
+base/maths	Length3	ZIG	src/math.zig:length3
+base/maths	Length3Sqr	ZIG	src/math.zig:length3Sqr
+base/maths	Length4	ZIG	src/math.zig:length4
+base/maths	Length4Sqr	ZIG	src/math.zig:length4Sqr
+base/maths	LengthSqr	ZIG	src/math.zig:length3Sqr
+base/maths	Lerp	INTERNAL	upstream libs/ozz/include/ozz/animation/runtime/track.h:46 (namespace)
+base/maths	Load1	ZIG	src/math.zig:load1
+base/maths	Load1Ptr	ZIG	src/math.zig:load1Ptr
+base/maths	Load1PtrU	ZIG	src/math.zig:load1PtrU
+base/maths	Load2Ptr	ZIG	src/math.zig:load2Ptr
+base/maths	Load2PtrU	ZIG	src/math.zig:load2PtrU
+base/maths	Load3Ptr	ZIG	src/math.zig:load3Ptr
+base/maths	Load3PtrU	ZIG	src/math.zig:load3PtrU
+base/maths	LoadPtr	ZIG	src/math.zig:loadPtr
+base/maths	LoadPtrU	ZIG	src/math.zig:loadPtrU
+base/maths	LoadX	ZIG	src/math.zig:loadX
+base/maths	LoadXPtr	ZIG	src/math.zig:loadXPtr
+base/maths	LoadXPtrU	ZIG	src/math.zig:loadXPtrU
+base/maths	MAdd	ZIG	src/math.zig:mAdd
+base/maths	MSub	ZIG	src/math.zig:mSub
+base/maths	Max0	ZIG	src/math.zig:max0
+base/maths	Merge	ZIG	src/math.zig:merge
+base/maths	Min	LANGUAGE	std.mem and std.math
+base/maths	Min0	ZIG	src/math.zig:min0
+base/maths	MoveMask	ZIG	src/math.zig:moveMask
+base/maths	NLerp	ZIG	src/math.zig:nlerp
+base/maths	NLerpEst	ZIG	src/math.zig:nlerpEst
+base/maths	NMAdd	ZIG	src/math.zig:nMAdd
+base/maths	NMSub	ZIG	src/math.zig:nMSub
+base/maths	Normalize	ZIG	src/math.zig:normalize3
+base/maths	Normalize2	ZIG	src/math.zig:normalize2
+base/maths	Normalize3	ZIG	src/math.zig:normalize3
+base/maths	Normalize4	ZIG	src/math.zig:normalize4
+base/maths	NormalizeEst	ZIG	src/math.zig:normalizeEst3
+base/maths	NormalizeEst2	ZIG	src/math.zig:normalizeEst2
+base/maths	NormalizeEst3	ZIG	src/math.zig:normalizeEst3
+base/maths	NormalizeEst4	ZIG	src/math.zig:normalizeEst4
+base/maths	NormalizeSafe	ZIG	src/math.zig:normalizeSafe3
+base/maths	NormalizeSafe2	ZIG	src/math.zig:normalizeSafe2
+base/maths	NormalizeSafe3	ZIG	src/math.zig:normalizeSafe3
+base/maths	NormalizeSafe4	ZIG	src/math.zig:normalizeSafe4
+base/maths	NormalizeSafeEst	ZIG	src/math.zig:normalizeSafeEst3
+base/maths	NormalizeSafeEst2	ZIG	src/math.zig:normalizeSafeEst2
+base/maths	NormalizeSafeEst3	ZIG	src/math.zig:normalizeSafeEst3
+base/maths	NormalizeSafeEst4	ZIG	src/math.zig:normalizeSafeEst4
+base/maths	Not	ZIG	src/math.zig:not
+base/maths	RSqrtEst	ZIG	src/math.zig:rSqrtEst
+base/maths	RSqrtEstNR	ZIG	src/math.zig:rSqrtEstNR
+base/maths	RSqrtEstX	ZIG	src/math.zig:rSqrtEstX
+base/maths	RSqrtEstXNR	ZIG	src/math.zig:rSqrtEstXNR
+base/maths	RcpEst	ZIG	src/math.zig:rcpEst
+base/maths	RcpEstNR	ZIG	src/math.zig:rcpEstNR
+base/maths	RcpEstX	ZIG	src/math.zig:rcpEstX
+base/maths	RcpEstXNR	ZIG	src/math.zig:rcpEstXNR
+base/maths	SLerp	ZIG	src/math.zig:slerp
+base/maths	Scaling	ZIG	src/math.zig:scaling
+base/maths	Select	ZIG	src/math.zig:select
+base/maths	SetI	ZIG	src/math.zig:withI
+base/maths	SetW	ZIG	src/math.zig:withW
+base/maths	SetX	ZIG	src/math.zig:withX
+base/maths	SetY	ZIG	src/math.zig:withY
+base/maths	SetZ	ZIG	src/math.zig:withZ
+base/maths	ShiftL	ZIG	src/math.zig:shiftL
+base/maths	ShiftR	ZIG	src/math.zig:shiftR
+base/maths	ShiftRu	ZIG	src/math.zig:shiftRu
+base/maths	Sign	ZIG	src/math.zig:sign
+base/maths	SimdImplementationName	ZIG	src/math.zig:simdImplementationName
+base/maths	Sin	ZIG	src/math.zig:sin
+base/maths	SinX	ZIG	src/math.zig:sinX
+base/maths	SplatW	ZIG	src/math.zig:splatW
+base/maths	SplatX	ZIG	src/math.zig:splatX
+base/maths	SplatY	ZIG	src/math.zig:splatY
+base/maths	SplatZ	ZIG	src/math.zig:splatZ
+base/maths	Sqrt	ZIG	src/math.zig:sqrt
+base/maths	SqrtX	ZIG	src/math.zig:sqrtX
+base/maths	Store1Ptr	ZIG	src/math.zig:store1Ptr
+base/maths	Store1PtrU	ZIG	src/math.zig:store1PtrU
+base/maths	Store2Ptr	ZIG	src/math.zig:store2Ptr
+base/maths	Store2PtrU	ZIG	src/math.zig:store2PtrU
+base/maths	Store3Ptr	ZIG	src/math.zig:store3Ptr
+base/maths	Store3PtrU	ZIG	src/math.zig:store3PtrU
+base/maths	StorePtr	ZIG	src/math.zig:storePtr
+base/maths	StorePtrU	ZIG	src/math.zig:storePtrU
+base/maths	Swizzle	ZIG	src/math.zig:swizzle
+base/maths	Tan	ZIG	src/math.zig:tan
+base/maths	TanX	ZIG	src/math.zig:tanX
+base/maths	ToAffine	ZIG	src/math.zig:toAffine
+base/maths	ToAxisAngle	ZIG	src/math.zig:toAxisAngle
+base/maths	ToEuler	ZIG	src/math.zig:toEuler
+base/maths	ToQuaternion	ZIG	src/math.zig:toQuaternion
+base/maths	TransformBox	ZIG	src/math.zig:transform
+base/maths	TransformPoint	ZIG	src/math.zig:transformPoint
+base/maths	TransformVector	ZIG	src/math.zig:transformVector
+base/maths	Translate	ZIG	src/math.zig:translate
+base/maths	Transpose	ZIG	src/math.zig:transpose
+base/maths	Transpose16x16	ZIG	src/math.zig:transpose16x16
+base/maths	Transpose1x4	ZIG	src/math.zig:transpose1x4
+base/maths	Transpose2x4	ZIG	src/math.zig:transpose2x4
+base/maths	Transpose3x4	ZIG	src/math.zig:transpose3x4
+base/maths	Transpose4x1	ZIG	src/math.zig:transpose4x1
+base/maths	Transpose4x2	ZIG	src/math.zig:transpose4x2
+base/maths	Transpose4x3	ZIG	src/math.zig:transpose4x3
+base/maths	Transpose4x4	ZIG	src/math.zig:transpose4x4
+base/maths	Xor	ZIG	src/math.zig:xor
+base/maths	alignas	INTERNAL	declared only under libs/ozz/include/ozz/base/maths/internal/simd_math_config.h, an internal directory
+base/maths	all_false	ZIG	src/math.zig:all_false
+base/maths	all_true	ZIG	src/math.zig:all_true
+base/maths	floor	INTERNAL	declared only under libs/ozz/include/ozz/base/maths/internal/simd_math_ref-inl.h, an internal directory
+base/maths	is_inside	LANGUAGE	Zig slices and std.ArrayList
+base/maths	is_valid	LANGUAGE	Zig slices and std.ArrayList
+base/maths	lerp	LANGUAGE	std.mem and std.math
+base/maths	mask_0000	ZIG	src/math.zig:mask_0000
+base/maths	mask_000f	ZIG	src/math.zig:mask_000f
+base/maths	mask_00f0	ZIG	src/math.zig:mask_00f0
+base/maths	mask_0f00	ZIG	src/math.zig:mask_0f00
+base/maths	mask_f000	ZIG	src/math.zig:mask_f000
+base/maths	mask_fff0	ZIG	src/math.zig:mask_fff0
+base/maths	mask_ffff	ZIG	src/math.zig:mask_ffff
+base/maths	mask_not_sign	ZIG	src/math.zig:mask_not_sign
+base/maths	mask_sign	ZIG	src/math.zig:mask_sign
+base/maths	mask_sign_w	ZIG	src/math.zig:mask_sign_w
+base/maths	mask_sign_xyz	ZIG	src/math.zig:mask_sign_xyz
+base/maths	min	LANGUAGE	std.mem and std.math
+base/maths	one	ZIG	src/math.zig:simd_float4
+base/maths	right	ZIG	src/math.zig:Rect
+base/maths	top	LANGUAGE	Zig slices and std.ArrayList
+base/maths	w_axis	ZIG	src/math.zig:simd_float4
+base/maths	x_axis	ZIG	src/math.zig:simd_float4
+base/maths	y_axis	ZIG	src/math.zig:simd_float4
+base/maths	z_axis	ZIG	src/math.zig:simd_float4
+base/maths	zero	ZIG	src/math.zig:simd_float4

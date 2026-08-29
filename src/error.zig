@@ -23,6 +23,9 @@ pub const Error = error{
     /// Authored offline data failed ozz validation: a raw skeleton over the
     /// depth limit, or raw animation keys out of order.
     InvalidData,
+    /// The entry point exists but its build option is off: the library was
+    /// compiled without the code it needs.
+    Unsupported,
 };
 
 /// Turns a C result into a Zig error, or void on success.
@@ -42,6 +45,7 @@ pub fn check(result: c.Result) Error!void {
         .buffer_too_small => Error.BufferTooSmall,
         .skeleton_mismatch => Error.SkeletonMismatch,
         .invalid_data => Error.InvalidData,
+        .unsupported => Error.Unsupported,
     };
 }
 

@@ -1,0 +1,17 @@
+# Entry points that ffi/*.h declares and no non-test Zig file calls.
+#
+# `ci/check-coverage.sh` requires every entry point to be reachable from the
+# Zig API, because one that is not is a capability stranded in C: it ships, it
+# is documented, and the host this library exists to serve cannot get at it.
+# That rule found `zozzLocalToModelRange` — the range-limited model-space walk
+# an IK correction wants — sitting unwrapped while the Zig job offered only the
+# whole-skeleton form.
+#
+# This is the list of the ones where "not called from the Zig API" is correct,
+# and it is enforced in both directions: a name here that IS called is an error
+# too, so the list cannot quietly outlive its reason.
+#
+# Format: NAME<TAB>reason.
+
+zozzIKTwoBoneJobDefaults	ozz's defaults for IKTwoBoneJob. The Zig job spells them as struct field defaults, which is the ergonomic form; `src/ik_test.zig` pins those literals against this call, so the values still come from ozz and a re-vendor that retunes one fails there.
+zozzIKAimJobDefaults	ozz's defaults for IKAimJob. Same arrangement, pinned by the same test.

@@ -45,6 +45,9 @@ pub const Result = enum(c_int) {
     buffer_too_small = 7,
     skeleton_mismatch = 8,
     invalid_data = 9,
+    /// The entry point exists but its build option is off (-Doptions,
+    /// -Dgltf): the library was compiled without the code it needs.
+    unsupported = 10,
 };
 
 /// Step vs. linear interpolation for a raw-track keyframe. Mirrors
@@ -60,6 +63,27 @@ pub const MotionReference = enum(c_int) {
     absolute = 0,
     skeleton = 1,
     animation = 2,
+};
+
+/// Matches `ZozzSeekOrigin` (ffi/zozz_archive.h) exactly, so a Zig-side `seek`
+/// callback can hand these straight to whatever it wraps.
+pub const SeekOrigin = enum(c_int) {
+    current = 0,
+    end = 1,
+    set = 2,
+};
+
+/// Mirrors `ZozzEndianness` (ffi/zozz_archive.h) exactly.
+pub const Endianness = enum(c_int) {
+    big = 0,
+    little = 1,
+};
+
+/// Mirrors `ZozzLogLevel` (ffi/zozz_core.h) exactly.
+pub const LogLevel = enum(c_int) {
+    silent = 0,
+    standard = 1,
+    verbose = 2,
 };
 
 //=============================================================================
@@ -192,7 +216,11 @@ pub extern fn zozzVersion() u32;
 pub extern fn zozzOzzVersion() u32;
 pub extern fn zozzResultName(result: Result) [*:0]const u8;
 pub extern fn zozzSetAllocator(alloc: ?*const Allocator) Result;
+pub extern fn zozzGetAllocator(out: *Allocator, installed: *bool) Result;
 pub extern fn zozzAbiLayout(out: *AbiLayout) void;
+
+pub extern fn zozzSetLogLevel(level: LogLevel) Result;
+pub extern fn zozzGetLogLevel() LogLevel;
 
 pub extern fn zozzSkeletonLoadFile(path: [*:0]const u8, out: **Skeleton) Result;
 pub extern fn zozzSkeletonLoadMemory(data: [*]const u8, size: usize, out: **Skeleton) Result;
@@ -214,6 +242,24 @@ pub extern fn zozzAnimationSize(animation: ?*const Animation) usize;
 pub extern fn zozzAnimationNumTimepoints(animation: ?*const Animation) c_int;
 pub extern fn zozzAnimationTimepoints(animation: ?*const Animation, out: [*]f32, count: usize) Result;
 
+/// Non-exhaustive: a host can pass any integer, and the C side rejects one it
+/// does not recognise rather than reading an out-of-range enum.
+pub const KeyframeChannel = enum(c_int) { translation = 0, rotation = 1, scale = 2, _ };
+
+pub const KeyframesCtrl = extern struct {
+    num_ratio_bytes: usize,
+    num_previouses: usize,
+    num_iframe_entry_bytes: usize,
+    num_iframe_desc: usize,
+    iframe_interval: f32,
+};
+
+pub extern fn zozzAnimationKeyframesCtrl(animation: ?*const Animation, channel: KeyframeChannel, out: ?*KeyframesCtrl) Result;
+pub extern fn zozzAnimationKeyframeRatios(animation: ?*const Animation, channel: KeyframeChannel, out: [*]u8, count: usize) Result;
+pub extern fn zozzAnimationKeyframePreviouses(animation: ?*const Animation, channel: KeyframeChannel, out: [*]u16, count: usize) Result;
+pub extern fn zozzAnimationKeyframeIframeEntries(animation: ?*const Animation, channel: KeyframeChannel, out: [*]u8, count: usize) Result;
+pub extern fn zozzAnimationKeyframeIframeDesc(animation: ?*const Animation, channel: KeyframeChannel, out: [*]u32, count: usize) Result;
+
 pub extern fn zozzSoaPoseCreate(num_joints: c_int, out: **SoaPose) Result;
 pub extern fn zozzSoaPoseDestroy(pose: ?*SoaPose) void;
 pub extern fn zozzSoaPoseNumJoints(pose: ?*const SoaPose) c_int;
@@ -226,6 +272,10 @@ pub extern fn zozzRawSkeletonCreate(out: **RawSkeleton) Result;
 pub extern fn zozzRawSkeletonDestroy(raw: ?*RawSkeleton) void;
 pub extern fn zozzRawSkeletonAddJoint(raw: *RawSkeleton, parent: i32, name: [*:0]const u8, rest: *const Transform, out_index: ?*i32) Result;
 pub extern fn zozzRawSkeletonNumJoints(raw: ?*const RawSkeleton) c_int;
+pub extern fn zozzRawSkeletonJointName(raw: ?*const RawSkeleton, joint: i32) ?[*:0]const u8;
+pub extern fn zozzRawSkeletonJointParent(raw: ?*const RawSkeleton, joint: i32) i32;
+pub extern fn zozzRawSkeletonJointRest(raw: ?*const RawSkeleton, joint: i32, out: *Transform) Result;
+pub extern fn zozzRawSkeletonIterateJointsBreadthFirst(raw: ?*const RawSkeleton, visitor: JointVisitor, user: ?*anyopaque) Result;
 pub extern fn zozzSkeletonBuild(raw: *const RawSkeleton, out: **Skeleton) Result;
 
 pub extern fn zozzRawAnimationCreate(num_tracks: c_int, duration: f32, name: ?[*:0]const u8, out: **RawAnimation) Result;
@@ -378,30 +428,50 @@ pub extern fn zozzFloatTrackLoadMemory(data: [*]const u8, size: usize, out: **Fl
 pub extern fn zozzFloatTrackDestroy(track: ?*FloatTrack) void;
 pub extern fn zozzFloatTrackName(track: ?*const FloatTrack) [*:0]const u8;
 pub extern fn zozzFloatTrackSample(track: *const FloatTrack, ratio: f32, out: *f32) Result;
+pub extern fn zozzFloatTrackNumKeyframes(track: ?*const FloatTrack) c_int;
+pub extern fn zozzFloatTrackRatios(track: ?*const FloatTrack, out: [*]f32, count: usize) Result;
+pub extern fn zozzFloatTrackValues(track: ?*const FloatTrack, out: [*]f32, count: usize) Result;
+pub extern fn zozzFloatTrackSteps(track: ?*const FloatTrack, out: [*]TrackInterpolation, count: usize) Result;
 
 pub extern fn zozzFloat2TrackLoadFile(path: [*:0]const u8, out: **Float2Track) Result;
 pub extern fn zozzFloat2TrackLoadMemory(data: [*]const u8, size: usize, out: **Float2Track) Result;
 pub extern fn zozzFloat2TrackDestroy(track: ?*Float2Track) void;
 pub extern fn zozzFloat2TrackName(track: ?*const Float2Track) [*:0]const u8;
 pub extern fn zozzFloat2TrackSample(track: *const Float2Track, ratio: f32, out: *[2]f32) Result;
+pub extern fn zozzFloat2TrackNumKeyframes(track: ?*const Float2Track) c_int;
+pub extern fn zozzFloat2TrackRatios(track: ?*const Float2Track, out: [*]f32, count: usize) Result;
+pub extern fn zozzFloat2TrackValues(track: ?*const Float2Track, out: [*][2]f32, count: usize) Result;
+pub extern fn zozzFloat2TrackSteps(track: ?*const Float2Track, out: [*]TrackInterpolation, count: usize) Result;
 
 pub extern fn zozzFloat3TrackLoadFile(path: [*:0]const u8, out: **Float3Track) Result;
 pub extern fn zozzFloat3TrackLoadMemory(data: [*]const u8, size: usize, out: **Float3Track) Result;
 pub extern fn zozzFloat3TrackDestroy(track: ?*Float3Track) void;
 pub extern fn zozzFloat3TrackName(track: ?*const Float3Track) [*:0]const u8;
 pub extern fn zozzFloat3TrackSample(track: *const Float3Track, ratio: f32, out: *[3]f32) Result;
+pub extern fn zozzFloat3TrackNumKeyframes(track: ?*const Float3Track) c_int;
+pub extern fn zozzFloat3TrackRatios(track: ?*const Float3Track, out: [*]f32, count: usize) Result;
+pub extern fn zozzFloat3TrackValues(track: ?*const Float3Track, out: [*][3]f32, count: usize) Result;
+pub extern fn zozzFloat3TrackSteps(track: ?*const Float3Track, out: [*]TrackInterpolation, count: usize) Result;
 
 pub extern fn zozzFloat4TrackLoadFile(path: [*:0]const u8, out: **Float4Track) Result;
 pub extern fn zozzFloat4TrackLoadMemory(data: [*]const u8, size: usize, out: **Float4Track) Result;
 pub extern fn zozzFloat4TrackDestroy(track: ?*Float4Track) void;
 pub extern fn zozzFloat4TrackName(track: ?*const Float4Track) [*:0]const u8;
 pub extern fn zozzFloat4TrackSample(track: *const Float4Track, ratio: f32, out: *[4]f32) Result;
+pub extern fn zozzFloat4TrackNumKeyframes(track: ?*const Float4Track) c_int;
+pub extern fn zozzFloat4TrackRatios(track: ?*const Float4Track, out: [*]f32, count: usize) Result;
+pub extern fn zozzFloat4TrackValues(track: ?*const Float4Track, out: [*][4]f32, count: usize) Result;
+pub extern fn zozzFloat4TrackSteps(track: ?*const Float4Track, out: [*]TrackInterpolation, count: usize) Result;
 
 pub extern fn zozzQuaternionTrackLoadFile(path: [*:0]const u8, out: **QuaternionTrack) Result;
 pub extern fn zozzQuaternionTrackLoadMemory(data: [*]const u8, size: usize, out: **QuaternionTrack) Result;
 pub extern fn zozzQuaternionTrackDestroy(track: ?*QuaternionTrack) void;
 pub extern fn zozzQuaternionTrackName(track: ?*const QuaternionTrack) [*:0]const u8;
 pub extern fn zozzQuaternionTrackSample(track: *const QuaternionTrack, ratio: f32, out: *[4]f32) Result;
+pub extern fn zozzQuaternionTrackNumKeyframes(track: ?*const QuaternionTrack) c_int;
+pub extern fn zozzQuaternionTrackRatios(track: ?*const QuaternionTrack, out: [*]f32, count: usize) Result;
+pub extern fn zozzQuaternionTrackValues(track: ?*const QuaternionTrack, out: [*][4]f32, count: usize) Result;
+pub extern fn zozzQuaternionTrackSteps(track: ?*const QuaternionTrack, out: [*]TrackInterpolation, count: usize) Result;
 
 pub extern fn zozzFloatTrackTriggeringJobRun(
     track: *const FloatTrack,
@@ -441,18 +511,22 @@ pub extern fn zozzBlendingRun(
 ) Result;
 
 //=============================================================================
-// Archive write path
+// Archive
 //=============================================================================
 
 pub const Stream = extern struct {
     opened: ?*const fn (user: ?*anyopaque) callconv(.c) c_int,
     write: ?*const fn (user: ?*anyopaque, data: ?*const anyopaque, size: usize) callconv(.c) usize,
+    read: ?*const fn (user: ?*anyopaque, buffer: ?*anyopaque, size: usize) callconv(.c) usize,
+    seek: ?*const fn (user: ?*anyopaque, offset: c_int, origin: SeekOrigin) callconv(.c) c_int,
+    tell: ?*const fn (user: ?*anyopaque) callconv(.c) c_int,
     user: ?*anyopaque,
 };
 
 pub const OArchive = opaque {};
+pub const IArchive = opaque {};
 
-pub extern fn zozzOArchiveCreate(stream: ?*const Stream, out: **OArchive) Result;
+pub extern fn zozzOArchiveCreate(stream: ?*const Stream, endianness: Endianness, out: **OArchive) Result;
 pub extern fn zozzOArchiveDestroy(archive: ?*OArchive) void;
 pub extern fn zozzOArchiveSaveBinary(archive: ?*OArchive, data: ?*const anyopaque, size: usize) Result;
 pub extern fn zozzOArchiveSaveInt32(archive: ?*OArchive, value: i32) Result;
@@ -464,6 +538,28 @@ pub extern fn zozzOArchiveSaveFloat2Track(archive: ?*OArchive, track: ?*const Fl
 pub extern fn zozzOArchiveSaveFloat3Track(archive: ?*OArchive, track: ?*const Float3Track) Result;
 pub extern fn zozzOArchiveSaveFloat4Track(archive: ?*OArchive, track: ?*const Float4Track) Result;
 pub extern fn zozzOArchiveSaveQuaternionTrack(archive: ?*OArchive, track: ?*const QuaternionTrack) Result;
+
+pub extern fn zozzIArchiveCreate(stream: ?*const Stream, out: **IArchive) Result;
+pub extern fn zozzIArchiveDestroy(archive: ?*IArchive) void;
+pub extern fn zozzIArchiveEndianSwap(archive: ?*const IArchive) bool;
+pub extern fn zozzIArchiveLoadBinary(archive: ?*IArchive, data: ?*anyopaque, size: usize) Result;
+pub extern fn zozzIArchiveLoadInt32(archive: ?*IArchive, out: *i32) Result;
+pub extern fn zozzIArchiveLoadFloat(archive: ?*IArchive, out: *f32) Result;
+pub extern fn zozzIArchiveLoadSkeleton(archive: ?*IArchive, out: **Skeleton) Result;
+pub extern fn zozzIArchiveLoadAnimation(archive: ?*IArchive, out: **Animation) Result;
+pub extern fn zozzIArchiveLoadFloatTrack(archive: ?*IArchive, out: **FloatTrack) Result;
+pub extern fn zozzIArchiveLoadFloat2Track(archive: ?*IArchive, out: **Float2Track) Result;
+pub extern fn zozzIArchiveLoadFloat3Track(archive: ?*IArchive, out: **Float3Track) Result;
+pub extern fn zozzIArchiveLoadFloat4Track(archive: ?*IArchive, out: **Float4Track) Result;
+pub extern fn zozzIArchiveLoadQuaternionTrack(archive: ?*IArchive, out: **QuaternionTrack) Result;
+pub extern fn zozzIArchiveTestSkeleton(archive: ?*IArchive) bool;
+pub extern fn zozzIArchiveTestAnimation(archive: ?*IArchive) bool;
+pub extern fn zozzIArchiveTestFloatTrack(archive: ?*IArchive) bool;
+pub extern fn zozzIArchiveTestFloat2Track(archive: ?*IArchive) bool;
+pub extern fn zozzIArchiveTestFloat3Track(archive: ?*IArchive) bool;
+pub extern fn zozzIArchiveTestFloat4Track(archive: ?*IArchive) bool;
+pub extern fn zozzIArchiveTestQuaternionTrack(archive: ?*IArchive) bool;
+
 pub extern fn zozzSkeletonSaveFile(skeleton: ?*const Skeleton, path: [*:0]const u8) Result;
 pub extern fn zozzAnimationSaveFile(animation: ?*const Animation, path: [*:0]const u8) Result;
 pub extern fn zozzFloatTrackSaveFile(track: ?*const FloatTrack, path: [*:0]const u8) Result;
@@ -586,3 +682,215 @@ pub const SkinningJob = extern struct {
 };
 
 pub extern fn zozzSkinningJobRun(job: *const SkinningJob) Result;
+
+//=============================================================================
+// GV4 group-varint codec (ffi/zozz_encode.h)
+//=============================================================================
+
+pub extern fn zozzEncodeGV4(values: *const [4]u32, out: [*]u8, out_capacity: usize, out_size: *usize) Result;
+pub extern fn zozzDecodeGV4(buffer: [*]const u8, buffer_size: usize, out: *[4]u32, bytes_read: *usize) Result;
+pub extern fn zozzComputeGV4WorstBufferSize(values_count: usize, out: *usize) Result;
+pub extern fn zozzEncodeGV4Stream(values: [*]const u32, values_count: usize, out: [*]u8, out_capacity: usize, out_size: *usize) Result;
+pub extern fn zozzDecodeGV4Stream(buffer: [*]const u8, buffer_size: usize, values: [*]u32, values_count: usize, bytes_read: *usize) Result;
+
+//=============================================================================
+// ozz's command-line option parser (ffi/zozz_options.h), behind -Doptions.
+//=============================================================================
+
+pub const OptionsParser = opaque {};
+pub const Option = opaque {};
+
+pub const OptionsParseResult = enum(c_int) {
+    success = 0,
+    exit_success = 1,
+    exit_failure = 2,
+};
+
+pub extern fn zozzOptionsParserCreate(out: **OptionsParser) Result;
+pub extern fn zozzOptionsParserDestroy(parser: ?*OptionsParser) void;
+pub extern fn zozzOptionsParserParseCommandLine(
+    parser: ?*OptionsParser,
+    argc: c_int,
+    argv: [*]const [*:0]const u8,
+    version: ?[*:0]const u8,
+    usage: ?[*:0]const u8,
+    out: *OptionsParseResult,
+) Result;
+pub extern fn zozzOptionsParserHelp(parser: ?*OptionsParser) Result;
+pub extern fn zozzOptionsParserRegister(parser: ?*OptionsParser, option: ?*Option) Result;
+pub extern fn zozzOptionsParserUnregister(parser: ?*OptionsParser, option: ?*Option) Result;
+pub extern fn zozzOptionsParserSetUsage(parser: ?*OptionsParser, usage: ?[*:0]const u8) Result;
+pub extern fn zozzOptionsParserUsage(parser: ?*const OptionsParser) [*:0]const u8;
+pub extern fn zozzOptionsParserSetVersion(parser: ?*OptionsParser, version: ?[*:0]const u8) Result;
+pub extern fn zozzOptionsParserMaxOptions(parser: ?*const OptionsParser) c_int;
+pub extern fn zozzOptionsParserExecutableName(parser: ?*const OptionsParser) [*:0]const u8;
+pub extern fn zozzOptionsParserExecutablePath(parser: ?*const OptionsParser) [*:0]const u8;
+
+pub extern fn zozzIntOptionCreate(name: [*:0]const u8, help: ?[*:0]const u8, default_value: i32, required: bool, out: **Option) Result;
+pub extern fn zozzFloatOptionCreate(name: [*:0]const u8, help: ?[*:0]const u8, default_value: f32, required: bool, out: **Option) Result;
+pub extern fn zozzBoolOptionCreate(name: [*:0]const u8, help: ?[*:0]const u8, default_value: bool, required: bool, out: **Option) Result;
+pub extern fn zozzStringOptionCreate(name: [*:0]const u8, help: ?[*:0]const u8, default_value: ?[*:0]const u8, required: bool, out: **Option) Result;
+pub extern fn zozzOptionDestroy(option: ?*Option) void;
+
+pub extern fn zozzIntOptionValue(option: ?*const Option, out: *i32) Result;
+pub extern fn zozzFloatOptionValue(option: ?*const Option, out: *f32) Result;
+pub extern fn zozzBoolOptionValue(option: ?*const Option, out: *bool) Result;
+pub extern fn zozzStringOptionValue(option: ?*const Option, out: *[*:0]const u8) Result;
+pub extern fn zozzIntOptionDefault(option: ?*const Option, out: *i32) Result;
+pub extern fn zozzFloatOptionDefault(option: ?*const Option, out: *f32) Result;
+pub extern fn zozzBoolOptionDefault(option: ?*const Option, out: *bool) Result;
+pub extern fn zozzStringOptionDefault(option: ?*const Option, out: *[*:0]const u8) Result;
+
+pub extern fn zozzOptionName(option: ?*const Option) [*:0]const u8;
+pub extern fn zozzOptionHelp(option: ?*const Option) [*:0]const u8;
+pub extern fn zozzOptionRequired(option: ?*const Option) bool;
+pub extern fn zozzOptionStatisfied(option: ?*const Option) bool;
+pub extern fn zozzOptionRestoreDefault(option: ?*Option) Result;
+
+//=============================================================================
+// OzzImporter (ffi/zozz_gltf.h): the concrete glTF backend (-Dgltf), the
+// host-implementable interface and the CLI driver (-Doptions), and the
+// generic accessors that drive either one.
+//=============================================================================
+
+pub const Importer = opaque {};
+
+pub const ImportNodeType = extern struct {
+    skeleton: bool,
+    marker: bool,
+    camera: bool,
+    geometry: bool,
+    light: bool,
+    null: bool,
+    any: bool,
+};
+
+pub const NodePropertyType = enum(c_int) {
+    float1 = 0,
+    float2 = 1,
+    float3 = 2,
+    float4 = 3,
+    point = 4,
+    vector = 5,
+};
+
+pub const NodeProperty = extern struct {
+    name: [*:0]const u8,
+    type: NodePropertyType,
+};
+
+pub const StringVisitor = *const fn (value: [*:0]const u8, user: ?*anyopaque) callconv(.c) void;
+pub const NodePropertyVisitor = *const fn (property: *const NodeProperty, user: ?*anyopaque) callconv(.c) void;
+
+pub const ImporterInterface = extern struct {
+    load: ?*const fn (user: ?*anyopaque, filename: [*:0]const u8) callconv(.c) c_int,
+    import_skeleton: ?*const fn (user: ?*anyopaque, types: ImportNodeType, out: *RawSkeleton) callconv(.c) c_int,
+    get_animation_names: ?*const fn (user: ?*anyopaque, visitor: StringVisitor, visitor_user: ?*anyopaque) callconv(.c) void,
+    import_animation: ?*const fn (
+        user: ?*anyopaque,
+        animation_name: [*:0]const u8,
+        skeleton: ?*const Skeleton,
+        sampling_rate: f32,
+        out: **RawAnimation,
+    ) callconv(.c) c_int,
+    get_node_properties: ?*const fn (
+        user: ?*anyopaque,
+        node_name: [*:0]const u8,
+        visitor: NodePropertyVisitor,
+        visitor_user: ?*anyopaque,
+    ) callconv(.c) void,
+    import_float_track: ?*const fn (
+        user: ?*anyopaque,
+        animation_name: [*:0]const u8,
+        node_name: [*:0]const u8,
+        track_name: [*:0]const u8,
+        track_type: NodePropertyType,
+        sampling_rate: f32,
+        out: **RawFloatTrack,
+    ) callconv(.c) c_int,
+    import_float2_track: ?*const fn (
+        user: ?*anyopaque,
+        animation_name: [*:0]const u8,
+        node_name: [*:0]const u8,
+        track_name: [*:0]const u8,
+        track_type: NodePropertyType,
+        sampling_rate: f32,
+        out: **RawFloat2Track,
+    ) callconv(.c) c_int,
+    import_float3_track: ?*const fn (
+        user: ?*anyopaque,
+        animation_name: [*:0]const u8,
+        node_name: [*:0]const u8,
+        track_name: [*:0]const u8,
+        track_type: NodePropertyType,
+        sampling_rate: f32,
+        out: **RawFloat3Track,
+    ) callconv(.c) c_int,
+    import_float4_track: ?*const fn (
+        user: ?*anyopaque,
+        animation_name: [*:0]const u8,
+        node_name: [*:0]const u8,
+        track_name: [*:0]const u8,
+        track_type: NodePropertyType,
+        sampling_rate: f32,
+        out: **RawFloat4Track,
+    ) callconv(.c) c_int,
+    user: ?*anyopaque,
+};
+
+pub extern fn zozzImporterCreate(interface: ?*const ImporterInterface, out: **Importer) Result;
+pub extern fn zozzGltfImporterCreate(path: [*:0]const u8, out: **Importer) Result;
+pub extern fn zozzImporterDestroy(importer: ?*Importer) void;
+pub extern fn zozzImporterLoad(importer: ?*Importer, filename: [*:0]const u8) Result;
+pub extern fn zozzImporterImportSkeleton(importer: ?*Importer, types: ImportNodeType, out: **RawSkeleton) Result;
+pub extern fn zozzImporterIterateAnimationNames(importer: ?*Importer, visitor: StringVisitor, user: ?*anyopaque) Result;
+pub extern fn zozzImporterImportAnimation(
+    importer: ?*Importer,
+    animation_name: [*:0]const u8,
+    skeleton: ?*const Skeleton,
+    sampling_rate: f32,
+    out: **RawAnimation,
+) Result;
+pub extern fn zozzImporterIterateNodeProperties(
+    importer: ?*Importer,
+    node_name: [*:0]const u8,
+    visitor: NodePropertyVisitor,
+    user: ?*anyopaque,
+) Result;
+pub extern fn zozzImporterImportFloatTrack(
+    importer: ?*Importer,
+    animation_name: [*:0]const u8,
+    node_name: [*:0]const u8,
+    track_name: [*:0]const u8,
+    track_type: NodePropertyType,
+    sampling_rate: f32,
+    out: **RawFloatTrack,
+) Result;
+pub extern fn zozzImporterImportFloat2Track(
+    importer: ?*Importer,
+    animation_name: [*:0]const u8,
+    node_name: [*:0]const u8,
+    track_name: [*:0]const u8,
+    track_type: NodePropertyType,
+    sampling_rate: f32,
+    out: **RawFloat2Track,
+) Result;
+pub extern fn zozzImporterImportFloat3Track(
+    importer: ?*Importer,
+    animation_name: [*:0]const u8,
+    node_name: [*:0]const u8,
+    track_name: [*:0]const u8,
+    track_type: NodePropertyType,
+    sampling_rate: f32,
+    out: **RawFloat3Track,
+) Result;
+pub extern fn zozzImporterImportFloat4Track(
+    importer: ?*Importer,
+    animation_name: [*:0]const u8,
+    node_name: [*:0]const u8,
+    track_name: [*:0]const u8,
+    track_type: NodePropertyType,
+    sampling_rate: f32,
+    out: **RawFloat4Track,
+) Result;
+pub extern fn zozzImporterRun(importer: ?*Importer, argc: c_int, argv: [*]const [*:0]const u8) Result;

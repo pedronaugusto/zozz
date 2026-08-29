@@ -60,6 +60,45 @@ ZOZZ_API ZozzResult zozzFloatTrackSample(const ZozzFloatTrack* track,
                                          float ratio, float* out);
 
 //===----------------------------------------------------------------------===//
+// Keyframe read-back
+//
+// A built track stores its authored keyframes as three parallel, uncompressed
+// arrays — ratio, value and interpolation mode, index-aligned — rather than
+// the compressed streams behind a runtime Animation. zozzFloatTrackSample and
+// its siblings above only ever produce an interpolated value at an arbitrary
+// ratio; these read back what the track actually holds, the way a curve
+// editor or a diff against another track needs.
+//
+// Every entry point below repeats the same shape once per value type, so it
+// is documented in full here for FloatTrack and only by name for the rest.
+//===----------------------------------------------------------------------===//
+
+/// Number of keyframes `track` holds. 0 for an empty or NULL track.
+ZOZZ_API int zozzFloatTrackNumKeyframes(const ZozzFloatTrack* track);
+
+/// Writes each keyframe's ratio, ascending. `count` must be at least
+/// zozzFloatTrackNumKeyframes, else ZOZZ_RESULT_BUFFER_TOO_SMALL.
+ZOZZ_API ZozzResult zozzFloatTrackRatios(const ZozzFloatTrack* track,
+                                         float* out, size_t count);
+
+/// Writes each keyframe's authored value, index-aligned with
+/// zozzFloatTrackRatios: `out[i]` is the value AT keyframe i, not an
+/// interpolated sample. `count` must be at least zozzFloatTrackNumKeyframes,
+/// else ZOZZ_RESULT_BUFFER_TOO_SMALL.
+ZOZZ_API ZozzResult zozzFloatTrackValues(const ZozzFloatTrack* track,
+                                         float* out, size_t count);
+
+/// Writes each keyframe's interpolation mode, index-aligned with
+/// zozzFloatTrackRatios. ozz packs this as one bit per key (Track::steps(),
+/// bit i of byte i/8, least-significant bit first) rather than as this array;
+/// this decodes it to one ZozzTrackInterpolation per key so a host never has
+/// to index the bitset itself. `count` must be at least
+/// zozzFloatTrackNumKeyframes, else ZOZZ_RESULT_BUFFER_TOO_SMALL.
+ZOZZ_API ZozzResult zozzFloatTrackSteps(const ZozzFloatTrack* track,
+                                        ZozzTrackInterpolation* out,
+                                        size_t count);
+
+//===----------------------------------------------------------------------===//
 // Float2Track
 //===----------------------------------------------------------------------===//
 
@@ -75,6 +114,22 @@ ZOZZ_API const char* zozzFloat2TrackName(const ZozzFloat2Track* track);
 
 ZOZZ_API ZozzResult zozzFloat2TrackSample(const ZozzFloat2Track* track,
                                           float ratio, float out[2]);
+
+/// See zozzFloatTrackNumKeyframes.
+ZOZZ_API int zozzFloat2TrackNumKeyframes(const ZozzFloat2Track* track);
+
+/// See zozzFloatTrackRatios.
+ZOZZ_API ZozzResult zozzFloat2TrackRatios(const ZozzFloat2Track* track,
+                                          float* out, size_t count);
+
+/// See zozzFloatTrackValues. One row per keyframe.
+ZOZZ_API ZozzResult zozzFloat2TrackValues(const ZozzFloat2Track* track,
+                                          float out[][2], size_t count);
+
+/// See zozzFloatTrackSteps.
+ZOZZ_API ZozzResult zozzFloat2TrackSteps(const ZozzFloat2Track* track,
+                                         ZozzTrackInterpolation* out,
+                                         size_t count);
 
 //===----------------------------------------------------------------------===//
 // Float3Track
@@ -93,6 +148,22 @@ ZOZZ_API const char* zozzFloat3TrackName(const ZozzFloat3Track* track);
 ZOZZ_API ZozzResult zozzFloat3TrackSample(const ZozzFloat3Track* track,
                                           float ratio, float out[3]);
 
+/// See zozzFloatTrackNumKeyframes.
+ZOZZ_API int zozzFloat3TrackNumKeyframes(const ZozzFloat3Track* track);
+
+/// See zozzFloatTrackRatios.
+ZOZZ_API ZozzResult zozzFloat3TrackRatios(const ZozzFloat3Track* track,
+                                          float* out, size_t count);
+
+/// See zozzFloatTrackValues. One row per keyframe.
+ZOZZ_API ZozzResult zozzFloat3TrackValues(const ZozzFloat3Track* track,
+                                          float out[][3], size_t count);
+
+/// See zozzFloatTrackSteps.
+ZOZZ_API ZozzResult zozzFloat3TrackSteps(const ZozzFloat3Track* track,
+                                         ZozzTrackInterpolation* out,
+                                         size_t count);
+
 //===----------------------------------------------------------------------===//
 // Float4Track
 //===----------------------------------------------------------------------===//
@@ -110,11 +181,28 @@ ZOZZ_API const char* zozzFloat4TrackName(const ZozzFloat4Track* track);
 ZOZZ_API ZozzResult zozzFloat4TrackSample(const ZozzFloat4Track* track,
                                           float ratio, float out[4]);
 
+/// See zozzFloatTrackNumKeyframes.
+ZOZZ_API int zozzFloat4TrackNumKeyframes(const ZozzFloat4Track* track);
+
+/// See zozzFloatTrackRatios.
+ZOZZ_API ZozzResult zozzFloat4TrackRatios(const ZozzFloat4Track* track,
+                                          float* out, size_t count);
+
+/// See zozzFloatTrackValues. One row per keyframe.
+ZOZZ_API ZozzResult zozzFloat4TrackValues(const ZozzFloat4Track* track,
+                                          float out[][4], size_t count);
+
+/// See zozzFloatTrackSteps.
+ZOZZ_API ZozzResult zozzFloat4TrackSteps(const ZozzFloat4Track* track,
+                                         ZozzTrackInterpolation* out,
+                                         size_t count);
+
 //===----------------------------------------------------------------------===//
 // QuaternionTrack
 //
 // `out` is a quaternion in (x, y, z, w) order — w LAST, matching
-// ZozzTransform.rotation and every other quaternion in this ABI.
+// ZozzTransform.rotation and every other quaternion in this ABI. The same
+// order applies to zozzQuaternionTrackValues' keyframe read-back below.
 //===----------------------------------------------------------------------===//
 
 ZOZZ_API ZozzResult zozzQuaternionTrackLoadFile(const char* path,
@@ -130,6 +218,22 @@ ZOZZ_API const char* zozzQuaternionTrackName(const ZozzQuaternionTrack* track);
 
 ZOZZ_API ZozzResult zozzQuaternionTrackSample(const ZozzQuaternionTrack* track,
                                               float ratio, float out[4]);
+
+/// See zozzFloatTrackNumKeyframes.
+ZOZZ_API int zozzQuaternionTrackNumKeyframes(const ZozzQuaternionTrack* track);
+
+/// See zozzFloatTrackRatios.
+ZOZZ_API ZozzResult zozzQuaternionTrackRatios(const ZozzQuaternionTrack* track,
+                                              float* out, size_t count);
+
+/// See zozzFloatTrackValues. One row per keyframe.
+ZOZZ_API ZozzResult zozzQuaternionTrackValues(const ZozzQuaternionTrack* track,
+                                              float out[][4], size_t count);
+
+/// See zozzFloatTrackSteps.
+ZOZZ_API ZozzResult zozzQuaternionTrackSteps(const ZozzQuaternionTrack* track,
+                                             ZozzTrackInterpolation* out,
+                                             size_t count);
 
 //===----------------------------------------------------------------------===//
 // Track edge triggering

@@ -1,0 +1,26 @@
+# AREA<TAB>NAME<TAB>VERDICT<TAB>EVIDENCE — one line per name tools/coverage.sh
+# reports unbound, keyed by the area it was found in.
+#
+#   BOUND      crosses the ABI; evidence names the zozz entry points.
+#   EXTENSION  a C++ virtual delivered as a C callback; evidence names it.
+#   LANGUAGE   Zig provides it; evidence names the facility.
+#   ZIG        zozz provides it in Zig without crossing the ABI; evidence is
+#              src/FILE.zig:decl.
+#   INTERNAL   upstream marks it internal, it has no public declaration, or
+#              this build compiles no source for it. tools/classify.sh
+#              computes this; nothing else may claim it.
+#   GAP        work. ci/check-coverage.sh fails while any remain.
+base/containers	IntrusiveList	LANGUAGE	Zig slices and std.ArrayList
+base/containers	address	LANGUAGE	std.mem.Allocator; Zig passes allocators explicitly
+base/containers	allocate	LANGUAGE	std.mem.Allocator; Zig passes allocators explicitly
+base/containers	array_begin	INTERNAL	no public declaration
+base/containers	array_end	INTERNAL	no public declaration
+base/containers	construct	LANGUAGE	std.mem.Allocator; Zig passes allocators explicitly
+base/containers	deallocate	LANGUAGE	std.mem.Allocator; Zig passes allocators explicitly
+base/containers	debug_is_linked_in	INTERNAL	upstream libs/ozz/include/ozz/base/containers/intrusive_list.h:94 (namespace)
+base/containers	empty	INTERNAL	upstream libs/ozz/include/ozz/base/containers/intrusive_list.h:94 (namespace)
+base/containers	is_linked	INTERNAL	upstream libs/ozz/include/ozz/base/containers/intrusive_list.h:94 (namespace)
+base/containers	max_size	LANGUAGE	Zig slices and std.ArrayList
+base/containers	old	INTERNAL	upstream libs/ozz/include/ozz/base/containers/intrusive_list.h:94 (namespace)
+base/containers	strcmp	LANGUAGE	std.mem and std.math
+base/containers	unlink	INTERNAL	upstream libs/ozz/include/ozz/base/containers/intrusive_list.h:94 (namespace)

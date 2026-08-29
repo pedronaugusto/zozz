@@ -1,5 +1,5 @@
-//! The OArchive write path: persisting a skeleton or an animation to a
-//! stream a host controls, or straight to a file.
+//! The archive: persisting a skeleton, an animation or a track to a stream a
+//! host controls, or straight to a file, and reading them back the same way.
 
 const std = @import("std");
 const c = @import("c.zig");
@@ -13,11 +13,29 @@ const Float3Track = track_mod.Float3Track;
 const Float4Track = track_mod.Float4Track;
 const QuaternionTrack = track_mod.QuaternionTrack;
 
-/// A host-provided sink standing in for ozz::io::Stream's write half — the
-/// same role a Zig allocator plays for `c.Allocator` in `memory.zig`. Reused
-/// verbatim rather than wrapped, the way `math.Transform` reuses `c.Transform`:
-/// a Zig-side implementation fills this struct directly.
+/// A host-provided stand-in for ozz::io::Stream — the same role a Zig
+/// allocator plays for `c.Allocator` in `memory.zig`. Reused verbatim rather
+/// than wrapped, the way `math.Transform` reuses `c.Transform`: a Zig-side
+/// implementation fills this struct directly, leaving whichever callbacks
+/// its direction does not need `null`.
 pub const Stream = c.Stream;
+
+/// Passed to a `Stream.seek` callback. Mirrors `c.SeekOrigin`.
+pub const SeekOrigin = c.SeekOrigin;
+
+/// The byte order an `OArchive` writes in. Mirrors `c.Endianness`.
+pub const Endianness = c.Endianness;
+
+/// The `Endianness` matching this build's own target — what reproduces
+/// `OArchive`'s old, unconditional native-endian behaviour. zozz has no C
+/// entry point to ask a platform its own native order (see zozz_archive.h);
+/// a Zig host already has one, in the compiler's own target information.
+pub fn nativeEndianness() Endianness {
+    return switch (std.builtin.Endian.native) {
+        .big => .big,
+        .little => .little,
+    };
+}
 
 /// An archive bound to one `Stream`, open for writing.
 ///
@@ -26,9 +44,9 @@ pub const Stream = c.Stream;
 pub const OArchive = struct {
     handle: *c.OArchive,
 
-    pub fn init(stream: *const Stream) err.Error!OArchive {
+    pub fn init(stream: *const Stream, endianness: Endianness) err.Error!OArchive {
         var handle: *c.OArchive = undefined;
-        try err.check(c.zozzOArchiveCreate(stream, &handle));
+        try err.check(c.zozzOArchiveCreate(stream, endianness, &handle));
         return .{ .handle = handle };
     }
 
@@ -81,6 +99,127 @@ pub const OArchive = struct {
 
     pub fn saveQuaternionTrack(self: OArchive, track: QuaternionTrack) err.Error!void {
         try err.check(c.zozzOArchiveSaveQuaternionTrack(self.handle, track.handle));
+    }
+};
+
+/// An archive bound to one `Stream`, open for reading — the read twin of
+/// `OArchive`.
+///
+/// Every archive is scoped to one logical file, read back in the order it
+/// was written: `init`, load everything that belongs together, `deinit`.
+pub const IArchive = struct {
+    handle: *c.IArchive,
+
+    pub fn init(stream: *const Stream) err.Error!IArchive {
+        var handle: *c.IArchive = undefined;
+        try err.check(c.zozzIArchiveCreate(stream, &handle));
+        return .{ .handle = handle };
+    }
+
+    pub fn deinit(self: IArchive) void {
+        c.zozzIArchiveDestroy(self.handle);
+    }
+
+    /// True when the stream was written in the opposite byte order from this
+    /// platform's. Loads swap transparently; this matters only for raw bytes
+    /// read back through `loadBinary`.
+    pub fn endianSwap(self: IArchive) bool {
+        return c.zozzIArchiveEndianSwap(self.handle);
+    }
+
+    /// Reads `data.len` untyped bytes into `data`, unswapped — the read twin
+    /// of `OArchive.saveBinary`.
+    pub fn loadBinary(self: IArchive, data: []u8) err.Error!void {
+        try err.check(c.zozzIArchiveLoadBinary(self.handle, data.ptr, data.len));
+    }
+
+    pub fn loadInt32(self: IArchive) err.Error!i32 {
+        var value: i32 = undefined;
+        try err.check(c.zozzIArchiveLoadInt32(self.handle, &value));
+        return value;
+    }
+
+    pub fn loadFloat(self: IArchive) err.Error!f32 {
+        var value: f32 = undefined;
+        try err.check(c.zozzIArchiveLoadFloat(self.handle, &value));
+        return value;
+    }
+
+    pub fn loadSkeleton(self: IArchive) err.Error!Skeleton {
+        var handle: *c.Skeleton = undefined;
+        try err.check(c.zozzIArchiveLoadSkeleton(self.handle, &handle));
+        return .{ .handle = handle };
+    }
+
+    pub fn loadAnimation(self: IArchive) err.Error!Animation {
+        var handle: *c.Animation = undefined;
+        try err.check(c.zozzIArchiveLoadAnimation(self.handle, &handle));
+        return .{ .handle = handle };
+    }
+
+    /// Reads a tagged, versioned runtime track — the read twin of
+    /// `OArchive.saveFloatTrack`. One method per track value type, matching
+    /// the save side.
+    pub fn loadFloatTrack(self: IArchive) err.Error!FloatTrack {
+        var handle: *c.FloatTrack = undefined;
+        try err.check(c.zozzIArchiveLoadFloatTrack(self.handle, &handle));
+        return .{ .handle = handle };
+    }
+
+    pub fn loadFloat2Track(self: IArchive) err.Error!Float2Track {
+        var handle: *c.Float2Track = undefined;
+        try err.check(c.zozzIArchiveLoadFloat2Track(self.handle, &handle));
+        return .{ .handle = handle };
+    }
+
+    pub fn loadFloat3Track(self: IArchive) err.Error!Float3Track {
+        var handle: *c.Float3Track = undefined;
+        try err.check(c.zozzIArchiveLoadFloat3Track(self.handle, &handle));
+        return .{ .handle = handle };
+    }
+
+    pub fn loadFloat4Track(self: IArchive) err.Error!Float4Track {
+        var handle: *c.Float4Track = undefined;
+        try err.check(c.zozzIArchiveLoadFloat4Track(self.handle, &handle));
+        return .{ .handle = handle };
+    }
+
+    pub fn loadQuaternionTrack(self: IArchive) err.Error!QuaternionTrack {
+        var handle: *c.QuaternionTrack = undefined;
+        try err.check(c.zozzIArchiveLoadQuaternionTrack(self.handle, &handle));
+        return .{ .handle = handle };
+    }
+
+    /// True if the next object in the archive is a skeleton. Leaves the read
+    /// position untouched either way, so a false result is free to try a
+    /// different `testX`, and a true result is free to `loadSkeleton` right
+    /// after.
+    pub fn testSkeleton(self: IArchive) bool {
+        return c.zozzIArchiveTestSkeleton(self.handle);
+    }
+
+    pub fn testAnimation(self: IArchive) bool {
+        return c.zozzIArchiveTestAnimation(self.handle);
+    }
+
+    pub fn testFloatTrack(self: IArchive) bool {
+        return c.zozzIArchiveTestFloatTrack(self.handle);
+    }
+
+    pub fn testFloat2Track(self: IArchive) bool {
+        return c.zozzIArchiveTestFloat2Track(self.handle);
+    }
+
+    pub fn testFloat3Track(self: IArchive) bool {
+        return c.zozzIArchiveTestFloat3Track(self.handle);
+    }
+
+    pub fn testFloat4Track(self: IArchive) bool {
+        return c.zozzIArchiveTestFloat4Track(self.handle);
+    }
+
+    pub fn testQuaternionTrack(self: IArchive) bool {
+        return c.zozzIArchiveTestQuaternionTrack(self.handle);
     }
 };
 

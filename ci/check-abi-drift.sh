@@ -30,6 +30,12 @@ set -uo pipefail
 cd "$(dirname "$0")/.."
 
 pass=0
+
+# What `expect` runs to see whether a mutation is refused. Almost every
+# mutation below is answered by the ABI cross-check, which lives inside the
+# test build; the coverage guard is a script, and rebuilding the world to ask
+# it a question it answers in a fraction of a second would be silly.
+BUILD='zig build test'
 fail=0
 backups=()
 
@@ -44,8 +50,20 @@ restore() {
 trap 'restore; exit 130' INT TERM
 
 # try <description> <file> <from> <to>
+#
+# Asserts the ABI cross-check refuses the mutation, by its own message.
 try() {
-  local what="$1" file="$2" from="$3" to="$4"
+  expect 'zozz ABI drift: .*' "$@"
+}
+
+# expect <signal> <description> <file> <from> <to>
+#
+# `signal` is a grep pattern the output must contain. Requiring a specific
+# signal rather than merely a non-zero exit is the whole point: a mutation that
+# fails for an unrelated reason — a typo in the replacement, a stale anchor
+# landing somewhere odd — would otherwise be counted as a guard doing its job.
+expect() {
+  local signal="$1" what="$2" file="$3" from="$4" to="$5"
 
   cp "$file" "$file.bak"
   backups=("$file")
@@ -67,7 +85,7 @@ PY
   fi
 
   local out status
-  out=$(zig build test 2>&1)
+  out=$(eval "$BUILD" 2>&1)
   status=$?
   restore
 
@@ -78,11 +96,13 @@ PY
   fi
 
   local msg
-  msg=$(printf '%s' "$out" | grep -m1 -o 'zozz ABI drift: .*')
+  msg=$(printf '%s' "$out" | grep -m1 -o "$signal")
   if [ -z "$msg" ]; then
-    # The build failed, but for some other reason — that is not the check
-    # doing its job, and a green count here would be a lie.
+    # The build failed, but not for the reason this mutation was aimed at.
+    # That is not the guard doing its job, and a green count here would be a
+    # lie about which guard is load-bearing.
     printf '  WRONG FAILURE %s\n' "$what"
+    printf '                expected to see: %s\n' "$signal"
     printf '%s\n' "$out" | tail -5 | sed 's/^/      | /'
     fail=$((fail + 1))
     return
@@ -186,6 +206,66 @@ try "an extern replaced by a Zig helper of the same name" src/c.zig \
     _ = animation;
     return 0;
 }'
+
+#-----------------------------------------------------------------------------
+# The coverage guard.
+#
+# `ci/check-coverage.sh` is the answer to "does zozz cover ozz", and it is
+# load-bearing in the same way the ABI cross-check is: if it goes vacuous it
+# reports full coverage and nobody notices. Before it existed the question was
+# answered by reading a name list and guessing, and the name matcher it rests
+# on was loose enough that a single shared keyword counted as a match.
+#
+# The anchors come from tools/unbound_animation_offline.txt, the smallest and
+# most settled classification file.
+#-----------------------------------------------------------------------------
+BUILD='ci/check-coverage.sh'
+
+if ! ci/check-coverage.sh >/dev/null 2>&1; then
+  echo
+  echo "  SKIPPED       the five coverage mutations"
+  echo "                ci/check-coverage.sh already fails, so they would all"
+  echo "                report a catch without catching anything. Close the"
+  echo "                open names first."
+  fail=$((fail + 1))
+else
+
+expect 'is not in ffi/\*\.h' \
+  "evidence naming an entry point that does not exist" tools/unbound_animation_offline.txt \
+  "$(printf 'animation/offline\tSampleAnimation\tBOUND\tzozzRawAnimationSample')" \
+  "$(printf 'animation/offline\tSampleAnimation\tBOUND\tzozzRawAnimationSampleAll')"
+
+expect 'not four tab-separated fields' \
+  "a line's tabs turned into spaces" tools/unbound_animation_offline.txt \
+  "$(printf 'animation/offline\tSampleAnimation\tBOUND\tzozzRawAnimationSample')" \
+  'animation/offline  SampleAnimation  BOUND  zozzRawAnimationSample'
+
+expect 'no verdict' \
+  "a classified name deleted" tools/unbound_animation_offline.txt \
+  "$(printf 'animation/offline\tSampleAnimation\tBOUND\tzozzRawAnimationSample')" \
+  "$(printf '#animation/offline\tSampleAnimation\tBOUND\tzozzRawAnimationSample')"
+
+expect 'gap(s)' \
+  "a settled name reopened as a gap" tools/unbound_animation_offline.txt \
+  "$(printf 'animation/offline\tSampleAnimation\tBOUND\tzozzRawAnimationSample')" \
+  "$(printf 'animation/offline\tSampleAnimation\tGAP\t')"
+
+# The enumerator itself. Loosening the name match is the subtle one: it makes
+# more names look bound, which shrinks the list the classification has to
+# explain and would quietly turn real questions into answered ones. What
+# notices is that the lines explaining them become stale.
+expect 'stale line' \
+  "the name matcher loosened to ignore word order" tools/coverage.sh \
+'        k = 1
+        for (i = 1; i <= bn[j] && k <= nw; i++) if (b[j, i] == w[k]) k++
+        if (k > nw) hit = 1' \
+'        k = 0
+        for (i = 1; i <= bn[j]; i++) for (m = 1; m <= nw; m++) if (b[j, i] == w[m]) k++
+        if (k >= nw) hit = 1'
+
+fi
+
+BUILD='zig build test'
 
 printf '\ncaught: %d   missed: %d\n' "$pass" "$fail"
 [ $fail -eq 0 ]

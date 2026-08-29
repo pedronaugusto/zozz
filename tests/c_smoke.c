@@ -61,6 +61,81 @@ static void count_deallocate(void* user, void* block) {
 }
 
 //===----------------------------------------------------------------------===//
+// A host-provided in-memory stream implementing every ZozzStream callback,
+// so the same buffer can back a write archive and, once rewound, a read one
+// — proving the archive round trip with no Zig in the picture.
+//===----------------------------------------------------------------------===//
+
+typedef struct MemStream {
+  unsigned char* data;
+  size_t size;
+  size_t capacity;
+  size_t pos;
+} MemStream;
+
+static int mem_opened(void* user) {
+  (void)user;
+  return 1;
+}
+
+static size_t mem_write(void* user, const void* src, size_t size) {
+  MemStream* m = (MemStream*)user;
+  if (m->pos + size > m->capacity) {
+    size_t new_cap = m->capacity == 0 ? 256 : m->capacity * 2;
+    while (new_cap < m->pos + size) new_cap *= 2;
+    unsigned char* grown = (unsigned char*)realloc(m->data, new_cap);
+    if (grown == NULL) return 0;
+    m->data = grown;
+    m->capacity = new_cap;
+  }
+  memcpy(m->data + m->pos, src, size);
+  m->pos += size;
+  if (m->pos > m->size) m->size = m->pos;
+  return size;
+}
+
+static size_t mem_read(void* user, void* dst, size_t size) {
+  MemStream* m = (MemStream*)user;
+  const size_t available = m->pos < m->size ? m->size - m->pos : 0;
+  const size_t n = size < available ? size : available;
+  if (n != 0) memcpy(dst, m->data + m->pos, n);
+  m->pos += n;
+  return n;
+}
+
+static int mem_seek(void* user, int offset, ZozzSeekOrigin origin) {
+  MemStream* m = (MemStream*)user;
+  long base;
+  switch (origin) {
+    case ZOZZ_SEEK_ORIGIN_CURRENT:
+      base = (long)m->pos;
+      break;
+    case ZOZZ_SEEK_ORIGIN_END:
+      base = (long)m->size;
+      break;
+    case ZOZZ_SEEK_ORIGIN_SET:
+      base = 0;
+      break;
+    default:
+      return -1;
+  }
+  const long target = base + offset;
+  if (target < 0 || (size_t)target > m->size) return -1;
+  m->pos = (size_t)target;
+  return 0;
+}
+
+static int mem_tell(void* user) {
+  MemStream* m = (MemStream*)user;
+  return (int)m->pos;
+}
+
+static void mem_stream_free(MemStream* m) {
+  free(m->data);
+  memset(m, 0, sizeof(*m));
+}
+
+//===----------------------------------------------------------------------===//
 
 static void test_version(void) {
   const uint32_t v = zozzVersion();
@@ -88,7 +163,7 @@ static void test_abi_layout(void) {
   CHECK(layout.float4x4_size == (uint32_t)sizeof(ZozzFloat4x4));
   CHECK(layout.float4x4_align == 16);
   CHECK(layout.allocator_size == (uint32_t)sizeof(ZozzAllocator));
-  CHECK(layout.result_count == (uint32_t)ZOZZ_RESULT_INVALID_DATA + 1u);
+  CHECK(layout.result_count == (uint32_t)ZOZZ_RESULT_UNSUPPORTED + 1u);
 }
 
 static void test_allocator_rejects_incomplete(void) {
@@ -97,6 +172,47 @@ static void test_allocator_rejects_incomplete(void) {
   bad.deallocate = count_deallocate;
   bad.user = NULL;
   CHECK(zozzSetAllocator(&bad) == ZOZZ_RESULT_INVALID_ARGUMENT);
+}
+
+/// Run both before any allocator has ever been installed and again after
+/// zozzSetAllocator(NULL) has restored ozz's own -- both must report the
+/// same "not installed" state, not merely the first one.
+static void test_allocator_getter_reports_not_installed(void) {
+  ZozzAllocator out;
+  memset(&out, 0xAB, sizeof(out));  // poisoned, so a stray write would show.
+  bool installed = true;
+  CHECK(zozzGetAllocator(&out, &installed) == ZOZZ_RESULT_OK);
+  CHECK(!installed);
+
+  CHECK(zozzGetAllocator(NULL, &installed) == ZOZZ_RESULT_INVALID_ARGUMENT);
+  CHECK(zozzGetAllocator(&out, NULL) == ZOZZ_RESULT_INVALID_ARGUMENT);
+}
+
+static void test_allocator_getter_reports_the_installed_allocator(
+    const ZozzAllocator* installed_allocator) {
+  ZozzAllocator got;
+  bool installed = false;
+  CHECK(zozzGetAllocator(&got, &installed) == ZOZZ_RESULT_OK);
+  CHECK(installed);
+  CHECK(got.allocate == installed_allocator->allocate);
+  CHECK(got.deallocate == installed_allocator->deallocate);
+  CHECK(got.user == installed_allocator->user);
+}
+
+static void test_log_level(void) {
+  CHECK(zozzGetLogLevel() == ZOZZ_LOG_LEVEL_STANDARD);
+
+  CHECK(zozzSetLogLevel(ZOZZ_LOG_LEVEL_SILENT) == ZOZZ_RESULT_OK);
+  CHECK(zozzGetLogLevel() == ZOZZ_LOG_LEVEL_SILENT);
+
+  CHECK(zozzSetLogLevel(ZOZZ_LOG_LEVEL_VERBOSE) == ZOZZ_RESULT_OK);
+  CHECK(zozzGetLogLevel() == ZOZZ_LOG_LEVEL_VERBOSE);
+
+  // Rejected out-of-range, leaving the level exactly where it was.
+  CHECK(zozzSetLogLevel((ZozzLogLevel)99) == ZOZZ_RESULT_INVALID_ARGUMENT);
+  CHECK(zozzGetLogLevel() == ZOZZ_LOG_LEVEL_VERBOSE);
+
+  CHECK(zozzSetLogLevel(ZOZZ_LOG_LEVEL_STANDARD) == ZOZZ_RESULT_OK);
 }
 
 static void test_bad_input(void) {
@@ -183,6 +299,197 @@ static void test_sampling_context(void) {
   CHECK(zozzSamplingContextCreate(-1, &context) == ZOZZ_RESULT_INVALID_ARGUMENT);
 }
 
+static void test_archive_round_trip(void) {
+  MemStream mem;
+  memset(&mem, 0, sizeof(mem));
+
+  ZozzTransform rest;
+  memset(&rest, 0, sizeof(rest));
+  rest.rotation[3] = 1.f;
+  rest.scale[0] = rest.scale[1] = rest.scale[2] = 1.f;
+
+  ZozzRawSkeleton* raw_skeleton = NULL;
+  CHECK(zozzRawSkeletonCreate(&raw_skeleton) == ZOZZ_RESULT_OK);
+  int32_t root_index = -1;
+  CHECK(zozzRawSkeletonAddJoint(raw_skeleton, ZOZZ_NO_PARENT, "root", &rest,
+                                &root_index) == ZOZZ_RESULT_OK);
+  CHECK(zozzRawSkeletonAddJoint(raw_skeleton, root_index, "child", &rest,
+                                NULL) == ZOZZ_RESULT_OK);
+
+  ZozzSkeleton* skeleton = NULL;
+  CHECK(zozzSkeletonBuild(raw_skeleton, &skeleton) == ZOZZ_RESULT_OK);
+  zozzRawSkeletonDestroy(raw_skeleton);
+  CHECK(skeleton != NULL);
+  if (skeleton == NULL) return;
+
+  ZozzRawAnimation* raw_animation = NULL;
+  CHECK(zozzRawAnimationCreate(2, 1.0f, "smoke", &raw_animation) ==
+        ZOZZ_RESULT_OK);
+  for (int track = 0; track < 2; ++track) {
+    const float t0[3] = {0.f, 0.f, 0.f};
+    const float t1[3] = {(float)track + 1.f, 0.f, 0.f};
+    const float r0[4] = {0.f, 0.f, 0.f, 1.f};
+    const float s0[3] = {1.f, 1.f, 1.f};
+    CHECK(zozzRawAnimationPushTranslation(raw_animation, track, 0.0f, t0) ==
+          ZOZZ_RESULT_OK);
+    CHECK(zozzRawAnimationPushTranslation(raw_animation, track, 1.0f, t1) ==
+          ZOZZ_RESULT_OK);
+    CHECK(zozzRawAnimationPushRotation(raw_animation, track, 0.0f, r0) ==
+          ZOZZ_RESULT_OK);
+    CHECK(zozzRawAnimationPushScale(raw_animation, track, 0.0f, s0) ==
+          ZOZZ_RESULT_OK);
+  }
+
+  ZozzAnimation* animation = NULL;
+  CHECK(zozzAnimationBuild(raw_animation, &animation) == ZOZZ_RESULT_OK);
+  zozzRawAnimationDestroy(raw_animation);
+  CHECK(animation != NULL);
+  if (animation == NULL) {
+    zozzSkeletonDestroy(skeleton);
+    return;
+  }
+
+  // Write both into one archive over the host-provided stream.
+  ZozzStream write_stream;
+  write_stream.opened = mem_opened;
+  write_stream.write = mem_write;
+  write_stream.read = NULL;
+  write_stream.seek = NULL;
+  write_stream.tell = NULL;
+  write_stream.user = &mem;
+
+  // Deliberately the endianness every CI runner in this project is NOT
+  // native in (all are little-endian): proves the swap path round-trips
+  // through the plain C header, not only through the Zig wrapper's own
+  // dedicated endianness test.
+  ZozzOArchive* out_archive = NULL;
+  CHECK(zozzOArchiveCreate(&write_stream, ZOZZ_ENDIANNESS_BIG, &out_archive) ==
+        ZOZZ_RESULT_OK);
+  CHECK(zozzOArchiveSaveSkeleton(out_archive, skeleton) == ZOZZ_RESULT_OK);
+  CHECK(zozzOArchiveSaveAnimation(out_archive, animation) == ZOZZ_RESULT_OK);
+  zozzOArchiveDestroy(out_archive);
+
+  // Read both back through a read-only view of the same buffer, rewound.
+  mem.pos = 0;
+  ZozzStream read_stream;
+  read_stream.opened = mem_opened;
+  read_stream.write = NULL;
+  read_stream.read = mem_read;
+  read_stream.seek = mem_seek;
+  read_stream.tell = mem_tell;
+  read_stream.user = &mem;
+
+  ZozzIArchive* in_archive = NULL;
+  CHECK(zozzIArchiveCreate(&read_stream, &in_archive) == ZOZZ_RESULT_OK);
+  CHECK(in_archive != NULL);
+  if (in_archive != NULL) {
+    // A wrong guess must not consume the object: the right one still works.
+    CHECK(!zozzIArchiveTestAnimation(in_archive));
+    CHECK(zozzIArchiveTestSkeleton(in_archive));
+
+    ZozzSkeleton* loaded_skeleton = NULL;
+    CHECK(zozzIArchiveLoadSkeleton(in_archive, &loaded_skeleton) ==
+          ZOZZ_RESULT_OK);
+    CHECK(loaded_skeleton != NULL);
+    if (loaded_skeleton != NULL) {
+      CHECK(zozzSkeletonNumJoints(loaded_skeleton) ==
+            zozzSkeletonNumJoints(skeleton));
+      CHECK(strcmp(zozzSkeletonJointName(loaded_skeleton, 1),
+                   zozzSkeletonJointName(skeleton, 1)) == 0);
+      zozzSkeletonDestroy(loaded_skeleton);
+    }
+
+    CHECK(!zozzIArchiveTestSkeleton(in_archive));
+    CHECK(zozzIArchiveTestAnimation(in_archive));
+
+    ZozzAnimation* loaded_animation = NULL;
+    CHECK(zozzIArchiveLoadAnimation(in_archive, &loaded_animation) ==
+          ZOZZ_RESULT_OK);
+    CHECK(loaded_animation != NULL);
+    if (loaded_animation != NULL) {
+      CHECK(zozzAnimationDuration(loaded_animation) ==
+            zozzAnimationDuration(animation));
+      CHECK(zozzAnimationNumTracks(loaded_animation) ==
+            zozzAnimationNumTracks(animation));
+      zozzAnimationDestroy(loaded_animation);
+    }
+
+    zozzIArchiveDestroy(in_archive);
+  }
+
+  zozzAnimationDestroy(animation);
+  zozzSkeletonDestroy(skeleton);
+  mem_stream_free(&mem);
+}
+
+static void test_archive_stream_rejection(void) {
+  MemStream mem;
+  memset(&mem, 0, sizeof(mem));
+
+  ZozzStream stream;
+  stream.opened = mem_opened;
+  stream.write = mem_write;
+  stream.read = mem_read;
+  stream.seek = mem_seek;
+  stream.tell = mem_tell;
+  stream.user = &mem;
+
+  ZozzStream missing_write = stream;
+  missing_write.write = NULL;
+  ZozzOArchive* out_archive = (ZozzOArchive*)0x1;
+  CHECK(zozzOArchiveCreate(&missing_write, ZOZZ_ENDIANNESS_LITTLE,
+                            &out_archive) == ZOZZ_RESULT_INVALID_ARGUMENT);
+  CHECK(out_archive == NULL);
+
+  // An out-of-range endianness is rejected too, ahead of the stream check
+  // failing for a different reason -- both must independently guard the
+  // entry point.
+  out_archive = (ZozzOArchive*)0x1;
+  CHECK(zozzOArchiveCreate(&stream, (ZozzEndianness)99, &out_archive) ==
+        ZOZZ_RESULT_INVALID_ARGUMENT);
+  CHECK(out_archive == NULL);
+
+  // Every enum this ABI accepts has to survive the same treatment, not just
+  // this one. A C caller can write `(SomeEnum)99` for any of them, and reading
+  // an enum object holding a value no enumerator names is undefined — the
+  // library must answer INVALID_ARGUMENT rather than abort a sanitised build.
+  {
+    ZozzRawFloatTrack *track = NULL;
+    CHECK(zozzRawFloatTrackCreate(&track) == ZOZZ_RESULT_OK);
+    CHECK(zozzRawFloatTrackPushKeyframe(
+              track, (ZozzTrackInterpolation)99, 0.5f, 1.0f) ==
+          ZOZZ_RESULT_INVALID_ARGUMENT);
+    zozzRawFloatTrackDestroy(track);
+  }
+
+  ZozzStream missing_read = stream;
+  missing_read.read = NULL;
+  ZozzIArchive* in_archive = (ZozzIArchive*)0x1;
+  CHECK(zozzIArchiveCreate(&missing_read, &in_archive) ==
+        ZOZZ_RESULT_INVALID_ARGUMENT);
+  CHECK(in_archive == NULL);
+
+  ZozzStream missing_seek = stream;
+  missing_seek.seek = NULL;
+  in_archive = (ZozzIArchive*)0x1;
+  CHECK(zozzIArchiveCreate(&missing_seek, &in_archive) ==
+        ZOZZ_RESULT_INVALID_ARGUMENT);
+  CHECK(in_archive == NULL);
+
+  ZozzStream missing_tell = stream;
+  missing_tell.tell = NULL;
+  in_archive = (ZozzIArchive*)0x1;
+  CHECK(zozzIArchiveCreate(&missing_tell, &in_archive) ==
+        ZOZZ_RESULT_INVALID_ARGUMENT);
+  CHECK(in_archive == NULL);
+
+  // Destroying NULL is defined and must not crash, on either archive type.
+  zozzOArchiveDestroy(NULL);
+  zozzIArchiveDestroy(NULL);
+
+  mem_stream_free(&mem);
+}
+
 int main(void) {
   Counters counters = {0, 0};
   ZozzAllocator allocator;
@@ -194,12 +501,17 @@ int main(void) {
   test_result_names();
   test_abi_layout();
   test_allocator_rejects_incomplete();
+  test_allocator_getter_reports_not_installed();
+  test_log_level();
 
   CHECK(zozzSetAllocator(&allocator) == ZOZZ_RESULT_OK);
+  test_allocator_getter_reports_the_installed_allocator(&allocator);
 
   test_bad_input();
   test_pose_round_trip();
   test_sampling_context();
+  test_archive_round_trip();
+  test_archive_stream_rejection();
 
   // The seam must actually have been used, and everything taken must have
   // been given back.
@@ -207,6 +519,7 @@ int main(void) {
   CHECK(counters.allocations == counters.frees);
 
   CHECK(zozzSetAllocator(NULL) == ZOZZ_RESULT_OK);
+  test_allocator_getter_reports_not_installed();
 
   if (failures != 0) {
     fprintf(stderr, "zozz c smoke: %d check(s) failed\n", failures);

@@ -19,7 +19,6 @@
 #include <stdint.h>
 
 #include "zozz.h"
-#include "zozz_track.h"
 
 #ifdef __cplusplus
 extern "C" {
@@ -27,6 +26,12 @@ extern "C" {
 
 //===----------------------------------------------------------------------===//
 // Interpolation
+//
+// Declared before the #include below rather than after: zozz_track.h's own
+// keyframe read-back (zozzFloatTrackSteps and its equivalents) reports this
+// same enum, and reaches it through the mutual-inclusion this header and
+// zozz_track.h already rely on — that only resolves one direction, so this
+// definition has to come first textually.
 //===----------------------------------------------------------------------===//
 
 typedef enum ZozzTrackInterpolation {
@@ -46,6 +51,8 @@ typedef enum ZozzTrackInterpolation {
 // allocated through zozz's installed allocator — see zozzFloatTrackDestroy
 // and friends there.
 //===----------------------------------------------------------------------===//
+
+#include "zozz_track.h"
 
 //===----------------------------------------------------------------------===//
 // RawFloatTrack

@@ -29,6 +29,10 @@
 #include <stddef.h>
 #include <stdint.h>
 
+#ifndef __cplusplus
+#include <stdbool.h>
+#endif
+
 #if defined(_MSC_VER) && defined(ZOZZ_SHARED)
 #ifdef ZOZZ_BUILD
 #define ZOZZ_API __declspec(dllexport)
@@ -97,6 +101,9 @@ typedef enum ZozzResult {
   /// Authored offline data failed ozz validation (Validate() returned false):
   /// a raw skeleton over the depth limit, or raw animation keys out of order.
   ZOZZ_RESULT_INVALID_DATA = 9,
+  /// The entry point exists but its build option is off (-Doptions,
+  /// -Dgltf): the library was compiled without the code it needs.
+  ZOZZ_RESULT_UNSUPPORTED = 10,
 } ZozzResult;
 
 /// Static, never-NULL description of a result code. Borrowed; do not free.
@@ -138,6 +145,67 @@ typedef struct ZozzAllocator {
 /// Returns ZOZZ_RESULT_INVALID_ARGUMENT if either function pointer is NULL, in
 /// which case the previously installed allocator is left untouched.
 ZOZZ_API ZozzResult zozzSetAllocator(const ZozzAllocator* alloc);
+
+/// Reads back the allocator zozzSetAllocator most recently installed.
+///
+/// Writes true to `*installed` and fills `*out` with the exact ZozzAllocator
+/// last passed to zozzSetAllocator — the same struct value, not merely an
+/// equivalent one — when a host allocator is currently active. Writes false
+/// and zeroes `*out` otherwise: zozzSetAllocator has never been called with a
+/// non-NULL argument, or the most recent call passed NULL to restore ozz's
+/// own allocator. `*out` is not a meaningful ZozzAllocator in that case;
+/// `*installed` is what tells the two states apart, rather than leaving a
+/// caller to guess whether an all-zero struct means "nothing installed" or
+/// "an allocator with a NULL user pointer," which it cannot do reliably.
+///
+/// This is what makes save-and-restore possible: read the current allocator
+/// before installing a temporary one, then pass it back to zozzSetAllocator
+/// afterward — or, if `*installed` came back false, pass NULL instead of
+/// reconstructing ozz's own allocator by hand.
+///
+/// Returns ZOZZ_RESULT_INVALID_ARGUMENT if `out` or `installed` is NULL.
+ZOZZ_API ZozzResult zozzGetAllocator(ZozzAllocator* out, bool* installed);
+
+//===----------------------------------------------------------------------===//
+// Log verbosity
+//
+// ozz's own runtime writes diagnostics straight past this ABI: an unsupported
+// archive version, for instance, is reported through ozz::log::Err() — see
+// libs/ozz/src/animation/runtime/skeleton.cc:131 and animation.cc:285 — which
+// lands on the process's own stderr with no ZozzResult attached, because
+// ozz::io::IArchive::operator>> cannot fail, only log and leave an empty
+// result (see "Validation at the boundary" in the README). A C++ host tunes
+// that noise with ozz::log::SetLevel() / GetLevel(); this seam gives a zozz
+// host the same two calls.
+//
+// ozz::log::Err() and Out() hand back a std::ostream&, which cannot cross a C
+// boundary, so only the LEVEL is bound here, not the destination: a zozz host
+// can silence or raise ozz's own diagnostics but has no way to redirect them
+// into a file or a logger of its own. ZOZZ_LOG_LEVEL_SILENT is the whole of
+// that lever, and it is a real one — it is what a host wanting no third-party
+// text on its stderr actually needs.
+//===----------------------------------------------------------------------===//
+
+/// Mirrors ozz::log::Level exactly (checked in ffi/zozz_abi.cpp).
+typedef enum ZozzLogLevel {
+  /// No output at all, even errors are muted.
+  ZOZZ_LOG_LEVEL_SILENT = 0,
+  /// ozz's own default.
+  ZOZZ_LOG_LEVEL_STANDARD = 1,
+  /// Most verbose.
+  ZOZZ_LOG_LEVEL_VERBOSE = 2,
+} ZozzLogLevel;
+
+/// Sets ozz's global logging verbosity — process-wide, like the allocator
+/// seam above, because ozz's own log level is.
+///
+/// Returns ZOZZ_RESULT_INVALID_ARGUMENT for a value outside ZozzLogLevel,
+/// leaving the current level untouched.
+ZOZZ_API ZozzResult zozzSetLogLevel(ZozzLogLevel level);
+
+/// Reads back ozz's current logging verbosity. Never fails: there is always
+/// a current level, ZOZZ_LOG_LEVEL_STANDARD until something changes it.
+ZOZZ_API ZozzLogLevel zozzGetLogLevel(void);
 
 //===----------------------------------------------------------------------===//
 // Plain-data types

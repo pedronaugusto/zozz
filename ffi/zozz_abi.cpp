@@ -13,6 +13,7 @@
 
 #include <cstddef>
 
+#include "ozz/base/log.h"
 #include "ozz/base/maths/simd_math.h"
 #include "zozz_internal.h"
 
@@ -65,11 +66,95 @@ static_assert(alignof(ozz::math::SoaTransform) == 16,
 static_assert(sizeof(ZozzAllocator) == 3 * sizeof(void*),
               "ZozzAllocator is expected to be three pointers");
 
+//===----------------------------------------------------------------------===//
+// Log levels
+//
+// zozzSetLogLevel/zozzGetLogLevel static_cast directly between ZozzLogLevel
+// and ozz::log::Level. These are what keep that cast valid across a vendored
+// ozz upgrade.
+//===----------------------------------------------------------------------===//
+
+static_assert(static_cast<int>(ZOZZ_LOG_LEVEL_SILENT) ==
+                  static_cast<int>(ozz::log::kSilent),
+              "ZozzLogLevel must match ozz::log::Level");
+static_assert(static_cast<int>(ZOZZ_LOG_LEVEL_STANDARD) ==
+                  static_cast<int>(ozz::log::kStandard),
+              "ZozzLogLevel must match ozz::log::Level");
+static_assert(static_cast<int>(ZOZZ_LOG_LEVEL_VERBOSE) ==
+                  static_cast<int>(ozz::log::kVerbose),
+              "ZozzLogLevel must match ozz::log::Level");
+
+//===----------------------------------------------------------------------===//
+// Seek origins
+//
+// zozz_archive.cpp's read bridge casts a ZozzSeekOrigin straight to
+// ozz::io::Stream::Origin, and back the other way when handing an origin ozz
+// picked to a host's seek callback. These are what keep that cast valid
+// across a vendored ozz upgrade.
+//===----------------------------------------------------------------------===//
+
+static_assert(static_cast<int>(ZOZZ_SEEK_ORIGIN_CURRENT) ==
+                  static_cast<int>(ozz::io::Stream::kCurrent),
+              "ZozzSeekOrigin must match ozz::io::Stream::Origin");
+static_assert(static_cast<int>(ZOZZ_SEEK_ORIGIN_END) ==
+                  static_cast<int>(ozz::io::Stream::kEnd),
+              "ZozzSeekOrigin must match ozz::io::Stream::Origin");
+static_assert(static_cast<int>(ZOZZ_SEEK_ORIGIN_SET) ==
+                  static_cast<int>(ozz::io::Stream::kSet),
+              "ZozzSeekOrigin must match ozz::io::Stream::Origin");
+
+//===----------------------------------------------------------------------===//
+// Endianness
+//
+// zozz_archive.cpp casts a ZozzEndianness straight to ozz::Endianness when
+// constructing an OArchive, and back the other way to report the platform's
+// own native order. These are what keep that cast valid across a vendored
+// ozz upgrade.
+//===----------------------------------------------------------------------===//
+
+static_assert(static_cast<int>(ZOZZ_ENDIANNESS_BIG) ==
+                  static_cast<int>(ozz::kBigEndian),
+              "ZozzEndianness must match ozz::Endianness");
+static_assert(static_cast<int>(ZOZZ_ENDIANNESS_LITTLE) ==
+                  static_cast<int>(ozz::kLittleEndian),
+              "ZozzEndianness must match ozz::Endianness");
+
+//===----------------------------------------------------------------------===//
+// Node property types
+//
+// zozz_gltf.cpp casts a ZozzNodePropertyType straight to
+// ozz::animation::offline::OzzImporter::NodeProperty::Type, and back the
+// other way when reporting a property GetNodeProperties returned. These are
+// what keep that cast valid across a vendored ozz upgrade.
+//===----------------------------------------------------------------------===//
+
+using NodePropertyType =
+    ozz::animation::offline::OzzImporter::NodeProperty;
+
+static_assert(static_cast<int>(ZOZZ_NODE_PROPERTY_TYPE_FLOAT1) ==
+                  static_cast<int>(NodePropertyType::kFloat1),
+              "ZozzNodePropertyType must match OzzImporter::NodeProperty::Type");
+static_assert(static_cast<int>(ZOZZ_NODE_PROPERTY_TYPE_FLOAT2) ==
+                  static_cast<int>(NodePropertyType::kFloat2),
+              "ZozzNodePropertyType must match OzzImporter::NodeProperty::Type");
+static_assert(static_cast<int>(ZOZZ_NODE_PROPERTY_TYPE_FLOAT3) ==
+                  static_cast<int>(NodePropertyType::kFloat3),
+              "ZozzNodePropertyType must match OzzImporter::NodeProperty::Type");
+static_assert(static_cast<int>(ZOZZ_NODE_PROPERTY_TYPE_FLOAT4) ==
+                  static_cast<int>(NodePropertyType::kFloat4),
+              "ZozzNodePropertyType must match OzzImporter::NodeProperty::Type");
+static_assert(static_cast<int>(ZOZZ_NODE_PROPERTY_TYPE_POINT) ==
+                  static_cast<int>(NodePropertyType::kPoint),
+              "ZozzNodePropertyType must match OzzImporter::NodeProperty::Type");
+static_assert(static_cast<int>(ZOZZ_NODE_PROPERTY_TYPE_VECTOR) ==
+                  static_cast<int>(NodePropertyType::kVector),
+              "ZozzNodePropertyType must match OzzImporter::NodeProperty::Type");
+
 /// One past the last ZozzResult enumerator. Update alongside the enum; the
 /// switch in zozzResultName is compiled with -Wswitch, so adding a result
 /// without handling it is already a warning there.
 constexpr uint32_t kResultCount =
-    static_cast<uint32_t>(ZOZZ_RESULT_INVALID_DATA) + 1u;
+    static_cast<uint32_t>(ZOZZ_RESULT_UNSUPPORTED) + 1u;
 
 }  // namespace
 

@@ -193,3 +193,40 @@ test "weight = 0 is a no-op for both IK jobs" {
     try std.testing.expectApproxEqAbs(@as(f32, 0), aim.joint_correction[2], 1e-5);
     try std.testing.expectApproxEqAbs(@as(f32, 1), aim.joint_correction[3], 1e-5);
 }
+
+test "IK job defaults match ozz's own" {
+    // `TwoBoneJob` and `AimJob` document their field defaults as ozz's
+    // defaults, and they are written out as literals — which is the ergonomic
+    // spelling in Zig and the one that rots. ozz ships the values through
+    // `zozzIKTwoBoneJobDefaults` and `zozzIKAimJobDefaults` precisely so a
+    // binding does not have to copy them; this is what makes the copy an
+    // assertion rather than a hope, and what fails the next time a re-vendor
+    // retunes one.
+    const c = @import("c.zig");
+    const dummy = zozz.mat4_identity;
+
+    var two_bone_defaults: c.IKTwoBoneJob = undefined;
+    c.zozzIKTwoBoneJobDefaults(&two_bone_defaults);
+    const two_bone = zozz.ik.TwoBoneJob{
+        .start_joint = &dummy,
+        .mid_joint = &dummy,
+        .end_joint = &dummy,
+    };
+    try std.testing.expectEqual(two_bone_defaults.target, two_bone.target);
+    try std.testing.expectEqual(two_bone_defaults.mid_axis, two_bone.mid_axis);
+    try std.testing.expectEqual(two_bone_defaults.pole_vector, two_bone.pole_vector);
+    try std.testing.expectEqual(two_bone_defaults.twist_angle, two_bone.twist_angle);
+    try std.testing.expectEqual(two_bone_defaults.soften, two_bone.soften);
+    try std.testing.expectEqual(two_bone_defaults.weight, two_bone.weight);
+
+    var aim_defaults: c.IKAimJob = undefined;
+    c.zozzIKAimJobDefaults(&aim_defaults);
+    const aim = zozz.ik.AimJob{ .joint = &dummy };
+    try std.testing.expectEqual(aim_defaults.target, aim.target);
+    try std.testing.expectEqual(aim_defaults.forward, aim.forward);
+    try std.testing.expectEqual(aim_defaults.offset, aim.offset);
+    try std.testing.expectEqual(aim_defaults.up, aim.up);
+    try std.testing.expectEqual(aim_defaults.pole_vector, aim.pole_vector);
+    try std.testing.expectEqual(aim_defaults.twist_angle, aim.twist_angle);
+    try std.testing.expectEqual(aim_defaults.weight, aim.weight);
+}

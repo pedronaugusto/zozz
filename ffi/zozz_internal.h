@@ -12,7 +12,9 @@
 #include <utility>
 
 #include "ozz/animation/offline/raw_animation.h"
+#include "ozz/animation/offline/raw_skeleton.h"
 #include "ozz/animation/offline/raw_track.h"
+#include "ozz/animation/offline/tools/import2ozz.h"
 #include "ozz/animation/runtime/animation.h"
 #include "ozz/animation/runtime/sampling_job.h"
 #include "ozz/animation/runtime/skeleton.h"
@@ -40,6 +42,34 @@ namespace zozz {
 constexpr int kMaxJoints = ozz::animation::Skeleton::kMaxJoints;
 
 /// Number of SoA blocks needed for `num_joints` joints.
+/// An enum parameter's bytes, rather than its value.
+///
+/// A C caller can put any integer through an enum parameter — `(ZozzLogLevel)99`
+/// is a legal thing to write — and reading an enum object that holds a value no
+/// enumerator names is undefined behaviour. Not theoretically: the obvious
+/// `switch (level)` aborts under UBSan with "load of value 99, which is not
+/// valid for type 'ZozzLogLevel'", which is the abort a host would get in a
+/// sanitised build for passing exactly the value this ABI promises to reject
+/// cleanly.
+///
+/// Copying the object representation into an integer is not a load of the enum,
+/// so the value can be validated as what it really is: a number that arrived
+/// from outside. Every entry point taking an enum by value goes through this
+/// before it looks at it. The enum stays in the signature because it is the
+/// documented interface — what it cannot be is trusted.
+/// Taken by reference on purpose: copying the parameter would itself be a load
+/// of the enum, which is the very thing this exists to avoid.
+template <typename E>
+int32_t RawEnum(const E& value) {
+  static_assert(sizeof(E) == sizeof(int32_t),
+                "an enum crossing this ABI must be int-sized: no enumerator is "
+                "negative, so every compiler this ABI targets gives it int as "
+                "its underlying type, and the byte copy below depends on it.");
+  int32_t raw;
+  std::memcpy(&raw, &value, sizeof raw);
+  return raw;
+}
+
 constexpr int SoaBlocks(int num_joints) { return (num_joints + 3) / 4; }
 
 //===----------------------------------------------------------------------===//
@@ -236,6 +266,41 @@ void SoaToAos(const ozz::math::SoaTransform* soa, ZozzTransform* aos,
 void AosToSoa(const ZozzTransform* aos, ozz::math::SoaTransform* soa,
               int num_joints);
 
+//===----------------------------------------------------------------------===//
+// Post-parse sanity checks
+//
+// Defined once each, in zozz_skeleton.cpp and zozz_animation.cpp
+// respectively, and shared here so every loader applies the same checks
+// regardless of where the bytes came from: a file, a memory buffer, or a
+// host-supplied ZozzIArchive (zozz_archive.cpp). Rejects an object that
+// parsed without complaint but describes something ozz's own jobs would
+// refuse — the shape a truncated or version-mismatched archive produces.
+//===----------------------------------------------------------------------===//
+
+ZozzResult ValidateSkeleton(const ozz::animation::Skeleton& skeleton);
+ZozzResult ValidateAnimation(const ozz::animation::Animation& animation);
+
+//===----------------------------------------------------------------------===//
+// Flat/nested raw-skeleton conversion
+//
+// zozz_offline.cpp owns ZozzRawSkeleton's layout (a flat parent/name/rest
+// list — see that file's module comment for why); zozz_gltf.cpp needs both
+// conversion directions to sit an ozz::animation::offline::OzzImporter, which
+// only knows the nested ozz::animation::offline::RawSkeleton tree, in front
+// of the flat handle this ABI hands out everywhere else. Defined once, here,
+// rather than duplicated.
+//===----------------------------------------------------------------------===//
+
+/// Depth-first flattening of a nested ozz RawSkeleton into a fresh flat
+/// handle, in the same insertion order zozzSkeletonBuild documents.
+ZozzResult BuildFlatSkeleton(const ozz::animation::offline::RawSkeleton& raw,
+                             ZozzRawSkeleton** out);
+
+/// The reverse: materialises `flat` into a nested ozz RawSkeleton — the shape
+/// OzzImporter::Import(RawSkeleton*, NodeType) fills.
+ZozzResult FlattenToNestedSkeleton(const ZozzRawSkeleton* flat,
+                                   ozz::animation::offline::RawSkeleton* out);
+
 }  // namespace zozz
 
 //===----------------------------------------------------------------------===//
@@ -286,6 +351,15 @@ struct ZozzRawFloat4Track {
 };
 struct ZozzRawQuaternionTrack {
   ozz::animation::offline::RawQuaternionTrack impl;
+};
+
+/// An importer handle, shared between zozz_gltf.cpp (the generic OzzImporter
+/// accessors and the host-implementable interface) and zozz_gltf_backend.cpp
+/// (the concrete glTF backend): both construct one, only the former
+/// dereferences it. `impl` is owned; deleted through this base pointer, which
+/// works because ~OzzImporter is virtual.
+struct ZozzImporter {
+  ozz::animation::offline::OzzImporter* impl;
 };
 
 #endif  // ZOZZ_INTERNAL_H_

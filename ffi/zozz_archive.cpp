@@ -1,5 +1,6 @@
 //===----------------------------------------------------------------------===//
-// zozz — the write-side stream bridge, and the OArchive entry points.
+// zozz — the stream bridge in both directions, and the OArchive/IArchive
+// entry points.
 //===----------------------------------------------------------------------===//
 
 #include "zozz_internal.h"
@@ -11,8 +12,9 @@ namespace {
 ///
 /// ozz's own OArchive only ever calls opened() (once, at construction) and
 /// Write() on the stream it is given; Read/Seek/Tell/Size are unreachable
-/// from this direction and stubbed the same way zozz_internal.h's
-/// ConstMemoryStream stubs the half of Stream ITS direction never uses.
+/// from this direction. ZozzStream carries read/seek/tell for IArchive below,
+/// but this adapter never calls them — it stubs the same four members
+/// zozz_internal.h's ConstMemoryStream stubs for the opposite reason.
 class HostWriteStream : public ozz::io::Stream {
  public:
   explicit HostWriteStream(const ZozzStream& host) : host_(host) {}
@@ -44,9 +46,96 @@ class HostWriteStream : public ozz::io::Stream {
   bool failed_ = false;
 };
 
-bool ValidStream(const ZozzStream* stream) {
+/// Read-only adapter from a host ZozzStream onto ozz::io::Stream — the mirror
+/// image of HostWriteStream above.
+///
+/// ozz's own IArchive checks a short read only via `assert(size ==
+/// sizeof(v))` (archive.h), which disappears under NDEBUG just like the write
+/// side's assert does. A host's `read` legitimately returns fewer bytes than
+/// asked at the true end of its data, so rather than ever handing that short
+/// count to ozz, this always reports the full count back, zero-fills
+/// whatever the host did not supply, and latches `failed_` — the exact
+/// technique zozz_internal.h's ConstMemoryStream uses for a memory-backed
+/// archive, applied here to an arbitrary host-backed one.
+class HostReadStream : public ozz::io::Stream {
+ public:
+  explicit HostReadStream(const ZozzStream& host) : host_(host) {}
+
+  bool opened() const override { return host_.opened(host_.user) != 0; }
+
+  size_t Read(void* buffer, size_t size) override {
+    uint8_t* out = static_cast<uint8_t*>(buffer);
+    size_t n = failed_ ? 0 : host_.read(host_.user, buffer, size);
+    if (n > size) n = size;  // A host reporting more than it was asked for.
+    if (n < size) {
+      std::memset(out + n, 0, size - n);
+      failed_ = true;
+    }
+    return size;
+  }
+
+  size_t Write(const void*, size_t) override { return 0; }
+
+  /// The only caller is IArchive::TestTag<T>(), rewinding after a peek — see
+  /// the tag-sniffing entry points below. A failed seek leaves the read
+  /// position unknown, so it latches `failed_` exactly like a short read
+  /// does, rather than letting the next read continue from an uncertain spot.
+  int Seek(int offset, Origin origin) override {
+    if (failed_) return -1;
+    if (host_.seek(host_.user, offset, static_cast<ZozzSeekOrigin>(origin)) !=
+        0) {
+      failed_ = true;
+      return -1;
+    }
+    return 0;
+  }
+
+  int Tell() const override { return failed_ ? -1 : host_.tell(host_.user); }
+
+  size_t Size() const override { return 0; }
+
+  bool failed() const { return failed_; }
+
+ private:
+  ZozzStream host_;
+  bool failed_ = false;
+};
+
+bool ValidWriteStream(const ZozzStream* stream) {
   return stream != nullptr && stream->opened != nullptr &&
          stream->write != nullptr;
+}
+
+// Both of these read the parameter's bytes rather than its value — see
+// RawEnum in zozz_internal.h. A host can pass any integer here.
+// These take the raw integer, not ZozzEndianness. Passing the enum by value
+// anywhere — even to a helper that means to validate it — is itself a load of
+// the enum, and undefined when a host passed a value no enumerator names. It
+// is converted once, with zozz::RawEnum, at the entry point that receives it,
+// and travels as a number from there.
+bool ValidEndianness(int32_t endianness) {
+  return endianness == ZOZZ_ENDIANNESS_BIG ||
+         endianness == ZOZZ_ENDIANNESS_LITTLE;
+}
+
+ozz::Endianness ToOzz(int32_t endianness) {
+  return endianness == ZOZZ_ENDIANNESS_BIG ? ozz::kBigEndian
+                                           : ozz::kLittleEndian;
+}
+
+/// The ZozzEndianness matching this platform's own native order — what the
+/// file-convenience functions below pass, unconditionally, to reproduce the
+/// behaviour every zozzOArchiveCreate call had before it took an explicit
+/// ZozzEndianness.
+int32_t NativeEndianness() {
+  return ozz::GetNativeEndianness() == ozz::kBigEndian ? ZOZZ_ENDIANNESS_BIG
+                                                        : ZOZZ_ENDIANNESS_LITTLE;
+}
+
+bool ValidReadStream(const ZozzStream* stream) {
+  return stream != nullptr && stream->opened != nullptr &&
+         stream->read != nullptr && stream->seek != nullptr &&
+         stream->tell != nullptr;
 }
 
 int FileOpened(void* user) {
@@ -63,18 +152,28 @@ struct ZozzOArchive {
   HostWriteStream stream;
   ozz::io::OArchive archive;
 
-  explicit ZozzOArchive(const ZozzStream& host)
+  ZozzOArchive(const ZozzStream& host, ozz::Endianness endianness)
+      : stream(host), archive(&stream, endianness) {}
+};
+
+struct ZozzIArchive {
+  HostReadStream stream;
+  ozz::io::IArchive archive;
+
+  explicit ZozzIArchive(const ZozzStream& host)
       : stream(host), archive(&stream) {}
 };
 
 namespace {
 
-ZozzResult CreateArchive(const ZozzStream* stream, ZozzOArchive** out) {
+ZozzResult CreateOArchive(const ZozzStream* stream, int32_t endianness,
+                          ZozzOArchive** out) {
   *out = nullptr;
-  if (!ValidStream(stream)) return ZOZZ_RESULT_INVALID_ARGUMENT;
+  if (!ValidWriteStream(stream)) return ZOZZ_RESULT_INVALID_ARGUMENT;
+  if (!ValidEndianness(endianness)) return ZOZZ_RESULT_INVALID_ARGUMENT;
   if (stream->opened(stream->user) == 0) return ZOZZ_RESULT_IO;
 
-  ZozzOArchive* archive = zozz::New<ZozzOArchive>(*stream);
+  ZozzOArchive* archive = zozz::New<ZozzOArchive>(*stream, ToOzz(endianness));
   if (archive == nullptr) return ZOZZ_RESULT_OUT_OF_MEMORY;
 
   *out = archive;
@@ -99,9 +198,10 @@ ZozzResult SaveToFile(const char* path, const T& object) {
   ozz::io::File file(path, "wb");
   if (!file.opened()) return ZOZZ_RESULT_IO;
 
-  const ZozzStream bridge = {&FileOpened, &FileWrite, &file};
+  const ZozzStream bridge = {&FileOpened, &FileWrite, nullptr,
+                             nullptr,    nullptr,     &file};
   ZozzOArchive* archive = nullptr;
-  ZozzResult result = CreateArchive(&bridge, &archive);
+  ZozzResult result = CreateOArchive(&bridge, NativeEndianness(), &archive);
   if (result != ZOZZ_RESULT_OK) return result;
 
   result = SaveObject(archive, object);
@@ -109,13 +209,57 @@ ZozzResult SaveToFile(const char* path, const T& object) {
   return result;
 }
 
+/// Reads one tagged, versioned object: tests the tag first — turning a
+/// wrong-type or non-ozz stream into ZOZZ_RESULT_BAD_FORMAT rather than a
+/// parse of unrelated bytes, the same guarantee zozz::LoadTagged gives the
+/// file/memory loaders — then parses, checking `failed()` at every step
+/// since none of this throws.
+template <typename T>
+ZozzResult LoadTaggedObject(ZozzIArchive* archive, T* object) {
+  if (archive == nullptr) return ZOZZ_RESULT_INVALID_ARGUMENT;
+  if (archive->stream.failed()) return ZOZZ_RESULT_IO;
+  if (!archive->archive.TestTag<T>()) return ZOZZ_RESULT_BAD_FORMAT;
+  if (archive->stream.failed()) return ZOZZ_RESULT_IO;
+  archive->archive >> *object;
+  return archive->stream.failed() ? ZOZZ_RESULT_IO : ZOZZ_RESULT_OK;
+}
+
+/// Shared shape of the five track loaders: allocate the handle, load into its
+/// impl, unwind on any failure. Skeleton and animation each need an extra
+/// post-parse sanity check (see zozzIArchiveLoadSkeleton/LoadAnimation below)
+/// so they are not routed through this helper.
+template <typename Handle>
+ZozzResult LoadTrack(ZozzIArchive* archive, Handle** out) {
+  if (out == nullptr) return ZOZZ_RESULT_INVALID_ARGUMENT;
+  *out = nullptr;
+  Handle* handle = zozz::New<Handle>();
+  if (handle == nullptr) return ZOZZ_RESULT_OUT_OF_MEMORY;
+
+  const ZozzResult result = LoadTaggedObject(archive, &handle->impl);
+  if (result != ZOZZ_RESULT_OK) {
+    zozz::Delete(handle);
+    return result;
+  }
+  *out = handle;
+  return ZOZZ_RESULT_OK;
+}
+
+/// True if the next object in `archive` tags as a T, without consuming it.
+/// Shared tail of the zozzIArchiveTest* entry points below.
+template <typename T>
+bool PeekTag(ZozzIArchive* archive) {
+  if (archive == nullptr || archive->stream.failed()) return false;
+  return archive->archive.TestTag<T>();
+}
+
 }  // namespace
 
 extern "C" {
 
-ZozzResult zozzOArchiveCreate(const ZozzStream* stream, ZozzOArchive** out) {
+ZozzResult zozzOArchiveCreate(const ZozzStream* stream,
+                              ZozzEndianness endianness, ZozzOArchive** out) {
   if (out == nullptr) return ZOZZ_RESULT_INVALID_ARGUMENT;
-  return CreateArchive(stream, out);
+  return CreateOArchive(stream, zozz::RawEnum(endianness), out);
 }
 
 void zozzOArchiveDestroy(ZozzOArchive* archive) { zozz::Delete(archive); }
@@ -185,6 +329,142 @@ ZozzResult zozzOArchiveSaveQuaternionTrack(ZozzOArchive* archive,
                                            const ZozzQuaternionTrack* track) {
   if (track == nullptr) return ZOZZ_RESULT_INVALID_ARGUMENT;
   return SaveObject(archive, track->impl);
+}
+
+ZozzResult zozzIArchiveCreate(const ZozzStream* stream, ZozzIArchive** out) {
+  if (out == nullptr) return ZOZZ_RESULT_INVALID_ARGUMENT;
+  *out = nullptr;
+  if (!ValidReadStream(stream)) return ZOZZ_RESULT_INVALID_ARGUMENT;
+  if (stream->opened(stream->user) == 0) return ZOZZ_RESULT_IO;
+
+  ZozzIArchive* archive = zozz::New<ZozzIArchive>(*stream);
+  if (archive == nullptr) return ZOZZ_RESULT_OUT_OF_MEMORY;
+
+  *out = archive;
+  return ZOZZ_RESULT_OK;
+}
+
+void zozzIArchiveDestroy(ZozzIArchive* archive) { zozz::Delete(archive); }
+
+bool zozzIArchiveEndianSwap(const ZozzIArchive* archive) {
+  return archive != nullptr && archive->archive.endian_swap();
+}
+
+ZozzResult zozzIArchiveLoadBinary(ZozzIArchive* archive, void* data,
+                                  size_t size) {
+  if (archive == nullptr || (data == nullptr && size != 0)) {
+    return ZOZZ_RESULT_INVALID_ARGUMENT;
+  }
+  if (archive->stream.failed()) return ZOZZ_RESULT_IO;
+  archive->archive.LoadBinary(data, size);
+  return archive->stream.failed() ? ZOZZ_RESULT_IO : ZOZZ_RESULT_OK;
+}
+
+ZozzResult zozzIArchiveLoadInt32(ZozzIArchive* archive, int32_t* out) {
+  if (archive == nullptr || out == nullptr) return ZOZZ_RESULT_INVALID_ARGUMENT;
+  *out = 0;
+  if (archive->stream.failed()) return ZOZZ_RESULT_IO;
+  archive->archive >> *out;
+  return archive->stream.failed() ? ZOZZ_RESULT_IO : ZOZZ_RESULT_OK;
+}
+
+ZozzResult zozzIArchiveLoadFloat(ZozzIArchive* archive, float* out) {
+  if (archive == nullptr || out == nullptr) return ZOZZ_RESULT_INVALID_ARGUMENT;
+  *out = 0.f;
+  if (archive->stream.failed()) return ZOZZ_RESULT_IO;
+  archive->archive >> *out;
+  return archive->stream.failed() ? ZOZZ_RESULT_IO : ZOZZ_RESULT_OK;
+}
+
+ZozzResult zozzIArchiveLoadSkeleton(ZozzIArchive* archive,
+                                    ZozzSkeleton** out) {
+  if (out == nullptr) return ZOZZ_RESULT_INVALID_ARGUMENT;
+  *out = nullptr;
+  ZozzSkeleton* skeleton = zozz::New<ZozzSkeleton>();
+  if (skeleton == nullptr) return ZOZZ_RESULT_OUT_OF_MEMORY;
+
+  ZozzResult result = LoadTaggedObject(archive, &skeleton->impl);
+  if (result == ZOZZ_RESULT_OK) {
+    result = zozz::ValidateSkeleton(skeleton->impl);
+  }
+  if (result != ZOZZ_RESULT_OK) {
+    zozz::Delete(skeleton);
+    return result;
+  }
+  *out = skeleton;
+  return ZOZZ_RESULT_OK;
+}
+
+ZozzResult zozzIArchiveLoadAnimation(ZozzIArchive* archive,
+                                     ZozzAnimation** out) {
+  if (out == nullptr) return ZOZZ_RESULT_INVALID_ARGUMENT;
+  *out = nullptr;
+  ZozzAnimation* animation = zozz::New<ZozzAnimation>();
+  if (animation == nullptr) return ZOZZ_RESULT_OUT_OF_MEMORY;
+
+  ZozzResult result = LoadTaggedObject(archive, &animation->impl);
+  if (result == ZOZZ_RESULT_OK) {
+    result = zozz::ValidateAnimation(animation->impl);
+  }
+  if (result != ZOZZ_RESULT_OK) {
+    zozz::Delete(animation);
+    return result;
+  }
+  *out = animation;
+  return ZOZZ_RESULT_OK;
+}
+
+ZozzResult zozzIArchiveLoadFloatTrack(ZozzIArchive* archive,
+                                      ZozzFloatTrack** out) {
+  return LoadTrack(archive, out);
+}
+
+ZozzResult zozzIArchiveLoadFloat2Track(ZozzIArchive* archive,
+                                       ZozzFloat2Track** out) {
+  return LoadTrack(archive, out);
+}
+
+ZozzResult zozzIArchiveLoadFloat3Track(ZozzIArchive* archive,
+                                       ZozzFloat3Track** out) {
+  return LoadTrack(archive, out);
+}
+
+ZozzResult zozzIArchiveLoadFloat4Track(ZozzIArchive* archive,
+                                       ZozzFloat4Track** out) {
+  return LoadTrack(archive, out);
+}
+
+ZozzResult zozzIArchiveLoadQuaternionTrack(ZozzIArchive* archive,
+                                           ZozzQuaternionTrack** out) {
+  return LoadTrack(archive, out);
+}
+
+bool zozzIArchiveTestSkeleton(ZozzIArchive* archive) {
+  return PeekTag<ozz::animation::Skeleton>(archive);
+}
+
+bool zozzIArchiveTestAnimation(ZozzIArchive* archive) {
+  return PeekTag<ozz::animation::Animation>(archive);
+}
+
+bool zozzIArchiveTestFloatTrack(ZozzIArchive* archive) {
+  return PeekTag<ozz::animation::FloatTrack>(archive);
+}
+
+bool zozzIArchiveTestFloat2Track(ZozzIArchive* archive) {
+  return PeekTag<ozz::animation::Float2Track>(archive);
+}
+
+bool zozzIArchiveTestFloat3Track(ZozzIArchive* archive) {
+  return PeekTag<ozz::animation::Float3Track>(archive);
+}
+
+bool zozzIArchiveTestFloat4Track(ZozzIArchive* archive) {
+  return PeekTag<ozz::animation::Float4Track>(archive);
+}
+
+bool zozzIArchiveTestQuaternionTrack(ZozzIArchive* archive) {
+  return PeekTag<ozz::animation::QuaternionTrack>(archive);
 }
 
 ZozzResult zozzSkeletonSaveFile(const ZozzSkeleton* skeleton,
