@@ -47,8 +47,11 @@ const blending_mod = @import("blending.zig");
 const archive_mod = @import("archive.zig");
 const ik_mod = @import("ik.zig");
 const skinning_mod = @import("skinning.zig");
+const encode_mod = @import("encode.zig");
 const optimizer_mod = @import("optimizer.zig");
 const rawtrack_mod = @import("rawtrack.zig");
+const options_mod = @import("options.zig");
+const importer_mod = @import("importer.zig");
 
 //=============================================================================
 // Public surface
@@ -62,8 +65,14 @@ pub const Mat4 = math_mod.Mat4;
 pub const transform_identity = math_mod.transform_identity;
 pub const mat4_identity = math_mod.mat4_identity;
 
+/// ozz::math: SimdFloat4/SimdInt4 lane ops, vector ops, quaternions, 4x4
+/// matrix operations, and Box — the operations that go with `Transform` and
+/// `Mat4` above.
+pub const math = math_mod;
+
 pub const setAllocator = memory_mod.setAllocator;
 pub const resetAllocator = memory_mod.resetAllocator;
+pub const getAllocator = memory_mod.getAllocator;
 
 pub const Skeleton = skeleton_mod.Skeleton;
 pub const no_parent = skeleton_mod.no_parent;
@@ -106,7 +115,11 @@ pub const BlendingLayer = blending_mod.Layer;
 pub const BlendingJob = blending_mod.BlendingJob;
 
 pub const Stream = archive_mod.Stream;
+pub const SeekOrigin = archive_mod.SeekOrigin;
+pub const Endianness = archive_mod.Endianness;
+pub const nativeEndianness = archive_mod.nativeEndianness;
 pub const OArchive = archive_mod.OArchive;
+pub const IArchive = archive_mod.IArchive;
 pub const saveSkeletonToFile = archive_mod.saveSkeletonToFile;
 pub const saveAnimationToFile = archive_mod.saveAnimationToFile;
 pub const saveFloatTrackToFile = archive_mod.saveFloatTrackToFile;
@@ -116,6 +129,10 @@ pub const saveFloat4TrackToFile = archive_mod.saveFloat4TrackToFile;
 pub const saveQuaternionTrackToFile = archive_mod.saveQuaternionTrackToFile;
 pub const ik = ik_mod;
 pub const skinning = skinning_mod;
+
+/// GV4 group-varint codec (ffi/zozz_encode.h) -- the wire format
+/// `zozzAnimationKeyframeIframeEntries`'s buffer is encoded with.
+pub const encode = encode_mod;
 pub const AnimationOptimizer = optimizer_mod.AnimationOptimizer;
 pub const OptimizerSetting = optimizer_mod.OptimizerSetting;
 pub const FixedRateSamplingTime = optimizer_mod.FixedRateSamplingTime;
@@ -132,6 +149,24 @@ pub const RawFloat4Track = rawtrack_mod.RawFloat4Track;
 pub const RawQuaternionTrack = rawtrack_mod.RawQuaternionTrack;
 // The runtime track types are re-exported from track.zig above; rawtrack.zig
 // names them too, for the builders that produce them.
+
+/// ozz's command-line option parser (ffi/zozz_options.h), behind
+/// `-Doptions`. See options.zig's module comment.
+pub const OptionsParser = options_mod.OptionsParser;
+pub const OptionsParseResult = options_mod.ParseResult;
+pub const IntOption = options_mod.IntOption;
+pub const FloatOption = options_mod.FloatOption;
+pub const BoolOption = options_mod.BoolOption;
+pub const StringOption = options_mod.StringOption;
+
+/// OzzImporter (ffi/zozz_gltf.h): the concrete glTF backend (-Dgltf), the
+/// host-implementable interface and CLI driver (-Doptions). See importer.zig's
+/// module comment.
+pub const Importer = importer_mod.Importer;
+pub const ImporterInterface = importer_mod.ImporterInterface;
+pub const ImportNodeType = importer_mod.ImportNodeType;
+pub const NodePropertyType = importer_mod.NodePropertyType;
+pub const NodeProperty = importer_mod.NodeProperty;
 
 /// Build options the C library was actually compiled with, so a consumer can
 /// branch on them instead of assuming.
@@ -170,6 +205,26 @@ pub fn ozzVersion() Version {
 }
 
 //=============================================================================
+// Log verbosity
+//=============================================================================
+
+pub const LogLevel = c.LogLevel;
+
+/// Sets ozz's global logging verbosity — process-wide, like the allocator
+/// seam. Silencing it is the only lever offered: ozz's diagnostic streams
+/// cannot cross this boundary (see zozz_core.h), so there is no way to
+/// redirect them, only to turn them down.
+pub fn setLogLevel(level: LogLevel) Error!void {
+    try error_mod.check(c.zozzSetLogLevel(level));
+}
+
+/// Reads back ozz's current logging verbosity. Never fails: there is always
+/// a current level, `.standard` until something changes it.
+pub fn logLevel() LogLevel {
+    return c.zozzGetLogLevel();
+}
+
+//=============================================================================
 // Tests
 //=============================================================================
 
@@ -189,6 +244,7 @@ test {
     _ = archive_mod;
     _ = ik_mod;
     _ = skinning_mod;
+    _ = encode_mod;
 
     // ik.zig and skinning.zig have no test blocks of their own, and nothing
     // above calls into them the way the other modules' functions get
@@ -207,8 +263,10 @@ test {
     _ = @import("offline.zig");
     _ = @import("optimizer.zig");
     _ = @import("rawtrack.zig");
+    _ = @import("log_test.zig");
 
     // Behavioural tests, one file per area.
+    _ = @import("math_test.zig");
     _ = @import("blending_test.zig");
     _ = @import("ik_test.zig");
     _ = @import("archive_test.zig");
@@ -217,6 +275,9 @@ test {
     _ = @import("skinning_test.zig");
     _ = @import("optimizer_test.zig");
     _ = @import("motion_test.zig");
+    _ = @import("encode_test.zig");
+    _ = @import("options_test.zig");
+    _ = @import("gltf_test.zig");
 
     // Test-only: this one @cImport-s the C header. Reached from a test block
     // and nowhere else, so a normal build never analyses it and the shipped

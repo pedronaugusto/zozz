@@ -67,4 +67,36 @@ pub const Animation = struct {
     pub fn timepoints(self: Animation, out: []f32) err.Error!void {
         try err.check(c.zozzAnimationTimepoints(self.handle, out.ptr, out.len));
     }
+
+    /// One of the three compressed keyframe streams a clip carries.
+    pub const Channel = c.KeyframeChannel;
+
+    /// Element counts of one channel's control streams, for sizing the buffers
+    /// the four readers below fill.
+    pub const KeyframesCtrl = c.KeyframesCtrl;
+
+    pub fn keyframesCtrl(self: Animation, channel: Channel) err.Error!KeyframesCtrl {
+        var out: KeyframesCtrl = undefined;
+        try err.check(c.zozzAnimationKeyframesCtrl(self.handle, channel, &out));
+        return out;
+    }
+
+    /// Indices into the clip's time points. One or two bytes per keyframe,
+    /// whichever the time-point count needs; ozz decides that per clip.
+    pub fn keyframeRatios(self: Animation, channel: Channel, out: []u8) err.Error!void {
+        try err.check(c.zozzAnimationKeyframeRatios(self.handle, channel, out.ptr, out.len));
+    }
+
+    pub fn keyframePreviouses(self: Animation, channel: Channel, out: []u16) err.Error!void {
+        try err.check(c.zozzAnimationKeyframePreviouses(self.handle, channel, out.ptr, out.len));
+    }
+
+    /// Group-varint encoded; decode with the same scheme ozz's own reader uses.
+    pub fn keyframeIframeEntries(self: Animation, channel: Channel, out: []u8) err.Error!void {
+        try err.check(c.zozzAnimationKeyframeIframeEntries(self.handle, channel, out.ptr, out.len));
+    }
+
+    pub fn keyframeIframeDesc(self: Animation, channel: Channel, out: []u32) err.Error!void {
+        try err.check(c.zozzAnimationKeyframeIframeDesc(self.handle, channel, out.ptr, out.len));
+    }
 };

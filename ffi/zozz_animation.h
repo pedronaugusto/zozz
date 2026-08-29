@@ -8,6 +8,7 @@
 #define ZOZZ_ANIMATION_H_
 
 #include <stddef.h>
+#include <stdint.h>
 
 #include "zozz.h"
 
@@ -49,6 +50,51 @@ ZOZZ_API int zozzAnimationNumTimepoints(const ZozzAnimation* animation);
 /// ZOZZ_RESULT_BUFFER_TOO_SMALL.
 ZOZZ_API ZozzResult zozzAnimationTimepoints(const ZozzAnimation* animation,
                                            float* out, size_t count);
+
+/// Which of the three compressed keyframe streams a control-stream query
+/// refers to.
+typedef enum ZozzKeyframeChannel {
+  ZOZZ_KEYFRAME_CHANNEL_TRANSLATION = 0,
+  ZOZZ_KEYFRAME_CHANNEL_ROTATION = 1,
+  ZOZZ_KEYFRAME_CHANNEL_SCALE = 2,
+} ZozzKeyframeChannel;
+
+/// Element counts of one channel's control streams, for sizing the buffers the
+/// four readers below fill.
+typedef struct ZozzKeyframesCtrl {
+  /// Indices into the clip's time points. One or two bytes per keyframe,
+  /// whichever the time-point count needs -- ozz decides that per clip, and a
+  /// reader has to derive it the same way from zozzAnimationNumTimepoints.
+  size_t num_ratio_bytes;
+  /// Offset from the previous keyframe of the same track, per keyframe.
+  size_t num_previouses;
+  /// Cached iframe entries, group-varint encoded.
+  size_t num_iframe_entry_bytes;
+  /// Two uint32 per iframe: offset into the entries, and the latest key index.
+  size_t num_iframe_desc;
+  /// Seconds between iframes, used to index the descriptors.
+  float iframe_interval;
+} ZozzKeyframesCtrl;
+
+ZOZZ_API ZozzResult zozzAnimationKeyframesCtrl(const ZozzAnimation* animation,
+                                               ZozzKeyframeChannel channel,
+                                               ZozzKeyframesCtrl* out);
+
+ZOZZ_API ZozzResult zozzAnimationKeyframeRatios(const ZozzAnimation* animation,
+                                                ZozzKeyframeChannel channel,
+                                                uint8_t* out, size_t count);
+
+ZOZZ_API ZozzResult zozzAnimationKeyframePreviouses(
+    const ZozzAnimation* animation, ZozzKeyframeChannel channel, uint16_t* out,
+    size_t count);
+
+ZOZZ_API ZozzResult zozzAnimationKeyframeIframeEntries(
+    const ZozzAnimation* animation, ZozzKeyframeChannel channel, uint8_t* out,
+    size_t count);
+
+ZOZZ_API ZozzResult zozzAnimationKeyframeIframeDesc(
+    const ZozzAnimation* animation, ZozzKeyframeChannel channel, uint32_t* out,
+    size_t count);
 
 #ifdef __cplusplus
 }  // extern "C"

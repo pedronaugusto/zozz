@@ -45,6 +45,39 @@ pub const FloatTrack = struct {
         try err.check(c.zozzFloatTrackSample(self.handle, ratio, &out));
         return out;
     }
+
+    /// Number of authored keyframes.
+    pub fn numKeyframes(self: FloatTrack) u32 {
+        return @intCast(c.zozzFloatTrackNumKeyframes(self.handle));
+    }
+
+    /// Each keyframe's ratio, ascending. Allocated with `allocator`; caller
+    /// frees the result.
+    pub fn ratios(self: FloatTrack, allocator: std.mem.Allocator) err.Error![]f32 {
+        const out = allocator.alloc(f32, self.numKeyframes()) catch return err.Error.OutOfMemory;
+        errdefer allocator.free(out);
+        try err.check(c.zozzFloatTrackRatios(self.handle, out.ptr, out.len));
+        return out;
+    }
+
+    /// Each keyframe's authored value, index-aligned with `ratios` —
+    /// `out[i]` is the value AT keyframe i, not an interpolated sample.
+    /// Allocated with `allocator`; caller frees the result.
+    pub fn values(self: FloatTrack, allocator: std.mem.Allocator) err.Error![]f32 {
+        const out = allocator.alloc(f32, self.numKeyframes()) catch return err.Error.OutOfMemory;
+        errdefer allocator.free(out);
+        try err.check(c.zozzFloatTrackValues(self.handle, out.ptr, out.len));
+        return out;
+    }
+
+    /// Each keyframe's interpolation mode, index-aligned with `ratios`.
+    /// Allocated with `allocator`; caller frees the result.
+    pub fn steps(self: FloatTrack, allocator: std.mem.Allocator) err.Error![]c.TrackInterpolation {
+        const out = allocator.alloc(c.TrackInterpolation, self.numKeyframes()) catch return err.Error.OutOfMemory;
+        errdefer allocator.free(out);
+        try err.check(c.zozzFloatTrackSteps(self.handle, out.ptr, out.len));
+        return out;
+    }
 };
 
 /// The C entry points for one vector track value type, gathered so the four
@@ -58,6 +91,10 @@ fn VectorOps(comptime Handle: type, comptime n: usize) type {
         destroy: fn (?*Handle) callconv(.c) void,
         name: fn (?*const Handle) callconv(.c) [*:0]const u8,
         sample: fn (*const Handle, f32, *[n]f32) callconv(.c) c.Result,
+        numKeyframes: fn (?*const Handle) callconv(.c) c_int,
+        ratios: fn (?*const Handle, [*]f32, usize) callconv(.c) c.Result,
+        values: fn (?*const Handle, [*][n]f32, usize) callconv(.c) c.Result,
+        steps: fn (?*const Handle, [*]c.TrackInterpolation, usize) callconv(.c) c.Result,
     };
 }
 
@@ -100,6 +137,39 @@ fn VectorTrack(comptime Handle: type, comptime n: usize, comptime ops: VectorOps
             try err.check(ops.sample(self.handle, ratio, &out));
             return out;
         }
+
+        /// Number of authored keyframes.
+        pub fn numKeyframes(self: Self) u32 {
+            return @intCast(ops.numKeyframes(self.handle));
+        }
+
+        /// Each keyframe's ratio, ascending. Allocated with `allocator`;
+        /// caller frees the result.
+        pub fn ratios(self: Self, allocator: std.mem.Allocator) err.Error![]f32 {
+            const out = allocator.alloc(f32, self.numKeyframes()) catch return err.Error.OutOfMemory;
+            errdefer allocator.free(out);
+            try err.check(ops.ratios(self.handle, out.ptr, out.len));
+            return out;
+        }
+
+        /// Each keyframe's authored value, index-aligned with `ratios` —
+        /// `out[i]` is the value AT keyframe i, not an interpolated sample.
+        /// Allocated with `allocator`; caller frees the result.
+        pub fn values(self: Self, allocator: std.mem.Allocator) err.Error![][n]f32 {
+            const out = allocator.alloc([n]f32, self.numKeyframes()) catch return err.Error.OutOfMemory;
+            errdefer allocator.free(out);
+            try err.check(ops.values(self.handle, out.ptr, out.len));
+            return out;
+        }
+
+        /// Each keyframe's interpolation mode, index-aligned with `ratios`.
+        /// Allocated with `allocator`; caller frees the result.
+        pub fn steps(self: Self, allocator: std.mem.Allocator) err.Error![]c.TrackInterpolation {
+            const out = allocator.alloc(c.TrackInterpolation, self.numKeyframes()) catch return err.Error.OutOfMemory;
+            errdefer allocator.free(out);
+            try err.check(ops.steps(self.handle, out.ptr, out.len));
+            return out;
+        }
     };
 }
 
@@ -109,6 +179,10 @@ pub const Float2Track = VectorTrack(c.Float2Track, 2, .{
     .destroy = c.zozzFloat2TrackDestroy,
     .name = c.zozzFloat2TrackName,
     .sample = c.zozzFloat2TrackSample,
+    .numKeyframes = c.zozzFloat2TrackNumKeyframes,
+    .ratios = c.zozzFloat2TrackRatios,
+    .values = c.zozzFloat2TrackValues,
+    .steps = c.zozzFloat2TrackSteps,
 });
 
 pub const Float3Track = VectorTrack(c.Float3Track, 3, .{
@@ -117,6 +191,10 @@ pub const Float3Track = VectorTrack(c.Float3Track, 3, .{
     .destroy = c.zozzFloat3TrackDestroy,
     .name = c.zozzFloat3TrackName,
     .sample = c.zozzFloat3TrackSample,
+    .numKeyframes = c.zozzFloat3TrackNumKeyframes,
+    .ratios = c.zozzFloat3TrackRatios,
+    .values = c.zozzFloat3TrackValues,
+    .steps = c.zozzFloat3TrackSteps,
 });
 
 pub const Float4Track = VectorTrack(c.Float4Track, 4, .{
@@ -125,16 +203,24 @@ pub const Float4Track = VectorTrack(c.Float4Track, 4, .{
     .destroy = c.zozzFloat4TrackDestroy,
     .name = c.zozzFloat4TrackName,
     .sample = c.zozzFloat4TrackSample,
+    .numKeyframes = c.zozzFloat4TrackNumKeyframes,
+    .ratios = c.zozzFloat4TrackRatios,
+    .values = c.zozzFloat4TrackValues,
+    .steps = c.zozzFloat4TrackSteps,
 });
 
-/// A quaternion track. `sample` returns (x, y, z, w) — w LAST, matching
-/// `Transform.rotation` and every other quaternion in this package.
+/// A quaternion track. `sample` and `values` return (x, y, z, w) — w LAST,
+/// matching `Transform.rotation` and every other quaternion in this package.
 pub const QuaternionTrack = VectorTrack(c.QuaternionTrack, 4, .{
     .loadFile = c.zozzQuaternionTrackLoadFile,
     .loadMemory = c.zozzQuaternionTrackLoadMemory,
     .destroy = c.zozzQuaternionTrackDestroy,
     .name = c.zozzQuaternionTrackName,
     .sample = c.zozzQuaternionTrackSample,
+    .numKeyframes = c.zozzQuaternionTrackNumKeyframes,
+    .ratios = c.zozzQuaternionTrackRatios,
+    .values = c.zozzQuaternionTrackValues,
+    .steps = c.zozzQuaternionTrackSteps,
 });
 
 //=============================================================================

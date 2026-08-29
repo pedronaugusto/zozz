@@ -76,6 +76,53 @@ void FillChildren(const ozz::vector<FlatJoint>& joints,
   }
 }
 
+/// Buckets `joints` by parent, recovering the same parent -> children
+/// adjacency the nested ozz tree would have — shared by the build path above
+/// and the breadth-first read-back below, so the two never compute it
+/// differently.
+void ComputeChildren(const ozz::vector<FlatJoint>& joints,
+                     ozz::vector<ozz::vector<int32_t>>* children,
+                     ozz::vector<int32_t>* roots) {
+  const size_t count = joints.size();
+  children->assign(count, {});
+  roots->clear();
+  for (size_t i = 0; i < count; ++i) {
+    const int32_t parent = joints[i].parent;
+    if (parent == ZOZZ_NO_PARENT) {
+      roots->push_back(static_cast<int32_t>(i));
+    } else {
+      (*children)[static_cast<size_t>(parent)].push_back(
+          static_cast<int32_t>(i));
+    }
+  }
+}
+
+/// The same recursion ozz::animation::offline::IterateJointsBF performs over
+/// its own nested Joint tree (raw_skeleton.h), addressed by insertion index
+/// instead of by Joint pointer: every joint in `level` visits before any of
+/// their children do. See zozzRawSkeletonIterateJointsBreadthFirst's doc
+/// comment for why that is not a single global level order once subtrees
+/// differ in depth.
+void IterateBreadthFirst(const ozz::vector<ozz::vector<int32_t>>& children,
+                         const ozz::vector<int32_t>& level, int32_t parent,
+                         ZozzJointVisitor visitor, void* user) {
+  for (int32_t joint : level) visitor(joint, parent, user);
+  for (int32_t joint : level) {
+    IterateBreadthFirst(children, children[static_cast<size_t>(joint)], joint,
+                        visitor, user);
+  }
+}
+
+/// Depth-first pre-order flattening of a nested ozz Joint tree, pushed into
+/// `out` — the reverse of FillChildren above, and what gives BuildFlatSkeleton
+/// below the same insertion-order convention zozzSkeletonBuild documents.
+void FlattenJoint(const ozz::animation::offline::RawSkeleton::Joint& joint,
+                  int32_t parent, ozz::vector<FlatJoint>* out) {
+  const int32_t index = static_cast<int32_t>(out->size());
+  out->push_back({parent, ozz::string(joint.name.c_str()), joint.transform});
+  for (const auto& child : joint.children) FlattenJoint(child, index, out);
+}
+
 }  // namespace
 
 //===----------------------------------------------------------------------===//
@@ -85,6 +132,39 @@ void FillChildren(const ozz::vector<FlatJoint>& joints,
 struct ZozzRawSkeleton {
   ozz::vector<FlatJoint> joints;
 };
+
+namespace zozz {
+
+ZozzResult BuildFlatSkeleton(const ozz::animation::offline::RawSkeleton& raw,
+                             ZozzRawSkeleton** out) {
+  if (out == nullptr) return ZOZZ_RESULT_INVALID_ARGUMENT;
+  *out = nullptr;
+  ZozzRawSkeleton* flat = zozz::New<ZozzRawSkeleton>();
+  if (flat == nullptr) return ZOZZ_RESULT_OUT_OF_MEMORY;
+  for (const auto& root : raw.roots) {
+    FlattenJoint(root, ZOZZ_NO_PARENT, &flat->joints);
+  }
+  *out = flat;
+  return ZOZZ_RESULT_OK;
+}
+
+ZozzResult FlattenToNestedSkeleton(const ZozzRawSkeleton* flat,
+                                   ozz::animation::offline::RawSkeleton* out) {
+  if (flat == nullptr || out == nullptr) return ZOZZ_RESULT_INVALID_ARGUMENT;
+  if (flat->joints.empty()) return ZOZZ_RESULT_INVALID_DATA;
+
+  ozz::vector<ozz::vector<int32_t>> children;
+  ozz::vector<int32_t> roots;
+  ComputeChildren(flat->joints, &children, &roots);
+
+  out->roots.resize(roots.size());
+  for (size_t i = 0; i < roots.size(); ++i) {
+    FillChildren(flat->joints, children, roots[i], &out->roots[i]);
+  }
+  return ZOZZ_RESULT_OK;
+}
+
+}  // namespace zozz
 
 // ZozzRawAnimation is defined in zozz_internal.h: zozz_optimizer.cpp needs the
 // complete type too (the animation optimizer, additive builder and motion
@@ -130,6 +210,57 @@ int zozzRawSkeletonNumJoints(const ZozzRawSkeleton* raw) {
   return raw == nullptr ? 0 : static_cast<int>(raw->joints.size());
 }
 
+const char* zozzRawSkeletonJointName(const ZozzRawSkeleton* raw,
+                                     int32_t joint) {
+  if (raw == nullptr) return nullptr;
+  if (joint < 0 || joint >= static_cast<int32_t>(raw->joints.size())) {
+    return nullptr;
+  }
+  return raw->joints[static_cast<size_t>(joint)].name.c_str();
+}
+
+int32_t zozzRawSkeletonJointParent(const ZozzRawSkeleton* raw, int32_t joint) {
+  if (raw == nullptr) return ZOZZ_NO_PARENT;
+  if (joint < 0 || joint >= static_cast<int32_t>(raw->joints.size())) {
+    return ZOZZ_NO_PARENT;
+  }
+  return raw->joints[static_cast<size_t>(joint)].parent;
+}
+
+ZozzResult zozzRawSkeletonJointRest(const ZozzRawSkeleton* raw, int32_t joint,
+                                    ZozzTransform* out) {
+  if (raw == nullptr || out == nullptr) return ZOZZ_RESULT_INVALID_ARGUMENT;
+  if (joint < 0 || joint >= static_cast<int32_t>(raw->joints.size())) {
+    return ZOZZ_RESULT_INVALID_ARGUMENT;
+  }
+  const ozz::math::Transform& rest =
+      raw->joints[static_cast<size_t>(joint)].rest;
+  out->translation[0] = rest.translation.x;
+  out->translation[1] = rest.translation.y;
+  out->translation[2] = rest.translation.z;
+  out->rotation[0] = rest.rotation.x;
+  out->rotation[1] = rest.rotation.y;
+  out->rotation[2] = rest.rotation.z;
+  out->rotation[3] = rest.rotation.w;
+  out->scale[0] = rest.scale.x;
+  out->scale[1] = rest.scale.y;
+  out->scale[2] = rest.scale.z;
+  return ZOZZ_RESULT_OK;
+}
+
+ZozzResult zozzRawSkeletonIterateJointsBreadthFirst(const ZozzRawSkeleton* raw,
+                                                    ZozzJointVisitor visitor,
+                                                    void* user) {
+  if (raw == nullptr || visitor == nullptr) {
+    return ZOZZ_RESULT_INVALID_ARGUMENT;
+  }
+  ozz::vector<ozz::vector<int32_t>> children;
+  ozz::vector<int32_t> roots;
+  ComputeChildren(raw->joints, &children, &roots);
+  IterateBreadthFirst(children, roots, ZOZZ_NO_PARENT, visitor, user);
+  return ZOZZ_RESULT_OK;
+}
+
 ZozzResult zozzSkeletonBuild(const ZozzRawSkeleton* raw, ZozzSkeleton** out) {
   if (raw == nullptr || out == nullptr) return ZOZZ_RESULT_INVALID_ARGUMENT;
   *out = nullptr;
@@ -139,17 +270,9 @@ ZozzResult zozzSkeletonBuild(const ZozzRawSkeleton* raw, ZozzSkeleton** out) {
   // depth-first from the roots. Insertion order is preserved within each
   // child list, which is what makes a depth-first insertion sequence come
   // out with identical indices.
-  const size_t count = raw->joints.size();
-  ozz::vector<ozz::vector<int32_t>> children(count);
+  ozz::vector<ozz::vector<int32_t>> children;
   ozz::vector<int32_t> roots;
-  for (size_t i = 0; i < count; ++i) {
-    const int32_t parent = raw->joints[i].parent;
-    if (parent == ZOZZ_NO_PARENT) {
-      roots.push_back(static_cast<int32_t>(i));
-    } else {
-      children[parent].push_back(static_cast<int32_t>(i));
-    }
-  }
+  ComputeChildren(raw->joints, &children, &roots);
 
   ozz::animation::offline::RawSkeleton raw_ozz;
   raw_ozz.roots.resize(roots.size());

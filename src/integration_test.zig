@@ -402,7 +402,7 @@ const WriteBuffer = struct {
     }
 
     fn stream(self: *WriteBuffer) zozz.Stream {
-        return .{ .opened = &opened, .write = &write, .user = self };
+        return .{ .opened = &opened, .write = &write, .read = null, .seek = null, .tell = null, .user = self };
     }
 };
 
@@ -421,7 +421,7 @@ test "an animation written through the archive and read back compares equal to t
     defer buffer.deinit();
     const bridge = buffer.stream();
 
-    const archive = try zozz.OArchive.init(&bridge);
+    const archive = try zozz.OArchive.init(&bridge, zozz.nativeEndianness());
     try archive.saveAnimation(original);
     archive.deinit();
 

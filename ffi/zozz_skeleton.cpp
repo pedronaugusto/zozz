@@ -4,10 +4,8 @@
 
 #include "zozz_internal.h"
 
-namespace {
+namespace zozz {
 
-/// Rejects a skeleton that parsed without complaint but describes something
-/// ozz's own jobs would refuse. A truncated archive can land here.
 ZozzResult ValidateSkeleton(const ozz::animation::Skeleton& skeleton) {
   const int joints = skeleton.num_joints();
   if (joints < 0 || joints > zozz::kMaxJoints) return ZOZZ_RESULT_BAD_FORMAT;
@@ -21,6 +19,10 @@ ZozzResult ValidateSkeleton(const ozz::animation::Skeleton& skeleton) {
   return ZOZZ_RESULT_OK;
 }
 
+}  // namespace zozz
+
+namespace {
+
 /// Shared tail of both load entry points: wrap the loaded impl in a handle, or
 /// destroy it and report why.
 ZozzResult FinishLoad(ZozzSkeleton* skeleton, ZozzResult load_result,
@@ -29,7 +31,7 @@ ZozzResult FinishLoad(ZozzSkeleton* skeleton, ZozzResult load_result,
     zozz::Delete(skeleton);
     return load_result;
   }
-  const ZozzResult valid = ValidateSkeleton(skeleton->impl);
+  const ZozzResult valid = zozz::ValidateSkeleton(skeleton->impl);
   if (valid != ZOZZ_RESULT_OK) {
     zozz::Delete(skeleton);
     return valid;

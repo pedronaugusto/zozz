@@ -59,6 +59,65 @@ pub const RawSkeleton = struct {
         return @intCast(c.zozzRawSkeletonNumJoints(self.handle));
     }
 
+    /// Borrowed name of the joint at insertion index `joint` — the index
+    /// `addJoint` returned, not a position in the depth-first tree `build`
+    /// produces. Null if `joint` is out of range. Valid only while `self` is
+    /// alive.
+    pub fn jointName(self: RawSkeleton, joint: u32) ?[:0]const u8 {
+        const name = c.zozzRawSkeletonJointName(self.handle, @intCast(joint)) orelse return null;
+        return std.mem.span(name);
+    }
+
+    /// Parent's insertion index, or null for a root. Out-of-range indices
+    /// also report null; check `numJoints` when the difference matters.
+    pub fn jointParent(self: RawSkeleton, joint: u32) ?u32 {
+        const parent = c.zozzRawSkeletonJointParent(self.handle, @intCast(joint));
+        return if (parent < 0) null else @intCast(parent);
+    }
+
+    /// The local-space rest transform authored for the joint at insertion
+    /// index `joint` — exactly what was last passed to `addJoint` for it.
+    pub fn jointRest(self: RawSkeleton, joint: u32) err.Error!math.Transform {
+        var out: math.Transform = undefined;
+        try err.check(c.zozzRawSkeletonJointRest(self.handle, @intCast(joint), &out));
+        return out;
+    }
+
+    /// Breadth-first traversal of the authored hierarchy, addressed by
+    /// insertion index rather than by the built index `build` would assign.
+    /// `context` must be a pointer; it is handed back to `visit` unchanged,
+    /// which is infallible — nothing that could unwind crosses the C
+    /// boundary this walks through.
+    ///
+    /// With more than one root, or subtrees of different depths, this is NOT
+    /// a single global level order: ozz visits every child of a joint, then
+    /// recurses fully into each of those children's own subtrees, before
+    /// moving on to the next root — so a grandchild of the first root can
+    /// visit before a child of the second one.
+    pub fn iterateJointsBreadthFirst(
+        self: RawSkeleton,
+        context: anytype,
+        comptime visit: fn (@TypeOf(context), joint: u32, parent: ?u32) void,
+    ) err.Error!void {
+        const Context = @TypeOf(context);
+        comptime if (@typeInfo(Context) != .pointer) {
+            @compileError("iterateJointsBreadthFirst: context must be a pointer");
+        };
+
+        const Trampoline = struct {
+            fn call(joint: c_int, parent: c_int, user: ?*anyopaque) callconv(.c) void {
+                const ctx: Context = @ptrCast(@alignCast(user.?));
+                const parent_joint: ?u32 = if (parent < 0) null else @intCast(parent);
+                visit(ctx, @intCast(joint), parent_joint);
+            }
+        };
+        try err.check(c.zozzRawSkeletonIterateJointsBreadthFirst(
+            self.handle,
+            &Trampoline.call,
+            @ptrCast(context),
+        ));
+    }
+
     /// Validates and builds a runtime skeleton. The raw skeleton is not
     /// consumed; it may be built again or extended further.
     pub fn build(self: RawSkeleton) err.Error!skeleton_mod.Skeleton {
@@ -253,6 +312,83 @@ test "builder: a non-depth-first insertion is reindexed depth-first" {
     try std.testing.expectEqualStrings("a", built.jointName(1).?);
     try std.testing.expectEqualStrings("c", built.jointName(2).?);
     try std.testing.expectEqualStrings("b", built.jointName(3).?);
+}
+
+test "raw skeleton read-back is addressed by insertion index, not the built order" {
+    const raw = try RawSkeleton.init();
+    defer raw.deinit();
+
+    // Same non-depth-first insertion as the test above: root, a, b,
+    // c(child of a). That test pins that the BUILT skeleton reindexes to
+    // root, a, c, b; the raw skeleton's own read-back must not follow suit —
+    // it stays addressed by insertion index no matter what building later
+    // does to the numbering.
+    const root = try raw.addJoint(null, "root", restAt(.{ 0, 0, 0 }));
+    const a = try raw.addJoint(root, "a", restAt(.{ 1, 0, 0 }));
+    const b = try raw.addJoint(root, "b", restAt(.{ 2, 0, 0 }));
+    const child = try raw.addJoint(a, "c", restAt(.{ 3, 0, 0 }));
+
+    try std.testing.expectEqual(@as(u32, 4), raw.numJoints());
+
+    try std.testing.expectEqualStrings("root", raw.jointName(root).?);
+    try std.testing.expectEqualStrings("a", raw.jointName(a).?);
+    try std.testing.expectEqualStrings("b", raw.jointName(b).?);
+    try std.testing.expectEqualStrings("c", raw.jointName(child).?);
+
+    try std.testing.expectEqual(@as(?u32, null), raw.jointParent(root));
+    try std.testing.expectEqual(@as(?u32, root), raw.jointParent(a));
+    try std.testing.expectEqual(@as(?u32, root), raw.jointParent(b));
+    try std.testing.expectEqual(@as(?u32, a), raw.jointParent(child));
+
+    try std.testing.expectEqual(@as(f32, 2), (try raw.jointRest(b)).translation[0]);
+    try std.testing.expectEqual(@as(f32, 3), (try raw.jointRest(child)).translation[0]);
+
+    // Out of range is a clean null/error, not a crash.
+    try std.testing.expectEqual(@as(?[:0]const u8, null), raw.jointName(99));
+    try std.testing.expectEqual(@as(?u32, null), raw.jointParent(99));
+    try std.testing.expectError(error.InvalidArgument, raw.jointRest(99));
+}
+
+test "raw skeleton breadth-first traversal is per-subtree, not a single global level order" {
+    const raw = try RawSkeleton.init();
+    defer raw.deinit();
+
+    // Two roots, asymmetric depth: root_a -> a1 -> a1a is two levels deep;
+    // root_b -> b1 is one. A true global level order would visit b1 (depth 1)
+    // before a1a (depth 2); ozz's own IterateJointsBF does not — it finishes
+    // root_a's whole subtree before starting root_b's, so a1a visits first.
+    const root_a = try raw.addJoint(null, "root_a", math.transform_identity);
+    const a1 = try raw.addJoint(root_a, "a1", math.transform_identity);
+    const a1a = try raw.addJoint(a1, "a1a", math.transform_identity);
+    const root_b = try raw.addJoint(null, "root_b", math.transform_identity);
+    const b1 = try raw.addJoint(root_b, "b1", math.transform_identity);
+
+    const Visit = struct { joint: u32, parent: ?u32 };
+    const Context = struct {
+        visits: [5]Visit = undefined,
+        count: usize = 0,
+    };
+    var ctx = Context{};
+
+    try raw.iterateJointsBreadthFirst(&ctx, struct {
+        fn visit(context: *Context, joint: u32, parent: ?u32) void {
+            context.visits[context.count] = .{ .joint = joint, .parent = parent };
+            context.count += 1;
+        }
+    }.visit);
+
+    const expected = [_]Visit{
+        .{ .joint = root_a, .parent = null },
+        .{ .joint = root_b, .parent = null },
+        .{ .joint = a1, .parent = root_a },
+        .{ .joint = a1a, .parent = a1 },
+        .{ .joint = b1, .parent = root_b },
+    };
+    try std.testing.expectEqual(expected.len, ctx.count);
+    for (expected, 0..) |exp, i| {
+        try std.testing.expectEqual(exp.joint, ctx.visits[i].joint);
+        try std.testing.expectEqual(exp.parent, ctx.visits[i].parent);
+    }
 }
 
 test "builder: a built animation samples what was authored" {

@@ -350,8 +350,10 @@ that a reflective cross-check pairs at build time:
   root-motion extraction
 - Raw tracks: the same five value types on the authoring side, with their own
   builders and optimizers
-- The `OArchive` write path: saving a skeleton or a clip to a host-controlled
-  stream, or straight to a file
+- The archive: saving a skeleton, a clip or a track to a host-controlled
+  stream (or straight to a file) with `OArchive`, and reading them back from
+  one with `IArchive` — including a tag test that answers "is the next object
+  a T?" without consuming it, for a host reading a mixed archive
 
 Importers (glTF and friends) are not exposed; see below for why.
 

@@ -5,6 +5,11 @@
 // Mirrors ozz's own skeleton_utils.h and animation_utils.h. Pulled into
 // zozz.h — the umbrella — so a consumer needs only that one include; this
 // header stands on its own only because zozz.h pulls it in.
+//
+// The traversal callback, ZozzJointVisitor, is declared in zozz.h itself
+// rather than here — zozz_offline.h's raw-skeleton traversal shares it, and
+// zozz.h is the one place both can reach without depending on which of the
+// two a translation unit happens to include first.
 //===----------------------------------------------------------------------===//
 
 #ifndef ZOZZ_UTILS_H_
@@ -52,13 +57,6 @@ ZOZZ_API ZozzResult zozzSkeletonJointIsLeaf(const ZozzSkeleton* skeleton,
 /// `skeleton` or `name` is NULL, or no joint matches.
 ZOZZ_API int zozzSkeletonFindJoint(const ZozzSkeleton* skeleton,
                                    const char* name);
-
-/// Visits one joint of a traversal. `parent` is ZOZZ_NO_PARENT when `joint`
-/// is a root of the traversal. Must not throw or unwind: nothing on this
-/// side of the call can propagate an exception across it, and a Zig
-/// implementation must stash any error in `user` and re-raise it after the
-/// call returns rather than crossing the boundary with it.
-typedef void (*ZozzJointVisitor)(int joint, int parent, void* user);
 
 /// Depth-first traversal of the joints at or below `from`. Pass
 /// ZOZZ_NO_PARENT to traverse the whole hierarchy, including every root when

@@ -68,6 +68,14 @@ const ozz_offline_sources = [_][]const u8{
     "libs/ozz/src/animation/offline/track_optimizer.cc",
 };
 
+/// ozz's command-line option parser. Kept out of ozz_runtime_sources above,
+/// unlike everything else the runtime needs: it is optional (-Doptions,
+/// default off) and writes to <iostream> in about twenty places, which no
+/// unconditionally-compiled zozz source does.
+const ozz_options_sources = [_][]const u8{
+    "libs/ozz/src/options/options.cc",
+};
+
 /// The zozz C boundary. One translation unit per concern — deliberately not a
 /// single monolithic binding file.
 const zozz_ffi_sources = [_][]const u8{
@@ -87,9 +95,22 @@ const zozz_ffi_sources = [_][]const u8{
     "ffi/zozz_motion.cpp",
     "ffi/zozz_blending.cpp",
     "ffi/zozz_archive.cpp",
+    "ffi/zozz_encode.cpp",
+    "ffi/zozz_options.cpp",
+    "ffi/zozz_gltf.cpp",
 };
 
-// Refuses a source listed twice, across all three lists at once.
+/// The -Dgltf half of the importer: wraps ozz's vendored GltfImporter
+/// (gltf2ozz.cc, which #include's tinygltf) as a ZozzImporter. Kept out of
+/// zozz_ffi_sources above because it pulls in tinygltf's whole
+/// TINYGLTF_IMPLEMENTATION, weight a runtime-only consumer should not pay
+/// for; see ffi/zozz_gltf_backend.cpp for why it is one file rather than
+/// gltf2ozz.cc compiled directly.
+const zozz_gltf_backend_sources = [_][]const u8{
+    "ffi/zozz_gltf_backend.cpp",
+};
+
+// Refuses a source listed twice, across all five lists at once.
 //
 // A duplicate is invisible in a static archive — the linker takes one member
 // and never looks at the other — so it survives every default build and every
@@ -99,7 +120,10 @@ const zozz_ffi_sources = [_][]const u8{
 // exactly that reason before this check existed.
 comptime {
     @setEvalBranchQuota(100_000);
-    const lists = .{ ozz_runtime_sources, ozz_offline_sources, zozz_ffi_sources };
+    const lists = .{
+        ozz_runtime_sources, ozz_offline_sources,       ozz_options_sources,
+        zozz_ffi_sources,    zozz_gltf_backend_sources,
+    };
     var all: []const []const u8 = &.{};
     for (lists) |list| all = all ++ @as([]const []const u8, &list);
     for (all, 0..) |a, i| {
@@ -145,6 +169,22 @@ pub fn build(b: *std.Build) void {
             bool,
             "sanitize_c",
             "Compile the C and C++ with Zig's undefined-behaviour sanitizer",
+        ) orelse false,
+        // Off by default: options.cc writes to <iostream> in about twenty
+        // places, and zozz otherwise never pulls that header in. A consumer
+        // who only wants the runtime should not pay for it.
+        .options = b.option(
+            bool,
+            "options",
+            "Build ozz's command-line option parser and the OzzImporter " ++
+                "host-implementable interface / CLI driver (zozz_options.h, " ++
+                "zozz_gltf.h)",
+        ) orelse false,
+        // Off by default: pulls in tinygltf's whole TINYGLTF_IMPLEMENTATION.
+        .gltf = b.option(
+            bool,
+            "gltf",
+            "Build the concrete glTF importer backend (zozz_gltf.h)",
         ) orelse false,
     };
 
@@ -229,6 +269,27 @@ pub fn build(b: *std.Build) void {
         .files = &zozz_ffi_sources,
         .flags = cxx_flags,
     });
+
+    // -Doptions / -Dgltf: see ozz_options_sources / zozz_gltf_backend_sources
+    // above for why each is kept out of the unconditional lists. The macros
+    // gate zozz_options.cpp's and zozz_gltf.cpp's own implementations (always
+    // compiled, in zozz_ffi_sources above) between the real thing and a
+    // ZOZZ_RESULT_UNSUPPORTED stub — see those files' own comments.
+    if (options.options) {
+        lib.root_module.addCMacro("ZOZZ_WITH_OPTIONS", "");
+        lib.root_module.addCSourceFiles(.{
+            .files = &ozz_options_sources,
+            .flags = ozz_cxx_flags,
+        });
+    }
+    if (options.gltf) {
+        lib.root_module.addCMacro("ZOZZ_WITH_GLTF", "");
+        lib.root_module.addCSourceFiles(.{
+            .files = &zozz_gltf_backend_sources,
+            .flags = ozz_cxx_flags,
+        });
+    }
+
     lib.root_module.sanitize_c = if (options.sanitize_c) .full else .off;
 
     // Consumers get the public headers without reaching into the source tree.
@@ -251,6 +312,9 @@ pub fn build(b: *std.Build) void {
     lib.installHeader(b.path("ffi/zozz_track.h"), "zozz_track.h");
     lib.installHeader(b.path("ffi/zozz_blending.h"), "zozz_blending.h");
     lib.installHeader(b.path("ffi/zozz_archive.h"), "zozz_archive.h");
+    lib.installHeader(b.path("ffi/zozz_encode.h"), "zozz_encode.h");
+    lib.installHeader(b.path("ffi/zozz_options.h"), "zozz_options.h");
+    lib.installHeader(b.path("ffi/zozz_gltf.h"), "zozz_gltf.h");
 
     //=====================================================================
     // The Zig module.

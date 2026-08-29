@@ -1,0 +1,19 @@
+# AREA<TAB>NAME<TAB>VERDICT<TAB>EVIDENCE — one line per name tools/coverage.sh
+# reports unbound, keyed by the area it was found in.
+#
+#   BOUND      crosses the ABI; evidence names the zozz entry points.
+#   EXTENSION  a C++ virtual delivered as a C callback; evidence names it.
+#   LANGUAGE   Zig provides it; evidence names the facility.
+#   ZIG        zozz provides it in Zig without crossing the ABI; evidence is
+#              src/FILE.zig:decl.
+#   INTERNAL   upstream marks it internal, it has no public declaration, or
+#              this build compiles no source for it. tools/classify.sh
+#              computes this; nothing else may claim it.
+#   GAP        work. ci/check-coverage.sh fails while any remain.
+base/memory	Allocate	INTERNAL	upstream libs/ozz/include/ozz/animation/runtime/animation.h:169 (decl)
+base/memory	Deallocate	INTERNAL	upstream libs/ozz/include/ozz/animation/runtime/track.h:46 (namespace)
+base/memory	Delete	LANGUAGE	std.mem.Allocator; Zig passes allocators explicitly
+base/memory	New	LANGUAGE	std.mem.Allocator; Zig passes allocators explicitly
+base/memory	SetDefaulAllocator	BOUND	zozzSetAllocator ZozzAllocator
+base/memory	default_allocator	BOUND	zozzGetAllocator ZozzAllocator zozzSetAllocator
+base/memory	make_unique	LANGUAGE	std.mem.Allocator; Zig passes allocators explicitly

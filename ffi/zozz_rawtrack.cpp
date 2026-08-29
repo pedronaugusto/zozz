@@ -29,20 +29,27 @@ bool FiniteN(const float* v, int n) {
   return true;
 }
 
-bool ValidInterpolation(ZozzTrackInterpolation interpolation) {
+// Both of these read the parameter's bytes rather than its value — see
+// RawEnum in zozz_internal.h. A host can pass any integer here.
+// These take the raw integer, not ZozzTrackInterpolation. Passing the enum by
+// value anywhere — even to a helper that means to validate it — is itself a
+// load of the enum, and undefined when a host passed a value no enumerator
+// names. It is converted once, with zozz::RawEnum, at the entry point that
+// receives it, and travels as a number from there.
+bool ValidInterpolation(int32_t interpolation) {
   return interpolation == ZOZZ_TRACK_INTERPOLATION_STEP ||
-        interpolation == ZOZZ_TRACK_INTERPOLATION_LINEAR;
+         interpolation == ZOZZ_TRACK_INTERPOLATION_LINEAR;
 }
 
 ozz::animation::offline::RawTrackInterpolation::Value ToOzz(
-    ZozzTrackInterpolation interpolation) {
+    int32_t interpolation) {
   return interpolation == ZOZZ_TRACK_INTERPOLATION_STEP
-            ? ozz::animation::offline::RawTrackInterpolation::kStep
-            : ozz::animation::offline::RawTrackInterpolation::kLinear;
+             ? ozz::animation::offline::RawTrackInterpolation::kStep
+             : ozz::animation::offline::RawTrackInterpolation::kLinear;
 }
 
 /// Shared push-keyframe argument validation across all five track types.
-ZozzResult CheckPushKeyframe(ZozzTrackInterpolation interpolation, float ratio,
+ZozzResult CheckPushKeyframe(int32_t interpolation, float ratio,
                              const float* value, int value_count) {
   if (value == nullptr) return ZOZZ_RESULT_INVALID_ARGUMENT;
   if (!ValidInterpolation(interpolation)) return ZOZZ_RESULT_INVALID_ARGUMENT;
@@ -98,9 +105,10 @@ ZozzResult zozzRawFloatTrackPushKeyframe(ZozzRawFloatTrack* raw,
                                          ZozzTrackInterpolation interpolation,
                                          float ratio, float value) {
   if (raw == nullptr) return ZOZZ_RESULT_INVALID_ARGUMENT;
-  const ZozzResult check = CheckPushKeyframe(interpolation, ratio, &value, 1);
+  const int32_t interp = zozz::RawEnum(interpolation);
+  const ZozzResult check = CheckPushKeyframe(interp, ratio, &value, 1);
   if (check != ZOZZ_RESULT_OK) return check;
-  raw->impl.keyframes.push_back({ToOzz(interpolation), ratio, value});
+  raw->impl.keyframes.push_back({ToOzz(interp), ratio, value});
   return ZOZZ_RESULT_OK;
 }
 
@@ -156,10 +164,11 @@ ZozzResult zozzRawFloat2TrackPushKeyframe(ZozzRawFloat2Track* raw,
                                           ZozzTrackInterpolation interpolation,
                                           float ratio, const float value[2]) {
   if (raw == nullptr) return ZOZZ_RESULT_INVALID_ARGUMENT;
-  const ZozzResult check = CheckPushKeyframe(interpolation, ratio, value, 2);
+  const int32_t interp = zozz::RawEnum(interpolation);
+  const ZozzResult check = CheckPushKeyframe(interp, ratio, value, 2);
   if (check != ZOZZ_RESULT_OK) return check;
   raw->impl.keyframes.push_back(
-      {ToOzz(interpolation), ratio, ozz::math::Float2(value[0], value[1])});
+      {ToOzz(interp), ratio, ozz::math::Float2(value[0], value[1])});
   return ZOZZ_RESULT_OK;
 }
 
@@ -215,9 +224,10 @@ ZozzResult zozzRawFloat3TrackPushKeyframe(ZozzRawFloat3Track* raw,
                                           ZozzTrackInterpolation interpolation,
                                           float ratio, const float value[3]) {
   if (raw == nullptr) return ZOZZ_RESULT_INVALID_ARGUMENT;
-  const ZozzResult check = CheckPushKeyframe(interpolation, ratio, value, 3);
+  const int32_t interp = zozz::RawEnum(interpolation);
+  const ZozzResult check = CheckPushKeyframe(interp, ratio, value, 3);
   if (check != ZOZZ_RESULT_OK) return check;
-  raw->impl.keyframes.push_back({ToOzz(interpolation), ratio,
+  raw->impl.keyframes.push_back({ToOzz(interp), ratio,
                                  ozz::math::Float3(value[0], value[1], value[2])});
   return ZOZZ_RESULT_OK;
 }
@@ -274,10 +284,11 @@ ZozzResult zozzRawFloat4TrackPushKeyframe(ZozzRawFloat4Track* raw,
                                           ZozzTrackInterpolation interpolation,
                                           float ratio, const float value[4]) {
   if (raw == nullptr) return ZOZZ_RESULT_INVALID_ARGUMENT;
-  const ZozzResult check = CheckPushKeyframe(interpolation, ratio, value, 4);
+  const int32_t interp = zozz::RawEnum(interpolation);
+  const ZozzResult check = CheckPushKeyframe(interp, ratio, value, 4);
   if (check != ZOZZ_RESULT_OK) return check;
   raw->impl.keyframes.push_back(
-      {ToOzz(interpolation), ratio,
+      {ToOzz(interp), ratio,
        ozz::math::Float4(value[0], value[1], value[2], value[3])});
   return ZOZZ_RESULT_OK;
 }
@@ -336,10 +347,11 @@ ZozzResult zozzRawQuaternionTrackPushKeyframe(
     ZozzRawQuaternionTrack* raw, ZozzTrackInterpolation interpolation,
     float ratio, const float value[4]) {
   if (raw == nullptr) return ZOZZ_RESULT_INVALID_ARGUMENT;
-  const ZozzResult check = CheckPushKeyframe(interpolation, ratio, value, 4);
+  const int32_t interp = zozz::RawEnum(interpolation);
+  const ZozzResult check = CheckPushKeyframe(interp, ratio, value, 4);
   if (check != ZOZZ_RESULT_OK) return check;
   raw->impl.keyframes.push_back(
-      {ToOzz(interpolation), ratio,
+      {ToOzz(interp), ratio,
        ozz::math::Quaternion(value[0], value[1], value[2], value[3])});
   return ZOZZ_RESULT_OK;
 }

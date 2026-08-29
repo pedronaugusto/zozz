@@ -37,6 +37,115 @@ test "a float track returns keyframe values exactly and interpolates between the
     try std.testing.expectApproxEqAbs(@as(f32, 5.0), try track.sample(0.75), 1e-2);
 }
 
+test "a float track's keyframe read-back matches what was authored, across a bitset byte boundary" {
+    const gpa = std.testing.allocator;
+    try zozz.setAllocator(gpa);
+    defer zozz.resetAllocator();
+
+    // 12 keys — more than the 8 that fit in one byte of the packed steps
+    // bitset (Track::steps(), one bit per key) — alternating step and linear,
+    // so decoding a byte boundary wrong (an off-by-one in i/8 or i%8) shows up
+    // as a wrong entry at index 8 or later rather than passing on 8-or-fewer
+    // keys by accident. front()/back() sit exactly at ratio 0 and 1, so the
+    // builder patches nothing in and the built track holds exactly these 12
+    // keys, in this order.
+    const raw = try zozz.RawFloatTrack.init();
+    defer raw.deinit();
+    const count = 12;
+    for (0..count) |i| {
+        const ratio: f32 = @as(f32, @floatFromInt(i)) / @as(f32, @floatFromInt(count - 1));
+        const value: f32 = @floatFromInt(i);
+        const interpolation: zozz.TrackInterpolation = if (i % 2 == 0) .step else .linear;
+        try raw.pushKeyframe(interpolation, ratio, value);
+    }
+
+    const track = try buildTrack(raw);
+    defer track.deinit();
+
+    try std.testing.expectEqual(@as(u32, count), track.numKeyframes());
+
+    const ratios = try track.ratios(gpa);
+    defer gpa.free(ratios);
+    const values = try track.values(gpa);
+    defer gpa.free(values);
+    const steps = try track.steps(gpa);
+    defer gpa.free(steps);
+
+    try std.testing.expectEqual(@as(usize, count), ratios.len);
+    try std.testing.expectEqual(@as(usize, count), values.len);
+    try std.testing.expectEqual(@as(usize, count), steps.len);
+
+    for (0..count) |i| {
+        const expected_ratio: f32 = @as(f32, @floatFromInt(i)) / @as(f32, @floatFromInt(count - 1));
+        try std.testing.expectApproxEqAbs(expected_ratio, ratios[i], 1e-6);
+        try std.testing.expectEqual(@as(f32, @floatFromInt(i)), values[i]);
+        const expected: zozz.TrackInterpolation = if (i % 2 == 0) .step else .linear;
+        try std.testing.expectEqual(expected, steps[i]);
+    }
+}
+
+test "a float3 track's keyframe read-back matches what was authored" {
+    const gpa = std.testing.allocator;
+    try zozz.setAllocator(gpa);
+    defer zozz.resetAllocator();
+
+    const raw = try zozz.RawFloat3Track.init();
+    defer raw.deinit();
+    try raw.pushKeyframe(.linear, 0.0, .{ 1, 2, 3 });
+    try raw.pushKeyframe(.step, 0.5, .{ -1, -2, -3 });
+    try raw.pushKeyframe(.linear, 1.0, .{ 0, 0, 0 });
+
+    const track = try raw.build();
+    defer track.deinit();
+
+    try std.testing.expectEqual(@as(u32, 3), track.numKeyframes());
+
+    const ratios = try track.ratios(gpa);
+    defer gpa.free(ratios);
+    try std.testing.expectEqualSlices(f32, &.{ 0.0, 0.5, 1.0 }, ratios);
+
+    const values = try track.values(gpa);
+    defer gpa.free(values);
+    try std.testing.expectEqual(@as(usize, 3), values.len);
+    try std.testing.expectEqual([3]f32{ 1, 2, 3 }, values[0]);
+    try std.testing.expectEqual([3]f32{ -1, -2, -3 }, values[1]);
+    try std.testing.expectEqual([3]f32{ 0, 0, 0 }, values[2]);
+
+    const steps = try track.steps(gpa);
+    defer gpa.free(steps);
+    try std.testing.expectEqualSlices(
+        zozz.TrackInterpolation,
+        &.{ .linear, .step, .linear },
+        steps,
+    );
+}
+
+test "a quaternion track's keyframe read-back preserves x, y, z, w order" {
+    const gpa = std.testing.allocator;
+    try zozz.setAllocator(gpa);
+    defer zozz.resetAllocator();
+
+    // A 90-degree turn about Z: identity, then (0, 0, sin45, cos45) — w LAST,
+    // matching every other quaternion in this package.
+    const half_turn: f32 = std.math.sqrt2 / 2.0;
+    const raw = try zozz.RawQuaternionTrack.init();
+    defer raw.deinit();
+    try raw.pushKeyframe(.linear, 0.0, .{ 0, 0, 0, 1 });
+    try raw.pushKeyframe(.linear, 1.0, .{ 0, 0, half_turn, half_turn });
+
+    const track = try raw.build();
+    defer track.deinit();
+
+    const values = try track.values(gpa);
+    defer gpa.free(values);
+    try std.testing.expectEqual(@as(usize, 2), values.len);
+    try std.testing.expectEqual([4]f32{ 0, 0, 0, 1 }, values[0]);
+    try std.testing.expectApproxEqAbs(@as(f32, 0.0), values[1][0], 1e-6);
+    try std.testing.expectApproxEqAbs(@as(f32, 0.0), values[1][1], 1e-6);
+    try std.testing.expectApproxEqAbs(half_turn, values[1][2], 1e-6);
+    try std.testing.expectApproxEqAbs(half_turn, values[1][3], 1e-6);
+}
+
 test "the triggering iterator yields the edges of a step function, in order" {
     const gpa = std.testing.allocator;
     try zozz.setAllocator(gpa);

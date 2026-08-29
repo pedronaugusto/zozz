@@ -86,18 +86,50 @@ pub const SamplingJob = struct {
 /// `root` pre-multiplies the whole hierarchy; pass null for identity. `out`
 /// must hold at least the skeleton's joint count and, being an array of
 /// 16-byte-aligned matrices, must itself start on a 16-byte boundary.
+///
+/// `from`, `to` and `from_excluded` narrow the walk to one chain, which is
+/// what an IK correction wants: re-running the whole skeleton to move three
+/// joints is the expensive way to do it. They default to the whole hierarchy.
 pub const LocalToModelJob = struct {
     skeleton: Skeleton,
     locals: SoaPose,
     root: ?*const math.Mat4,
     out: []math.Mat4,
 
+    /// First joint to update, or `null` for the root. `out` must still cover
+    /// every joint either way: ancestors outside the range are read to place
+    /// the ones inside it.
+    from: ?u32 = null,
+    /// Last joint to update, inclusive, or `null` for the last joint.
+    to: ?u32 = null,
+    /// Leave `from` itself untouched and start at its children. It must
+    /// already hold a valid model-space matrix in `out`, since its children
+    /// are expressed relative to it — this is the combination that finishes a
+    /// chain whose first joint the correction already moved.
+    from_excluded: bool = false,
+
     /// Runs the local-to-model job.
     pub fn run(self: LocalToModelJob) err.Error!void {
-        try err.check(c.zozzLocalToModel(
+        // The unrestricted walk keeps its own entry point rather than passing
+        // sentinels to the range one: it is the common case, it is what a C
+        // caller reaches for, and routing both through one of them would mean
+        // only one of the two was ever exercised.
+        if (self.from == null and self.to == null and !self.from_excluded) {
+            return err.check(c.zozzLocalToModel(
+                self.skeleton.handle,
+                self.locals.handle,
+                self.root,
+                self.out.ptr,
+                self.out.len,
+            ));
+        }
+        try err.check(c.zozzLocalToModelRange(
             self.skeleton.handle,
             self.locals.handle,
             self.root,
+            if (self.from) |f| @intCast(f) else c.no_parent,
+            if (self.to) |t| @intCast(t) else std.math.maxInt(c_int),
+            @intFromBool(self.from_excluded),
             self.out.ptr,
             self.out.len,
         ));

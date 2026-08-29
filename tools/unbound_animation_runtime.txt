@@ -1,0 +1,37 @@
+# AREA<TAB>NAME<TAB>VERDICT<TAB>EVIDENCE — one line per name tools/coverage.sh
+# reports unbound, keyed by the area it was found in.
+#
+#   BOUND      crosses the ABI; evidence names the zozz entry points.
+#   EXTENSION  a C++ virtual delivered as a C callback; evidence names it.
+#   LANGUAGE   Zig provides it; evidence names the facility.
+#   ZIG        zozz provides it in Zig without crossing the ABI; evidence is
+#              src/FILE.zig:decl.
+#   INTERNAL   upstream marks it internal, it has no public declaration, or
+#              this build compiles no source for it. tools/classify.sh
+#              computes this; nothing else may claim it.
+#   GAP        work. ci/check-coverage.sh fails while any remain.
+animation/runtime	Allocate	INTERNAL	upstream libs/ozz/include/ozz/animation/runtime/animation.h:169 (decl)
+animation/runtime	CountRotationKeyframes	BOUND	zozzAnimationCountRotationKeys
+animation/runtime	CountScaleKeyframes	BOUND	zozzAnimationCountScaleKeys
+animation/runtime	CountTranslationKeyframes	BOUND	zozzAnimationCountTranslationKeys
+animation/runtime	Deallocate	INTERNAL	upstream libs/ozz/include/ozz/animation/runtime/track.h:46 (namespace)
+animation/runtime	Distance	INTERNAL	upstream libs/ozz/include/ozz/animation/runtime/track.h:46 (namespace)
+animation/runtime	GetJointRestPoseLocalSpace	BOUND	zozzSkeletonJointRestPoseLocal
+animation/runtime	GetRestPoseModelSpace	BOUND	zozzSkeletonRestPoseModelSpace
+animation/runtime	IterateJointsDF	BOUND	zozzSkeletonIterateJointsDepthFirst ZozzSkeleton ZozzJointVisitor
+animation/runtime	IterateJointsDFReverse	BOUND	zozzSkeletonIterateJointsDepthFirstReverse
+animation/runtime	Lerp	INTERNAL	upstream libs/ozz/include/ozz/animation/runtime/track.h:46 (namespace)
+animation/runtime	Validate	BOUND	ZOZZ_RESULT_JOB_INVALID zozzSample zozzLocalToModel zozzBlendingRun zozzSkinningJobRun zozzIKTwoBoneJobRun zozzFloatTrackTriggeringJobRun zozzSkeletonBuild zozzAnimationBuild zozzFloatTrackBuild ZOZZ_RESULT_INVALID_DATA zozzIArchiveTestSkeleton
+animation/runtime	end	BOUND	zozzTrackTriggeringIteratorValid zozzFloatTrackTriggeringJobRun zozz zozzSkeletonNumJoints
+animation/runtime	joint_names	BOUND	zozzSkeletonJointName zozzSkeletonNumJoints
+animation/runtime	joint_parents	BOUND	zozzSkeletonJointParent
+animation/runtime	joint_rest_poses	BOUND	zozzSkeletonRestPose
+animation/runtime	max_soa_tracks	BOUND	zozzSamplingContextMaxTracks
+animation/runtime	rising	BOUND	ZozzTrackEdge zozzFloatTrackTriggeringJobRun zozzTrackTriggeringIteratorGet
+animation/runtime	rotations_ctrl	BOUND	zozzAnimationKeyframesCtrl ZOZZ_KEYFRAME_CHANNEL_ROTATION
+animation/runtime	rotations_values	INTERNAL	upstream libs/ozz/include/ozz/animation/runtime/animation.h:147 (type)
+animation/runtime	scales_ctrl	BOUND	zozzAnimationKeyframesCtrl ZOZZ_KEYFRAME_CHANNEL_SCALE
+animation/runtime	scales_values	INTERNAL	upstream libs/ozz/include/ozz/animation/runtime/animation.h:153 (type)
+animation/runtime	size_bytes	LANGUAGE	Zig slices and std.ArrayList
+animation/runtime	translations_ctrl	BOUND	zozzAnimationKeyframesCtrl ZOZZ_KEYFRAME_CHANNEL_TRANSLATION
+animation/runtime	translations_values	INTERNAL	upstream libs/ozz/include/ozz/animation/runtime/animation.h:141 (type)
