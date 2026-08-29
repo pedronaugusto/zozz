@@ -29,13 +29,12 @@ bool FiniteN(const float* v, int n) {
   return true;
 }
 
-// Both of these read the parameter's bytes rather than its value — see
-// RawEnum in zozz_internal.h. A host can pass any integer here.
-// These take the raw integer, not ZozzTrackInterpolation. Passing the enum by
-// value anywhere — even to a helper that means to validate it — is itself a
-// load of the enum, and undefined when a host passed a value no enumerator
-// names. It is converted once, with zozz::RawEnum, at the entry point that
-// receives it, and travels as a number from there.
+// Takes the raw integer, not ZozzTrackInterpolation — see RawEnum in
+// zozz_internal.h. Passing the enum by value anywhere, even to a helper
+// meant to validate it, is itself a load of the enum, and undefined when a
+// host passes a value no enumerator names. The value is converted once, with
+// zozz::RawEnum, at the entry point that receives it, and travels as a
+// number from there.
 bool ValidInterpolation(int32_t interpolation) {
   return interpolation == ZOZZ_TRACK_INTERPOLATION_STEP ||
          interpolation == ZOZZ_TRACK_INTERPOLATION_LINEAR;

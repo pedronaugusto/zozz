@@ -1,26 +1,16 @@
 //===----------------------------------------------------------------------===//
 // zozz — core types and conventions: version, results, the allocator seam,
-// plain-data types, and the ABI layout guard.
-//
-// This is the foundation every other zozz header builds on — ZOZZ_API,
-// ZozzResult, ZozzTransform and ZozzFloat4x4 all live here, and the
-// conventions that apply to the whole C ABI are documented once, in this
-// file, rather than repeated per header.
-//
-// No exceptions cross this boundary; ozz is compiled -fno-exceptions. Opaque
-// handles, POD structs with fixed layout, and a flat error enum are the only
-// currency.
-//
-// Ownership rules, uniformly:
-//   *Create / *Load  allocate through the installed allocator and yield a
-//                    handle the caller owns.
-//   *Destroy         accepts NULL and is idempotent-safe on a NULL handle.
-//   Query accessors  never allocate; returned pointers borrow from the handle
-//                    and die with it.
-//
-// Thread safety: handles are not internally synchronised. Distinct handles may
-// be used concurrently. A ZozzSamplingContext is single-threaded state — one
-// per concurrently-sampled animation instance.
+// plain-data types, and the ABI layout guard. Every other zozz header builds
+// on this one, and ABI-wide conventions are documented once, here. No
+// exceptions cross this boundary (ozz is compiled -fno-exceptions); the only
+// currency is opaque handles, POD structs with fixed layout, and a flat
+// error enum. Ownership: *Create/*Load allocate through the installed
+// allocator and yield a caller-owned handle. *Destroy accepts NULL and is
+// idempotent on NULL. Query accessors never allocate; returned pointers
+// borrow from the handle and die with it. Thread safety: handles are not
+// internally synchronised, but distinct handles may be used concurrently. A
+// ZozzSamplingContext is single-threaded state, one per concurrently-sampled
+// animation instance.
 //===----------------------------------------------------------------------===//
 
 #ifndef ZOZZ_CORE_H_
@@ -66,20 +56,12 @@ ZOZZ_API uint32_t zozzOzzVersion(void);
 // Results
 //===----------------------------------------------------------------------===//
 
-// Every enumerator carries its type's name: ZOZZ_RESULT_<WHAT>, never
-// ZOZZ_<WHAT>. That is not house style, it is what makes the enum checkable.
-// The comptime cross-check in ../src/abi_check.zig pairs each Zig enum field
-// with a header enumerator by computing `ZOZZ_` + TYPE + `_` + FIELD, and it
-// has to, because a C enum reaches Zig as a plain integer alias with no
-// record of which enumerators belonged to it. The prefix is the only thing
-// left that can put them back together.
-//
-// No enumerator may be negative, here or in any enum added later. C leaves an
-// enum's underlying type to the implementation and the implementations
-// disagree — clang and gcc pick an unsigned type when every enumerator is
-// non-negative, MSVC uses int. Staying non-negative is what makes that choice
-// unobservable. A negative sentinel belongs in a fixed-width constant, the way
-// ZOZZ_NO_PARENT is one.
+// Every enumerator carries its type's name (ZOZZ_RESULT_<WHAT>, not
+// ZOZZ_<WHAT>) so abi_check.zig's cross-check can derive it from `ZOZZ_` +
+// TYPE + `_` + FIELD — a C enum reaches Zig with no other record of its
+// members. No enumerator may be negative, here or later: clang/gcc vs. MSVC
+// disagree on the underlying type otherwise. A negative sentinel goes in a
+// fixed-width constant instead, as ZOZZ_NO_PARENT is.
 typedef enum ZozzResult {
   ZOZZ_RESULT_OK = 0,
   /// The path could not be opened for reading.
@@ -132,58 +114,35 @@ typedef struct ZozzAllocator {
   void* user;
 } ZozzAllocator;
 
-/// Installs a process-wide allocator for all subsequent ozz allocations.
-///
-/// This is global state, mirroring ozz's own design. Call it before loading
-/// anything, and do not swap it while live handles exist — those handles will
-/// be freed through whichever allocator is installed at destruction time.
-/// Passing NULL restores ozz's default (malloc/free) allocator.
-///
-/// `alloc` is copied by value; the caller need not keep it alive, but `user`
-/// must outlive every handle allocated through it.
-///
-/// Returns ZOZZ_RESULT_INVALID_ARGUMENT if either function pointer is NULL, in
-/// which case the previously installed allocator is left untouched.
+/// Installs a process-wide allocator for all subsequent ozz allocations. Call
+/// before loading anything; do not swap it while live handles exist — they
+/// free through whichever allocator is installed at destruction. NULL
+/// restores ozz's default (malloc/free) allocator. `alloc` is copied by
+/// value, but `user` must outlive every handle it allocates. Either function
+/// pointer NULL returns ZOZZ_RESULT_INVALID_ARGUMENT, allocator untouched.
 ZOZZ_API ZozzResult zozzSetAllocator(const ZozzAllocator* alloc);
 
-/// Reads back the allocator zozzSetAllocator most recently installed.
-///
-/// Writes true to `*installed` and fills `*out` with the exact ZozzAllocator
-/// last passed to zozzSetAllocator — the same struct value, not merely an
-/// equivalent one — when a host allocator is currently active. Writes false
-/// and zeroes `*out` otherwise: zozzSetAllocator has never been called with a
-/// non-NULL argument, or the most recent call passed NULL to restore ozz's
-/// own allocator. `*out` is not a meaningful ZozzAllocator in that case;
-/// `*installed` is what tells the two states apart, rather than leaving a
-/// caller to guess whether an all-zero struct means "nothing installed" or
-/// "an allocator with a NULL user pointer," which it cannot do reliably.
-///
-/// This is what makes save-and-restore possible: read the current allocator
-/// before installing a temporary one, then pass it back to zozzSetAllocator
-/// afterward — or, if `*installed` came back false, pass NULL instead of
-/// reconstructing ozz's own allocator by hand.
-///
+/// Reads back the allocator zozzSetAllocator most recently installed. If a
+/// host allocator is active, writes true to `*installed` and fills `*out`
+/// with the exact ZozzAllocator last passed to zozzSetAllocator (same struct
+/// value, not merely equivalent). Otherwise writes false and zeroes `*out` —
+/// `*installed` alone tells a never-installed state from a zero-valued one.
 /// Returns ZOZZ_RESULT_INVALID_ARGUMENT if `out` or `installed` is NULL.
 ZOZZ_API ZozzResult zozzGetAllocator(ZozzAllocator* out, bool* installed);
 
 //===----------------------------------------------------------------------===//
 // Log verbosity
-//
 // ozz's own runtime writes diagnostics straight past this ABI: an unsupported
-// archive version, for instance, is reported through ozz::log::Err() — see
-// libs/ozz/src/animation/runtime/skeleton.cc:131 and animation.cc:285 — which
+// archive version, for instance, is reported through ozz::log::Err(), which
 // lands on the process's own stderr with no ZozzResult attached, because
 // ozz::io::IArchive::operator>> cannot fail, only log and leave an empty
-// result (see "Validation at the boundary" in the README). A C++ host tunes
-// that noise with ozz::log::SetLevel() / GetLevel(); this seam gives a zozz
-// host the same two calls.
-//
-// ozz::log::Err() and Out() hand back a std::ostream&, which cannot cross a C
-// boundary, so only the LEVEL is bound here, not the destination: a zozz host
-// can silence or raise ozz's own diagnostics but has no way to redirect them
-// into a file or a logger of its own. ZOZZ_LOG_LEVEL_SILENT is the whole of
-// that lever, and it is a real one — it is what a host wanting no third-party
-// text on its stderr actually needs.
+// result. A C++ host tunes that noise with ozz::log::SetLevel()/GetLevel();
+// this seam gives a zozz host the same two calls. ozz::log::Err()/Out() hand
+// back a std::ostream&, which cannot cross a C boundary, so only the LEVEL is
+// bound here, not the destination: a zozz host can silence or raise ozz's
+// diagnostics but cannot redirect them into a file or logger of its own.
+// ZOZZ_LOG_LEVEL_SILENT is the real lever for a host that wants no
+// third-party text on its stderr.
 //===----------------------------------------------------------------------===//
 
 /// Mirrors ozz::log::Level exactly (checked in ffi/zozz_abi.cpp).
@@ -230,13 +189,12 @@ typedef struct ZozzTransform {
 #define ZOZZ_ALIGN16 _Alignas(16)
 #endif
 
-/// A 4x4 matrix in COLUMN-MAJOR order: m[0..3] is the first column.
-/// This matches ozz's Float4x4 (four SimdFloat4 columns) with no transpose.
-///
-/// 16-byte aligned, and that is load-bearing: ozz's Float4x4 is four SIMD
-/// registers and is written with aligned stores. Arrays of this type passed to
-/// zozzLocalToModel must therefore start on a 16-byte boundary; the function
-/// rejects a misaligned pointer rather than faulting inside ozz.
+/// A 4x4 matrix in COLUMN-MAJOR order: m[0..3] is the first column, matching
+/// ozz's Float4x4 (four SimdFloat4 columns) with no transpose. 16-byte
+/// aligned, and that is load-bearing: ozz's Float4x4 is four SIMD registers
+/// written with aligned stores, so arrays of this type passed to
+/// zozzLocalToModel must start on a 16-byte boundary; the function rejects a
+/// misaligned pointer rather than faulting inside ozz.
 typedef struct ZozzFloat4x4 {
   ZOZZ_ALIGN16 float m[16];
 } ZozzFloat4x4;

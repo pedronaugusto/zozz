@@ -10,11 +10,10 @@ namespace {
 
 /// Write-only adapter from a host ZozzStream onto ozz::io::Stream.
 ///
-/// ozz's own OArchive only ever calls opened() (once, at construction) and
-/// Write() on the stream it is given; Read/Seek/Tell/Size are unreachable
-/// from this direction. ZozzStream carries read/seek/tell for IArchive below,
-/// but this adapter never calls them — it stubs the same four members
-/// zozz_internal.h's ConstMemoryStream stubs for the opposite reason.
+/// ozz's own OArchive only calls opened() (once, at construction) and
+/// Write(); Read/Seek/Tell/Size are unreachable here. ZozzStream carries
+/// read/seek/tell for IArchive below, but this adapter never calls them,
+/// stubbing the same four members zozz_internal.h's ConstMemoryStream stubs.
 class HostWriteStream : public ozz::io::Stream {
  public:
   explicit HostWriteStream(const ZozzStream& host) : host_(host) {}
@@ -46,17 +45,12 @@ class HostWriteStream : public ozz::io::Stream {
   bool failed_ = false;
 };
 
-/// Read-only adapter from a host ZozzStream onto ozz::io::Stream — the mirror
-/// image of HostWriteStream above.
-///
-/// ozz's own IArchive checks a short read only via `assert(size ==
-/// sizeof(v))` (archive.h), which disappears under NDEBUG just like the write
-/// side's assert does. A host's `read` legitimately returns fewer bytes than
-/// asked at the true end of its data, so rather than ever handing that short
-/// count to ozz, this always reports the full count back, zero-fills
-/// whatever the host did not supply, and latches `failed_` — the exact
-/// technique zozz_internal.h's ConstMemoryStream uses for a memory-backed
-/// archive, applied here to an arbitrary host-backed one.
+/// Read-only mirror of HostWriteStream, adapting a host ZozzStream onto
+/// ozz::io::Stream. ozz's IArchive checks a short read only via
+/// `assert(size == sizeof(v))`, which disappears under NDEBUG. Since a host
+/// `read` may legitimately return fewer bytes at the true end of data, this
+/// always reports the full count, zero-fills what is missing, and latches
+/// `failed_` — as ConstMemoryStream (zozz_internal.h) does for memory.
 class HostReadStream : public ozz::io::Stream {
  public:
   explicit HostReadStream(const ZozzStream& host) : host_(host) {}
@@ -106,13 +100,12 @@ bool ValidWriteStream(const ZozzStream* stream) {
          stream->write != nullptr;
 }
 
-// Both of these read the parameter's bytes rather than its value — see
-// RawEnum in zozz_internal.h. A host can pass any integer here.
-// These take the raw integer, not ZozzEndianness. Passing the enum by value
-// anywhere — even to a helper that means to validate it — is itself a load of
-// the enum, and undefined when a host passed a value no enumerator names. It
-// is converted once, with zozz::RawEnum, at the entry point that receives it,
-// and travels as a number from there.
+// Both take the raw integer, not ZozzEndianness — see RawEnum in
+// zozz_internal.h. Passing the enum by value anywhere, even to a helper
+// meant to validate it, is itself a load of the enum, and undefined when a
+// host passes a value no enumerator names. The value is converted once, with
+// zozz::RawEnum, at the entry point that receives it, and travels as a
+// number from there.
 bool ValidEndianness(int32_t endianness) {
   return endianness == ZOZZ_ENDIANNESS_BIG ||
          endianness == ZOZZ_ENDIANNESS_LITTLE;

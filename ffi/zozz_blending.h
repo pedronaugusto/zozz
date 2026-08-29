@@ -18,15 +18,12 @@ extern "C" {
 // Per-joint weights, for partial blending
 //===----------------------------------------------------------------------===//
 
-/// A per-joint SoA weight buffer, for partial blending.
-///
-/// ozz::animation::BlendingJob::Layer::joint_weights is a span over the same
-/// SoA currency a pose is (one ozz::math::SimdFloat4 per 4 joints, matching
-/// ZozzSoaPose's own block layout) rather than a plain float array, so this
-/// mirrors ZozzSoaPose rather than taking a raw pointer: an opaque handle a
-/// host builds once, with zozzSoaWeightsFromArray, and reuses across every
-/// zozzBlendingRun call that wants the same partial mask, instead of
-/// re-packing floats into SIMD lanes every frame.
+/// A per-joint SoA weight buffer for partial blending. ozz's own
+/// BlendingJob::Layer::joint_weights is a span over the same SoA layout as a
+/// pose (one SimdFloat4 per 4 joints, matching ZozzSoaPose's layout), so this
+/// mirrors ZozzSoaPose rather than a raw pointer: an opaque handle built once
+/// via zozzSoaWeightsFromArray and reused across zozzBlendingRun calls to
+/// avoid re-packing floats into SIMD lanes every frame.
 typedef struct ZozzSoaWeights ZozzSoaWeights;
 
 /// Allocates a weight buffer sized for `num_joints` (rounded up to a SoA
@@ -50,19 +47,10 @@ ZOZZ_API ZozzResult zozzSoaWeightsFromArray(ZozzSoaWeights* weights,
 
 /// One blend input: a pose, its weight, and an optional partial-blend mask.
 ///
-/// BlendingJob::Layer crosses as this flat struct rather than two raw spans,
-/// for the same reason zozz keeps poses opaque everywhere else: `transform`
-/// is already the exact SoA buffer a sampling job wrote, so a layer just
-/// borrows a ZozzSoaPose instead of asking the caller to unpack one. Its
-/// members are borrowed for the call only — zozzBlendingRun reads every
-/// layer before returning and keeps no pointer afterwards.
-///
-/// `joint_weights` is NULL exactly when ozz's own span would be empty: no
-/// per-joint mask, every joint weighted at `weight`. This one optional field
-/// is what makes blending, additive blending and partial blending a single
-/// function instead of three — additive layers are simply
-/// BlendingJob::additive_layers, passed through this same struct, and a
-/// layer opts into partial blending by supplying one extra pointer.
+/// BlendingJob::Layer crosses as this flat struct rather than two raw spans:
+/// `transform` is the exact SoA buffer a sampling job wrote, so a layer just
+/// borrows a ZozzSoaPose. Members are borrowed for the call only —
+/// zozzBlendingRun reads every layer before returning and keeps no pointer.
 typedef struct ZozzBlendingLayer {
   /// Blending weight. Negative values are treated as 0 by ozz; normalisation
   /// happens during the blend, so any non-negative range is valid.
@@ -76,22 +64,12 @@ typedef struct ZozzBlendingLayer {
   const ZozzSoaWeights* joint_weights;
 } ZozzBlendingLayer;
 
-/// Blends `layers` and adds `additive_layers` on top, into `out`.
-///
-/// `layers` are normalised and mixed; `additive_layers` are added over the
-/// result — this is ozz::animation::BlendingJob's own two-pass split, not a
-/// second pass zozz adds on top. Either array may be NULL when its paired
-/// count is 0.
-///
-/// A joint whose accumulated `layers` weight falls below `threshold` (which
-/// must be finite and greater than 0) is taken from `rest_pose` instead, so
-/// `rest_pose` also sets the joint count every buffer here is measured
-/// against; `out` must be at least that size.
-///
-/// The job's own Validate() is the source of truth for every other
-/// consistency rule — layer count, span sizes, threshold range — so a
-/// rejection there surfaces as ZOZZ_RESULT_JOB_INVALID rather than being
-/// re-derived here.
+/// Blends `layers` and adds `additive_layers` into `out`. `layers` are
+/// normalised and mixed; `additive_layers` add over the result. Either array
+/// may be NULL if its paired count is 0. A joint whose `layers` weight falls
+/// below `threshold` (finite, > 0) is taken from `rest_pose` instead, which
+/// sets the joint count `out` must be sized to. Validate() governs remaining
+/// rules; a rejection yields ZOZZ_RESULT_JOB_INVALID.
 ZOZZ_API ZozzResult zozzBlendingRun(const ZozzBlendingLayer* layers,
                                     size_t num_layers,
                                     const ZozzBlendingLayer* additive_layers,

@@ -21,24 +21,16 @@ extern "C" {
 //===----------------------------------------------------------------------===//
 // Stream seam
 //
-// A host-provided stand-in for ozz::io::Stream — the same role ZozzAllocator
-// plays for ozz::memory::Allocator. One struct serves both directions,
-// because ozz has one Stream interface and this ABI has exactly one seam for
-// it, not a second read-only shape bolted on beside the first.
+// A host-provided stand-in for ozz::io::Stream, the role ZozzAllocator plays
+// for ozz::memory::Allocator; one struct covers both directions. OArchive
+// calls only opened() once and write() repeatedly. IArchive calls opened()
+// once, read() repeatedly, and seek()/tell() only to rewind after a tag test
+// (TestTag below); a sequential read never seeks. Size() is never called
+// either direction, so no host implementation of it is required.
 //
-// Which callbacks a direction actually reaches is narrow and fixed: OArchive
-// calls only opened(), once at construction, and write(), repeatedly.
-// IArchive calls opened() at construction, read() repeatedly, and seek() and
-// tell() only to rewind after a tag test (see TestTag below) — a plain
-// sequential read never seeks at all. Size() is never called from either
-// direction, so unlike ozz::io::Stream this bridge does not ask a host to
-// implement it.
-//
-// A callback the direction in use does not need may be left NULL:
-// zozzOArchiveCreate rejects a stream missing `opened` or `write`;
-// zozzIArchiveCreate rejects one missing `opened`, `read`, `seek` or `tell`.
-// Either way the rejection happens at Create, not the first call that would
-// have needed the missing callback.
+// A callback its direction does not need may be left NULL — rejected at
+// Create, not at first use: zozzOArchiveCreate requires `opened` and `write`;
+// zozzIArchiveCreate requires `opened`, `read`, `seek` and `tell`.
 //===----------------------------------------------------------------------===//
 
 /// Matches ozz::io::Stream::Origin exactly (checked in ffi/zozz_abi.cpp), so
@@ -57,11 +49,9 @@ typedef enum ZozzSeekOrigin {
 typedef struct ZozzStream {
   /// Returns non-zero if the stream is open and ready for the calls below.
   ///
-  /// Deliberately `int`, not `bool`, unlike an out-parameter elsewhere in
-  /// this ABI: this field is a HOST-IMPLEMENTED callback, not a value zozz
-  /// hands back, and a host compiling as strict C89 (no `<stdbool.h>`) can
-  /// still implement it without pulling in a C99+ header just for this one
-  /// signature.
+  /// Deliberately `int`, not `bool` as elsewhere in this ABI: this is a
+  /// HOST-IMPLEMENTED callback, so a strict C89 host (no `<stdbool.h>`) can
+  /// implement it without a C99+ header just for this one signature.
   int (*opened)(void* user);
 
   /// Writes `size` bytes from `data`. Must return the number of bytes
@@ -107,20 +97,15 @@ typedef enum ZozzEndianness {
 // Writing
 //
 // Constructing a ZozzOArchive writes an endianness byte immediately, naming
-// whichever ZozzEndianness the caller chose — a host producing a file for a
-// foreign-endian target writes one, just as a C++ host would pass one to
-// OArchive's own constructor — and IArchive adapts on read regardless of
-// which platform wrote the file (see below). Every archive is scoped to
-// exactly one logical file either way: create it, write everything that
-// belongs together, destroy it.
+// the ZozzEndianness the caller chose; IArchive adapts on read regardless of
+// which platform wrote the file. Each archive is scoped to one logical file:
+// create it, write everything that belongs together, then destroy it.
 //
-// There is no entry point for the platform's own native order: a Zig host has
-// that in the compiler's target information.
-//
-// OArchive::endian_swap() is not exposed either, because the host chose the
-// byte order itself. IArchive::endian_swap() IS exposed, below: its value comes
-// from a byte IArchive's constructor reads off the stream, and nothing else
-// here hands that byte back.
+// There is no entry point for the platform's native order — a Zig host has
+// that in the compiler's target information. OArchive::endian_swap() is not
+// exposed, since the host already chose the byte order; IArchive's version
+// IS exposed: its value comes from a byte the constructor reads off the
+// stream, and nothing else here hands it back.
 //===----------------------------------------------------------------------===//
 
 typedef struct ZozzOArchive ZozzOArchive;

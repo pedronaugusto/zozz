@@ -20,14 +20,8 @@ fn translated(x: f32, y: f32, z: f32) zozz.Transform {
 
 /// A deliberately awkward hierarchy: two roots, branches at two different
 /// depths, and leaves that are NOT the last joint. Built depth-first, so
-/// insertion indices equal built indices (see offline.zig).
-///
-///   a          e
-///   +- b       +- f
-///   |  +- c
-///   |  +- d
-///   +- g
-///
+/// insertion indices equal built indices (see offline.zig): a-b-c, a-b-d, a-g,
+/// e-f.
 fn buildSkeleton() !zozz.Skeleton {
     const raw = try zozz.RawSkeleton.init();
     defer raw.deinit();

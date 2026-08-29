@@ -3,23 +3,14 @@
 // (gltf2ozz.cc) as a ZozzImporter. Compiled only when -Dgltf is on; see
 // zozz_gltf.h and build.zig.
 //
-// gltf2ozz.cc has no header of its own — GltfImporter is defined, not merely
-// declared, directly in that .cc file, so the only way to name the type at
-// all is to #include the .cc into a translation unit of ours; a bare
-// -Dmain=... flag on gltf2ozz.cc itself would rename its `int main` cleanly
-// enough, but would still leave GltfImporter unreachable from any other file,
-// since nothing would declare it. `main` is #defined away first because that
-// `int main` (the CLI entry point this binding does not use — see
-// zozz_gltf.h) cannot coexist with this library's own object files.
-//
-// Renaming does not remove that function's body, which calls
-// OzzImporter::operator() — the CLI driver, defined in import2ozz.cc, which
-// this build does not compile (see zozz_gltf.h). Nothing ever calls the
-// renamed function either, but it still lives in this translation unit's
-// object file alongside GltfImporter, so the linker still needs
-// operator()'s symbol to resolve once anything else in this file is
-// referenced. The stub below satisfies that without vendoring jsoncpp: it
-// is never reached.
+// GltfImporter is defined, not merely declared, in gltf2ozz.cc, which has no
+// header, so the only way to name the type is to #include the .cc here.
+// `main` is #defined away first: that file's `int main` (the CLI entry this
+// binding skips, see zozz_gltf.h) cannot coexist with this library's object
+// files. Renaming leaves the function body intact, still calling the CLI
+// driver OzzImporter::operator() from import2ozz.cc, not compiled here; the
+// stub below resolves that link-time reference without vendoring jsoncpp —
+// it is never reached.
 //===----------------------------------------------------------------------===//
 
 #define main ZozzGltf2ozzUnusedMain

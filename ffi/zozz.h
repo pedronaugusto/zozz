@@ -5,12 +5,10 @@
 // implementation and any consumer (the Zig wrapper in ../src, or a plain C
 // host) is the union of what it pulls in below, one header per concern,
 // matching the .cpp file that implements it. Include this one header for the
-// whole surface, or include a concern's own header directly — each stands on
-// its own, at the cost of a little redundant preprocessing the very first
-// time it is reached.
+// whole surface, or a concern's own header directly — each stands on its own.
 //
-// Conventions that apply to the whole ABI — ownership rules, thread safety,
-// the ZOZZ_API linkage macro, ZozzResult, and the plain-data types every other
+// Conventions for the whole ABI — ownership rules, thread safety, the
+// ZOZZ_API linkage macro, ZozzResult, and the plain-data types every other
 // header builds on — are documented once, in zozz_core.h, rather than
 // repeated here.
 //===----------------------------------------------------------------------===//
@@ -26,14 +24,13 @@
 //
 // zozz_utils.h's runtime-skeleton traversal and zozz_offline.h's raw-skeleton
 // traversal (below) share this one callback shape. Whichever of the two a
-// translation unit includes directly is the file whose own header guard
-// blocks the umbrella's later attempt to include it again, so the OTHER
-// header — reached first through this umbrella, before control ever returns
-// to the directly-included one's own body — would otherwise see an
-// undeclared type. Declaring it here, ahead of both, is what the
-// ZozzRawFloatTrack forward declarations further down do for the
-// optimizer/rawtrack pair, applied before the hazard can occur rather than
-// after.
+// translation unit includes directly is the file whose header guard blocks the
+// umbrella's later attempt to include it again, so the OTHER header — reached
+// first through this umbrella, before control returns to the directly-included
+// one's own body — would otherwise see an undeclared type. Declaring it here,
+// ahead of both, is what the ZozzRawFloatTrack forward declarations further
+// down do for the optimizer/rawtrack pair, applied before the hazard can occur
+// rather than after.
 //===----------------------------------------------------------------------===//
 
 #ifdef __cplusplus

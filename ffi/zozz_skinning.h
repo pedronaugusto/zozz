@@ -16,24 +16,12 @@
 extern "C" {
 #endif
 
-/// Transforms vertex positions, and optionally normals and tangents, by a
-/// per-vertex weighted blend of joint matrices ("matrix palette skinning").
-///
-/// Every buffer below is a flat array with its own element count and byte
-/// stride, so array-of-structs and struct-of-arrays vertex layouts both work
-/// without a repacking pass. None of them are retained past the call. A
-/// buffer's element count is independent of vertex_count and is re-checked
-/// against it, so a short buffer is refused rather than read past its end. A
-/// NULL pointer paired with a non-zero count is always refused, required or
-/// optional: it claims memory that is not there.
-///
-/// Required: joint_matrices, joint_indices, in_positions, out_positions.
-/// joint_weights is required unless influences_count == 1, in which case the
-/// sole influence's implicit weight is 1 and joint_weights is never read.
-/// in_normals/out_normals are optional but must be given together; the same
-/// holds for in_tangents/out_tangents, which additionally require normals. A
-/// field that is not provided must have both its pointer NULL and its count
-/// 0.
+/// Transforms vertex positions (and optionally normals/tangents) via a per-
+/// vertex blend of joint matrices. Every buffer is a flat array with its own
+/// element count and byte stride; none are retained past the call. Each
+/// buffer's count is independent of vertex_count and re-checked: a short buffer
+/// is refused, not read past its end. Required: joint_matrices, joint_indices,
+/// in_positions, out_positions; an unset field's pointer and count are both 0.
 typedef struct ZozzSkinningJob {
   /// Vertices to transform. Every buffer below must hold at least this many.
   int vertex_count;

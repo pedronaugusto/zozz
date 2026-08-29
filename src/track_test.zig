@@ -42,13 +42,12 @@ test "a float track's keyframe read-back matches what was authored, across a bit
     try zozz.setAllocator(gpa);
     defer zozz.resetAllocator();
 
-    // 12 keys — more than the 8 that fit in one byte of the packed steps
-    // bitset (Track::steps(), one bit per key) — alternating step and linear,
-    // so decoding a byte boundary wrong (an off-by-one in i/8 or i%8) shows up
-    // as a wrong entry at index 8 or later rather than passing on 8-or-fewer
-    // keys by accident. front()/back() sit exactly at ratio 0 and 1, so the
-    // builder patches nothing in and the built track holds exactly these 12
-    // keys, in this order.
+    // 12 keys — more than the 8 in one byte of the packed steps bitset
+    // (Track::steps(), one bit per key) — alternating step/linear, so an
+    // off-by-one at the byte boundary (i/8 or i%8) shows up at index 8+, not by
+    // silently passing with fewer keys. front()/back() sit exactly at ratio 0
+    // and 1, so the builder patches nothing in: the built track holds exactly
+    // these 12 keys, in order.
     const raw = try zozz.RawFloatTrack.init();
     defer raw.deinit();
     const count = 12;
@@ -174,14 +173,12 @@ test "the triggering iterator yields the edges of a step function, in order" {
         try triggering.next();
     }
 
-    // Four edges, and the first one is at ratio 0 — which is the part worth
-    // pinning. A track is CYCLIC: the value at ratio 1 wraps to the value at
-    // ratio 0. This wave ends high and starts low, so the seam is a falling
-    // edge, and it lands at the START of the range rather than the end.
-    //
-    // A host driving a footstep off a looping clip gets that trigger on every
-    // lap, at the moment the clip restarts. Counting the keyframes suggests
-    // three edges; there are four, and the extra one fires first.
+    // Four edges, and the first is at ratio 0: a track is CYCLIC, so the value
+    // at ratio 1 wraps to ratio 0. This wave ends high and starts low, so the
+    // seam is a falling edge landing at the START of the range, not the end. A
+    // host driving a footstep off a looping clip gets that trigger every lap,
+    // at the restart: counting keyframes suggests three edges, but the extra
+    // one fires first.
     try std.testing.expectEqual(@as(usize, 4), count);
     try std.testing.expectApproxEqAbs(@as(f32, 0.0), edges[0].ratio, 1e-3);
     try std.testing.expect(!edges[0].rising);

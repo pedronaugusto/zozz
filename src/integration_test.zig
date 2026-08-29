@@ -321,22 +321,12 @@ test "the full pipeline runs against .ozz files on disk" {
 }
 
 test "a truncated archive is refused rather than trusted" {
-    // The dangerous case is not random garbage — the tag test catches that.
-    // It is a VALID archive cut short: the tag passes, then every subsequent
-    // read runs past the end. ozz ignores short reads under NDEBUG, so
-    // whatever lands in a length field is believed and then allocated.
-    //
-    // ConstMemoryStream closes that by zero-filling past the end and latching
-    // a flag the loader checks. This test walks every prefix of both fixtures
-    // and requires that not one of them loads.
-    //
-    // Skipped when Zig's C sanitizer is on: upstream ozz forms member accesses
-    // on a null pointer when a keyframe array has zero entries — exactly the
-    // shape a zero-filled count produces. That is real (if benign) undefined
-    // behaviour in ozz, not in zozz, and it is worth being able to see rather
-    // than suppressing globally. The sanitizer is off by default, so a plain
-    // `zig build test` exercises this; `-Dsanitize_c=true` is the run that
-    // skips it.
+    // A VALID archive cut short: the tag passes, then reads run past the end.
+    // ozz ignores short reads under NDEBUG, so a bogus length is trusted.
+    // ConstMemoryStream zero-fills past the end and latches a flag the loader
+    // checks; this walks every fixture prefix, requiring none load. Skipped
+    // under the C sanitizer, off by default: upstream ozz null-derefs on a
+    // zero-entry keyframe array here, and `-Dsanitize_c=true` turns it on.
     if (zozz.options.sanitize_c) return error.SkipZigTest;
 
     const gpa = std.testing.allocator;

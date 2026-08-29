@@ -43,8 +43,8 @@ typedef struct ZozzIKTwoBoneJob {
   float soften;
   /// Blends the correction: 0 leaves the pose untouched, 1 applies it in
   /// full. Unlike mid_axis, this is NOT checked by Validate() — a weight of 0
-  /// is accepted and silently produces an identity correction, which is why
-  /// zozzIKTwoBoneJobDefaults sets it to 1 rather than leaving a caller to
+  /// is accepted and silently produces an identity correction.
+  /// zozzIKTwoBoneJobDefaults sets it to 1 instead of leaving a caller to
   /// zero-initialize the struct and get that by accident.
   float weight;
 
@@ -133,19 +133,12 @@ ZOZZ_API ZozzResult zozzIKAimJobRun(const ZozzIKAimJob* job);
 // Folding a correction back into a pose
 //===----------------------------------------------------------------------===//
 
-/// Left-multiplies `correction` (a local-space rotation, xyzw, w LAST) onto
-/// `joint`'s current local rotation in `pose`, in place:
-/// pose[joint].rotation = correction * pose[joint].rotation. `joint`'s
-/// translation and scale, and every other joint, are left untouched.
-///
-/// This is how a ZozzIKTwoBoneJob's or ZozzIKAimJob's correction output gets
-/// folded back into the pose that produced start_joint/mid_joint/joint,
-/// before the pose is next converted to model-space (see
-/// zozzLocalToModelRange, which can then be limited to the corrected chain).
-/// `correction` is read only during the call.
-///
-/// Returns ZOZZ_RESULT_INVALID_ARGUMENT if `pose` or `correction` is NULL, or
-/// if `joint` is negative or at least the pose's joint count.
+/// Left-multiplies `correction` (a local-space rotation, xyzw, w LAST; borrowed
+/// for the call only) onto `joint`'s current local rotation in `pose`, in
+/// place: pose[joint].rotation = correction * pose[joint].rotation. `joint`'s
+/// translation and scale, and every other joint, are left untouched. Returns
+/// ZOZZ_RESULT_INVALID_ARGUMENT if `pose` or `correction` is NULL, or if
+/// `joint` is negative or at least the pose's joint count.
 ZOZZ_API ZozzResult zozzSoaPoseApplyLocalCorrection(ZozzSoaPose* pose,
                                                     int joint,
                                                     const float correction[4]);

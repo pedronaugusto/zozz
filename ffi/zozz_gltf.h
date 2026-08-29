@@ -1,30 +1,16 @@
 //===----------------------------------------------------------------------===//
 // zozz — ozz::animation::offline::OzzImporter, ozz's converter interface, in
-// both directions:
-//
-//   * a concrete glTF-backed importer (-Dgltf, off by default: pulls in
-//     tinygltf and its bundled JSON parser, weight a runtime-only consumer
-//     should not pay for);
-//   * a host-implementable ZozzImporterInterface, so a host with its own
-//     source format (FBX via the proprietary Autodesk SDK, Collada, a
-//     proprietary pipeline) can plug into the same pipeline ozz's own
-//     importers use (-Doptions: this and zozzImporterRun below are ozz's
-//     `ozz_animation_tools` library, which needs the option parser).
-//
-// Every entry point is declared unconditionally and returns
-// ZOZZ_RESULT_UNSUPPORTED when the option its implementation needs is off.
-// zozzImporterRun (OzzImporter::operator(), the CLI driver) is the one
-// exception: it always returns ZOZZ_RESULT_UNSUPPORTED regardless of build
-// options, because its dependency chain (import2ozz_config.cc and its
-// siblings) needs jsoncpp, which UPSTREAM.md records as deliberately excluded
-// from the vendored tree. It is declared anyway so the interface stays
-// complete and the reason is discoverable, not silently missing.
-//
-// A ZozzImporter handle is opaque regardless of which side created it —
-// zozzGltfImporterCreate or zozzImporterCreate — because every entry point
-// below drives it through OzzImporter's own virtual interface. A host that
-// implements ZozzImporterInterface gets the exact same accessors a glTF
-// import does.
+// both directions: a concrete glTF-backed importer (-Dgltf, off by default —
+// tinygltf's JSON parser is weight a runtime-only consumer should not pay for),
+// and a host-implementable ZozzImporterInterface (-Doptions) for a host with
+// its own source format. Every entry point is declared unconditionally and
+// returns ZOZZ_RESULT_UNSUPPORTED when its option is off. zozzImporterRun (the
+// CLI driver) always returns ZOZZ_RESULT_UNSUPPORTED, on every build, because
+// its jsoncpp dependency is not vendored; it stays declared so this is
+// discoverable rather than silently missing. A ZozzImporter handle is opaque
+// regardless of which side created it: every entry point drives it through
+// OzzImporter's own virtual interface, so a host-implemented importer gets the
+// same accessors a glTF import does.
 //===----------------------------------------------------------------------===//
 
 #ifndef ZOZZ_GLTF_H_

@@ -43,12 +43,11 @@ pub fn findJoint(skeleton: Skeleton, name: [:0]const u8) ?u32 {
 }
 
 /// Depth-first traversal starting at `from` (`no_parent`, from `skeleton.zig`,
-/// to traverse the whole hierarchy, including every root when the skeleton
-/// has more than one).
-///
-/// `context` must be a pointer; it is handed back to `visit` unchanged. The
-/// callback is infallible, matching ozz's own functor contract: nothing that
-/// could unwind or need re-raising crosses the C boundary.
+/// traverses the whole hierarchy, including every root when the skeleton has
+/// more than one). `context` must be a pointer; it is handed back to `visit`
+/// unchanged. The callback is infallible, matching ozz's own functor
+/// contract: nothing that could unwind or need re-raising crosses the C
+/// boundary.
 pub fn iterateJointsDepthFirst(
     skeleton: Skeleton,
     from: i32,

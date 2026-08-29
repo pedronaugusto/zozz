@@ -51,14 +51,11 @@ pub const Layer = struct {
     }
 };
 
-/// Mirrors `ozz::animation::BlendingJob`.
-///
-/// Blends `layers` and adds `additive_layers` on top, into `out` — ozz's own
-/// two-pass split, not a second pass this wrapper adds.
-///
-/// A joint whose accumulated `layers` weight falls below `threshold` (finite,
-/// > 0) is taken from `rest_pose` instead, so `rest_pose` also sets the
-/// joint count every buffer here is measured against.
+/// Mirrors `ozz::animation::BlendingJob`. Blends `layers` and adds
+/// `additive_layers` on top, into `out` — ozz's own two-pass split, not a
+/// second pass this wrapper adds. A joint whose accumulated `layers` weight
+/// falls below `threshold` (finite, > 0) is taken from `rest_pose` instead, so
+/// `rest_pose` also sets the joint count every buffer here is measured against.
 pub const BlendingJob = struct {
     layers: []const Layer,
     additive_layers: []const Layer,

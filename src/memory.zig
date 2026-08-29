@@ -1,29 +1,15 @@
 //! Bridges a Zig `std.mem.Allocator` onto ozz's global allocator seam.
 //!
-//! ## Why this is not a two-line shim
+//! ozz frees with `deallocate(block)` — no size, no alignment — but Zig's
+//! allocator interface requires both back at free time. The gap is closed by
+//! allocating a little extra and stashing the length and alignment in a header
+//! placed immediately before the pointer handed to ozz, in a prefix rounded up
+//! to the requested alignment so the returned pointer keeps it; the base
+//! pointer is recovered by subtracting that same rounded prefix at free time.
 //!
-//! ozz frees with `deallocate(block)` — no size, no alignment. Zig's allocator
-//! interface requires both back at free time. The gap is closed by allocating
-//! a little extra and stashing the length and alignment in a header placed
-//! immediately before the pointer handed to ozz:
-//!
-//! ```text
-//!   base                       returned pointer
-//!    |                          |
-//!    v                          v
-//!   [ .... padding .... ][Header][ ..... payload ..... ]
-//!    \___ prefix, a multiple of the requested alignment ___/
-//! ```
-//!
-//! The prefix is rounded up to the requested alignment so the returned pointer
-//! keeps that alignment, and the base pointer is recoverable by subtracting
-//! the same rounded prefix at free time.
-//!
-//! ## Global state
-//!
-//! ozz's allocator is process-wide, so this one is too. That is a property of
-//! ozz, not a shortcut taken here — it is surfaced rather than hidden behind
-//! a per-object allocator parameter that could not be honoured.
+//! ozz's allocator is process-wide, so this one is too — a property of ozz,
+//! not a shortcut taken here, surfaced rather than hidden behind a per-object
+//! allocator parameter that could not be honoured.
 
 const std = @import("std");
 const c = @import("c.zig");
@@ -121,16 +107,11 @@ pub fn resetAllocator() void {
 }
 
 /// Reads back the raw `c.Allocator` `setAllocator` most recently installed —
-/// `null` if none currently is: `setAllocator` has never been called, or
-/// `resetAllocator` undid the last call. There is deliberately no equivalent
-/// taking a `std.mem.Allocator` back out of the raw struct: `user` only ever
-/// points at the module-level `installed` above while a Zig host is driving
-/// this seam, so a Zig caller already has the `std.mem.Allocator` it passed
-/// in and never needs to reconstruct one from this. What this is for is the
-/// same save-and-restore `zozzGetAllocator` documents in zozz_core.h: read
-/// the allocator here before installing a temporary one (through
-/// `c.zozzSetAllocator` directly, for a non-Zig allocator), then pass the
-/// returned struct back to `c.zozzSetAllocator` afterward.
+/// `null` if none is: `setAllocator` was never called, or `resetAllocator`
+/// undid the last call. No equivalent returns a `std.mem.Allocator`. Same
+/// save-and-restore `zozzGetAllocator` documents in zozz_core.h: read here
+/// before installing a temporary allocator (via `c.zozzSetAllocator`, for a
+/// non-Zig one), then pass the result back to `c.zozzSetAllocator` afterward.
 pub fn getAllocator() err.Error!?c.Allocator {
     var out: c.Allocator = undefined;
     var is_installed: bool = undefined;

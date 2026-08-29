@@ -43,13 +43,10 @@ ZOZZ_API ZozzResult zozzSkeletonRestPoseModelSpace(const ZozzSkeleton* skeleton,
 
 /// Writes true to `*out` if `joint` has no children — it is the last joint,
 /// or the next joint's parent is not `joint` — false otherwise. `joint` must
-/// be in [0, zozzSkeletonNumJoints).
-///
-/// A result plus an out-param rather than a plain `bool` return like
-/// zozzSkeletonFindJoint's -1, because a boolean has no value left over to
-/// mean "you asked about a joint that does not exist": returning false for
-/// both a real interior joint and an out-of-range index is a bug a caller
-/// cannot see.
+/// be in [0, zozzSkeletonNumJoints). A ZozzResult plus an out-param, not a
+/// plain `bool`, because a bool has no value left for "joint does not exist"
+/// — returning false for both a real leaf and an out-of-range index would be
+/// an invisible bug.
 ZOZZ_API ZozzResult zozzSkeletonJointIsLeaf(const ZozzSkeleton* skeleton,
                                             int joint, bool* out);
 

@@ -66,14 +66,12 @@ test "SILENT suppresses the diagnostic ozz logs for a version-mismatched skeleto
     defer zozz.resetAllocator();
     defer _ = zozz.setLogLevel(.standard) catch {};
 
-    // Just enough of an archive to pass Skeleton::Load's tag test and then
-    // fail its version check: the tag ozz::animation::Skeleton registers with
-    // OZZ_IO_TYPE_TAG (libs/ozz/include/ozz/animation/runtime/skeleton.h:149)
-    // is "ozz-skeleton" plus its counted null terminator, 13 bytes, and
-    // version 2 is the only one skeleton.cc's Load accepts. Any other value
-    // makes it log "Unsupported Skeleton version" to ozz::log::Err() and
-    // return without reading further -- exactly the diagnostic this test
-    // wants to see silenced and not, with no need to build a real skeleton.
+    // Just enough of an archive to pass Skeleton::Load's tag test, then fail
+    // its version check: the tag is "ozz-skeleton" plus its counted null
+    // terminator, and version 2 is the only one skeleton.cc's Load accepts. Any
+    // other value logs "Unsupported Skeleton version" via ozz::log::Err() and
+    // returns without reading further -- the diagnostic this test wants
+    // silenced or not.
     var sink: Sink = .{ .gpa = gpa };
     defer sink.deinit();
     const bridge = sink.stream();

@@ -37,28 +37,16 @@ namespace zozz {
 //===----------------------------------------------------------------------===//
 
 /// Largest joint count zozz will accept from an archive. Mirrors ozz's own
-/// hard limit; used to reject a truncated or hostile file before it is
-/// interpreted as a huge allocation.
+/// hard limit, rejecting a truncated or hostile file before it is read as
+/// a huge allocation.
 constexpr int kMaxJoints = ozz::animation::Skeleton::kMaxJoints;
 
-/// Number of SoA blocks needed for `num_joints` joints.
-/// An enum parameter's bytes, rather than its value.
-///
-/// A C caller can put any integer through an enum parameter — `(ZozzLogLevel)99`
-/// is a legal thing to write — and reading an enum object that holds a value no
-/// enumerator names is undefined behaviour. Not theoretically: the obvious
-/// `switch (level)` aborts under UBSan with "load of value 99, which is not
-/// valid for type 'ZozzLogLevel'", which is the abort a host would get in a
-/// sanitised build for passing exactly the value this ABI promises to reject
-/// cleanly.
-///
-/// Copying the object representation into an integer is not a load of the enum,
-/// so the value can be validated as what it really is: a number that arrived
-/// from outside. Every entry point taking an enum by value goes through this
-/// before it looks at it. The enum stays in the signature because it is the
-/// documented interface — what it cannot be is trusted.
-/// Taken by reference on purpose: copying the parameter would itself be a load
-/// of the enum, which is the very thing this exists to avoid.
+/// An enum parameter's bytes, not its value: a C caller can pass any int
+/// (`(ZozzLogLevel)99` is legal), and reading an enum object holding a value
+/// no enumerator names is undefined behaviour — every entry point taking an
+/// enum by value routes through this before looking at it. Taken by
+/// reference on purpose: copying the parameter would itself be the load
+/// this function exists to avoid.
 template <typename E>
 int32_t RawEnum(const E& value) {
   static_assert(sizeof(E) == sizeof(int32_t),
@@ -70,6 +58,7 @@ int32_t RawEnum(const E& value) {
   return raw;
 }
 
+/// Number of SoA blocks needed for `num_joints` joints.
 constexpr int SoaBlocks(int num_joints) { return (num_joints + 3) / 4; }
 
 //===----------------------------------------------------------------------===//
@@ -115,17 +104,11 @@ class ConstMemoryStream : public ozz::io::Stream {
   bool truncated() const { return truncated_; }
 
   /// Satisfies every request in full, zero-filling past the end and latching
-  /// `truncated_`.
-  ///
-  /// A short read must never reach ozz. Its IArchive does not check reads:
-  /// `operator>>` for a primitive is `Read(&v, sizeof(v))` followed by
-  /// `assert(size == sizeof(v))`, and under NDEBUG that assert disappears —
-  /// leaving `v` holding whatever was on the stack, with parsing continuing on
-  /// garbage. A count read that way decides how much ozz then allocates.
-  ///
-  /// Zeros are the safe filler: a zeroed count is zero, so ozz's loops do
-  /// nothing rather than run wild, and no partially-overwritten count can
-  /// round upward. The loader rejects the archive on the flag afterwards.
+  /// `truncated_`. A short read must never reach ozz: `operator>>` does
+  /// `Read(&v, sizeof(v))` then `assert(...)`, which vanishes under NDEBUG,
+  /// so a short read would leave `v` full of stack garbage sizing further
+  /// allocations. Zero fill keeps counts at zero — never rounded upward by
+  /// stray bytes — so ozz's loops stay idle; the loader checks that flag.
   size_t Read(void* buffer, size_t size) override {
     uint8_t* out = static_cast<uint8_t*>(buffer);
     const size_t available =
@@ -189,15 +172,12 @@ class ConstMemoryStream : public ozz::io::Stream {
 // Archive loading
 //===----------------------------------------------------------------------===//
 
-/// Loads one tagged ozz object from a truncation-detecting stream.
-///
-/// Two checks bracket ozz's parser, because ozz performs neither in a release
-/// build:
-///
-///   * the tag test, which turns a wrong-type or non-ozz input into a clean
-///     error instead of a parse of unrelated bytes (ozz only asserts);
-///   * the truncation flag, which catches an input that ran out mid-parse
-///     (ozz only asserts on the short read).
+/// Loads one tagged ozz object from a truncation-detecting stream. Two
+/// checks bracket ozz's parser, since ozz performs neither in a release
+/// build: the tag test turns a wrong-type or non-ozz input into a clean
+/// error instead of parsing unrelated bytes (ozz only asserts), and the
+/// truncation flag catches an input that ran out mid-parse (ozz only
+/// asserts on the short read).
 template <typename T>
 ZozzResult LoadTagged(ConstMemoryStream* stream, T* out) {
   if (!stream->opened()) return ZOZZ_RESULT_IO;
@@ -217,14 +197,12 @@ ZozzResult LoadFromMemory(const void* data, size_t size, T* out) {
   return LoadTagged(&stream, out);
 }
 
-/// Loads one tagged ozz object from a file path.
-///
-/// The file is read whole into memory and parsed through ConstMemoryStream
-/// rather than handed to ozz's own File stream. That is deliberate: ozz's File
-/// returns short reads at end-of-file, which is precisely the case its archive
-/// reader fails to check. Buffering costs one allocation the size of the
-/// archive — which is read in full regardless — and buys both paths the same
-/// truncation guarantee.
+/// Loads one tagged ozz object from a file path: the file is read whole
+/// into memory and parsed through ConstMemoryStream, not ozz's own File
+/// stream, since File returns short reads at end-of-file — precisely what
+/// its archive reader fails to check. Buffering costs one allocation the
+/// size of the archive, read in full regardless, and buys both paths the
+/// same truncation guarantee.
 template <typename T>
 ZozzResult LoadFromFile(const char* path, T* out) {
   if (path == nullptr) return ZOZZ_RESULT_INVALID_ARGUMENT;
