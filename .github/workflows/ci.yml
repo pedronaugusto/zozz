@@ -127,11 +127,25 @@ jobs:
           version: ${{ env.ZIG_VERSION }}
       - run: zig build -Dtarget=${{ matrix.target }}
 
+  # Every number README.md and UPSTREAM.md publish, recomputed from the tree
+  # and compared against what is committed — and no other number allowed to be
+  # written by hand. It builds (the test count is what the build reports), so
+  # it cannot join the hygiene job above.
+  docs:
+    name: documented numbers
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: mlugg/setup-zig@v2
+        with:
+          version: ${{ env.ZIG_VERSION }}
+      - run: ci/check-docs.sh
+
   # Mutation test for the ABI cross-check in src/abi_check.zig. That check is
   # the one test here that cannot test itself — a refactor making it vacuous
   # looks exactly like a passing build — so this deliberately drifts the header
-  # against the externs, twelve ways, and asserts each one is refused. Its own
-  # job because it rebuilds once per mutation.
+  # against the externs every way the script lists, and asserts each one is
+  # refused. Its own job because it rebuilds once per mutation.
   abi-drift:
     name: ABI drift
     runs-on: ubuntu-latest

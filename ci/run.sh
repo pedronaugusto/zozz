@@ -91,6 +91,11 @@ run 'comment standard' ci/check-comments.sh
 
 run 'coverage (every name has a verdict)' ci/check-coverage.sh
 
+# Every number README.md and UPSTREAM.md publish, recomputed and compared. It
+# builds once (the test count is what the build reports, not a grep), so it
+# sits with the tests rather than with the one-second checks above.
+run 'documented numbers' ci/check-docs.sh
+
 # ZOZZ_ALIGN16 on a member instead of the type makes the ABI oracle fail on
 # every non-MSVC target for a difference no object file has. See the script.
 run 'ZOZZ_ALIGN16 is applied to types' ci/check-alignment.sh
@@ -140,7 +145,7 @@ if [ $QUICK -eq 0 ]; then
   # Mutation test for the ABI cross-check itself — see the script's own header
   # for why a check that guards everything else needs one. It rebuilds once per
   # mutation, which is why it is out of the --quick loop.
-  run 'abi drift (17 mutations)' ci/check-abi-drift.sh
+  run 'abi drift (mutation proof)' ci/check-abi-drift.sh
 fi
 
 #-----------------------------------------------------------------------------

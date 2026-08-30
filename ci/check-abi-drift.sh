@@ -27,6 +27,7 @@
 # Usage: ci/check-abi-drift.sh
 
 set -uo pipefail
+SELF=$(cd "$(dirname "$0")" && pwd)/$(basename "$0")
 cd "$(dirname "$0")/.."
 
 pass=0
@@ -35,7 +36,8 @@ pass=0
 # mutation below is answered by the ABI cross-check, which lives inside the
 # test build; the coverage guard is a script, and rebuilding the world to ask
 # it a question it answers in a fraction of a second would be silly.
-BUILD='zig build test'
+ZIG=${ZIG:-zig}
+BUILD="$ZIG build test"
 fail=0
 backups=()
 
@@ -114,7 +116,7 @@ PY
 }
 
 # A clean tree first: a mutation is only evidence if the unmutated build passes.
-if ! zig build test >/dev/null 2>&1; then
+if ! $ZIG build test >/dev/null 2>&1; then
   echo "the unmutated build already fails; fix that before reading this script's output"
   exit 1
 fi
@@ -265,7 +267,18 @@ expect 'stale line' \
 
 fi
 
-BUILD='zig build test'
+BUILD="$ZIG build test"
 
 printf '\ncaught: %d   missed: %d\n' "$pass" "$fail"
+
+# ci/measurements.sh publishes how many mutations this file holds by counting
+# its `try` and `expect` lines. A declaration inside a branch that did not run
+# would make that number overstate the proof; this is what makes it mean "ran".
+declared=$(grep -cE '^(try|expect) ' "$SELF")
+if [ $fail -eq 0 ] && [ $((pass + fail)) -ne "$declared" ]; then
+  printf 'ran %d of %d declared mutations; the published count would overstate it\n' \
+    "$((pass + fail))" "$declared"
+  exit 1
+fi
+
 [ $fail -eq 0 ]

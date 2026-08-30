@@ -2,98 +2,132 @@
 #
 # zozz — recompute every number the documentation claims.
 #
-# The README and TODO.md quote counts: entry points, tests, translation units,
-# how long a full run takes. All of them are written by hand, and none of them
-# has anything that notices when the code moves underneath. A count that is
-# quietly wrong is worse than no count, because a reader has no way to tell.
+# Every count README.md publishes comes from here and from nowhere else: the
+# README carries a generated block that ci/check-docs.sh rebuilds from this
+# script and refuses to let drift. A hand-written count is not allowed to
+# exist, so there is nothing left that can quietly go stale.
 #
-# This prints what is actually true right now. Run it before touching a number
-# in a document, and paste what it says rather than what you remember.
+# Usage:
+#   ci/measurements.sh            # human-readable
+#   ci/measurements.sh --kv       # KEY<TAB>VALUE<TAB>DESCRIPTION
+#   ci/measurements.sh --markdown # the table README.md's generated block holds
 #
-# It measures; it does not judge. Nothing here fails a build — the numbers are
-# for prose, and prose is a human's job to keep honest.
-#
-# Usage: ci/measurements.sh
+# ZIG overrides the compiler used by the one measurement that has to build.
+# Nothing here uses `bc`: it is absent from Git Bash, and an absent bc produced
+# an EMPTY count rather than an error.
 
 set -euo pipefail
 cd "$(dirname "$0")/.."
 
-section() { printf '\n%s\n%s\n' "$1" "$(printf '%*s' "${#1}" '' | tr ' ' -)"; }
+MODE=${1:-}
+ZIG=${ZIG:-zig}
 
-section "C ABI"
+#-----------------------------------------------------------------------------
+# The measurements. Each is `emit KEY VALUE DESCRIPTION`, and the description
+# is what the README prints, so a measurement is described once.
+#-----------------------------------------------------------------------------
 
-# One ZOZZ_API per entry point, and the macro appears nowhere else.
-entry_points=$(grep -rhc '^ZOZZ_API' ffi/*.h | paste -sd+ - | bc)
-printf 'entry points (ZOZZ_API in ffi/*.h)   %s\n' "$entry_points"
+keys=()
+values=()
+descriptions=()
+emit() {
+  keys+=("$1")
+  values+=("$2")
+  descriptions+=("$3")
+}
 
-# The Zig mirror of the same set. abi_check.zig fails the build if these ever
-# disagree, so a difference here means this script is counting wrong.
+sum() { awk '{ total += $1 } END { print total + 0 }'; }
+
+# build.zig fails to compile if build.zig.zon and ffi/zozz_core.h disagree on
+# the version, so either file answers for both.
+emit version "$(sed -n 's/^ *\.version = "\([^"]*\)".*/\1/p' build.zig.zon)" \
+  'version, the same in `build.zig.zon` and `ffi/zozz_core.h`'
+
+# One ZOZZ_API per entry point; the macro appears nowhere else.
+entry_points=$(grep -rhc '^ZOZZ_API' ffi/*.h | sum)
+emit c_entry_points "$entry_points" 'C entry points (`ZOZZ_API` in `ffi/*.h`)'
+
+# The Zig mirror of the same set. src/abi_check.zig fails the build if the two
+# sets disagree, so a difference here is a bug in this script.
 externs=$(grep -c '^pub extern fn zozz' src/c.zig)
-printf 'externs (pub extern fn in src/c.zig)  %s\n' "$externs"
+emit zig_externs "$externs" 'Zig externs (`pub extern fn` in `src/c.zig`)'
+
+emit public_headers "$(ls ffi/*.h | wc -l | tr -d ' ')" 'installed public headers'
+
+# tools/coverage.sh matches ozz's public names against zozz's entry points by
+# name, per vendored area. The total is a work list, not a score: much of what
+# it counts as public is ozz-internal machinery no C ABI should carry.
+coverage_line=$(tools/coverage.sh | sed -n 's/^  TOTAL  *\([0-9][0-9]*\)  *\([0-9][0-9]*\).*/\1 \2/p')
+emit ozz_names_bound "${coverage_line%% *}" 'ozz public names with a binding'
+emit ozz_names_total "${coverage_line##* }" 'ozz public names in the bound areas'
+
+# What the build reports, not what a grep for `test` finds: a test behind a
+# build option would be counted by the grep and never run.
+test_line=$(${ZIG} build test --summary all 2>&1 |
+  sed -n 's/.*run test zozz-tests \([0-9][0-9]*\) pass, \([0-9][0-9]*\) skip .*/\1 \2/p' | head -1)
+emit zig_tests_run "${test_line%% *}" 'Zig tests `zig build test` executes'
+emit zig_tests_skipped "${test_line##* }" \
+  'tests it skips, each needing a build option or an on-disk asset'
+emit c_smoke_assertions "$(grep -c 'CHECK\|assert' tests/c_smoke.c)" \
+  'assertions in the standalone C smoke test'
+
+# What one configuration compiles.
+emit ozz_translation_units "$(grep -cE '^ *"libs/ozz/[^"]*\.cc",' build.zig)" \
+  'vendored ozz translation units `build.zig` compiles'
+emit zozz_translation_units "$(ls ffi/*.cpp | wc -l | tr -d ' ')" \
+  'zozz C++ translation units (`ffi/*.cpp`)'
+emit zig_source_lines "$(cat src/*.zig | wc -l | tr -d ' ')" 'Zig source lines (`src/`)'
+emit cxx_source_lines "$(cat ffi/*.cpp ffi/*.h | wc -l | tr -d ' ')" 'C++ source lines (`ffi/`)'
+
+# One `try` or `expect` per mutation. check-abi-drift.sh counts the same
+# declarations and refuses to report success unless it ran that many, so this
+# count cannot overstate the proof.
+emit abi_drift_mutations "$(grep -cE '^(try|expect) ' ci/check-abi-drift.sh)" \
+  'deliberate drifts `ci/check-abi-drift.sh` must refuse'
+emit ci_checks "$(grep -cE "^ *run ['\"]" ci/run.sh)" 'steps `ci/run.sh` runs'
+emit ci_cross_targets \
+  "$(sed -n '/^for target in/,/^do$/p' ci/run.sh | grep -cE '^ +[a-z0-9_]+-')" \
+  'further targets `ci/run.sh` cross-compiles'
+
+#-----------------------------------------------------------------------------
+# Output
+#-----------------------------------------------------------------------------
+
+# A measurement that silently produces nothing is worse than a wrong one: it
+# renders as an empty cell and reads as "not applicable". An empty value here
+# is what a changed `zig build` summary format looks like from the outside.
+for i in "${!keys[@]}"; do
+  if [ -z "${values[$i]}" ]; then
+    printf 'measurement %s produced no value; its source has changed shape\n' \
+      "${keys[$i]}" >&2
+    exit 1
+  fi
+done
+
+if [ "$MODE" = "--kv" ]; then
+  for i in "${!keys[@]}"; do
+    printf '%s\t%s\t%s\n' "${keys[$i]}" "${values[$i]}" "${descriptions[$i]}"
+  done
+  exit 0
+fi
+
+if [ "$MODE" = "--markdown" ]; then
+  printf '| | |
+|---:|---|
+'
+  for i in "${!keys[@]}"; do
+    printf '| **%s** | %s |
+' "${values[$i]}" "${descriptions[$i]}"
+  done
+  exit 0
+fi
+
+for i in "${!keys[@]}"; do
+  printf '%-24s %8s  %s\n' "${keys[$i]}" "${values[$i]}" "${descriptions[$i]}"
+done
+
 if [ "$entry_points" != "$externs" ]; then
-  printf '  ^ these must match; src/abi_check.zig pairs them at build time\n'
+  printf '\nc_entry_points and zig_externs must match: src/abi_check.zig pairs\n'
+  printf 'them at build time, so a difference is a bug in this script.\n'
+  exit 1
 fi
-
-printf 'public headers                        %s\n' "$(ls ffi/*.h | wc -l | tr -d ' ')"
-
-section "ozz coverage"
-
-# tools/coverage.sh enumerates ozz's public names against zozz's entry points
-# by name, per vendored area. The total is a work list, not a score: most of
-# what it counts as "public" is internal ozz machinery no C ABI should carry.
-# See tools/coverage.sh for what counts and what is deliberately excluded.
-coverage_line=$(tools/coverage.sh | sed -n 's/^  TOTAL *\([0-9]*\) *\([0-9]*\).*/\1 \2/p')
-coverage_bound=$(printf '%s' "$coverage_line" | cut -d' ' -f1)
-coverage_public=$(printf '%s' "$coverage_line" | cut -d' ' -f2)
-printf 'ozz public names bound (of total)    %s / %s\n' \
-  "${coverage_bound:-unknown}" "${coverage_public:-unknown}"
-
-section "Tests"
-
-# The counts the build itself reports, rather than counting `test` keywords:
-# a test inside a `comptime` block or behind a build option would be counted
-# but never run.
-zig_tests=$(zig build test --summary all 2>&1 |
-  sed -n 's/.*run test zozz-tests \([0-9]*\) pass.*/\1/p' | head -1)
-printf 'zig tests (as run)                    %s\n' "${zig_tests:-unknown}"
-printf 'test files                            %s\n' \
-  "$(ls src/*_test.zig 2>/dev/null | wc -l | tr -d ' ')"
-printf 'C smoke assertions                    %s\n' \
-  "$(grep -c 'CHECK\|assert' tests/c_smoke.c 2>/dev/null || echo 0)"
-
-section "Build size"
-
-# What a single configuration actually compiles. This is the number that sets
-# how long everything else takes.
-ozz_tu=$(find libs/ozz/src -name '*.cc' -o -name '*.cpp' | wc -l | tr -d ' ')
-own_tu=$(ls ffi/*.cpp | wc -l | tr -d ' ')
-printf 'ozz translation units                %s\n' "$ozz_tu"
-printf 'zozz translation units               %s\n' "$own_tu"
-printf 'total per configuration               %s\n' "$((ozz_tu + own_tu))"
-printf 'zig source lines (src/)               %s\n' \
-  "$(cat src/*.zig | wc -l | tr -d ' ')"
-printf 'C++ source lines (ffi/)               %s\n' \
-  "$(cat ffi/*.cpp ffi/*.h | wc -l | tr -d ' ')"
-
-section "Guards"
-
-# One `try` per mutation. ci/run.sh names this count in a label, so it has to
-# be kept in step by hand — this is where to read the true one.
-printf 'ABI drift mutations                   %s\n' \
-  "$(grep -c '^try ' ci/check-abi-drift.sh)"
-printf 'ci/run.sh checks (static)             %s\n' \
-  "$(grep -cE "^ *run ['\"]" ci/run.sh)"
-printf 'ci/run.sh cross targets               %s\n' \
-  "$(sed -n '/^ *for target in/,/^ *do$/p' ci/run.sh | grep -cE '^ +[a-z0-9_]+-')"
-
-# The one number in ci/run.sh that is written into a label rather than
-# computed, so it is the one that can silently disagree with the script it
-# names.
-label=$(sed -n "s/.*abi drift (\([0-9]*\) mutations).*/\1/p" ci/run.sh)
-actual=$(grep -c '^try ' ci/check-abi-drift.sh)
-if [ -n "$label" ] && [ "$label" != "$actual" ]; then
-  printf "\n  ci/run.sh's label says %s mutations; check-abi-drift.sh has %s\n" \
-    "$label" "$actual"
-fi
-
-printf '\n'

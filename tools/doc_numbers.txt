@@ -1,0 +1,15 @@
+# Numbers a document may state by hand, and why each one cannot go stale.
+#
+# ci/check-docs.sh refuses every other multi-digit number outside a generated
+# block: anything describing THIS TREE belongs in a block instead, so that a
+# script recomputes it. Adding a line here has to be a deliberate argument
+# that the number is not a measurement.
+#
+# Format: NUMBER<TAB>why it is not a measurement of this tree.
+#
+# Numbers inside `code`, a fenced block, a link target or an identifier
+# (x86_64, 0.17.0, a date, a CI run id) are citations rather than claims and
+# are never listed here. An entry that no document states is a failure too --
+# a rule that allows nothing is as stale as a count that is wrong.
+#
+# The list is empty, and that is the intended state.
