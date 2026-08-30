@@ -150,7 +150,7 @@ test "aim IK points the forward axis at the target" {
     try std.testing.expect(dot > 0.999);
 }
 
-test "weight = 0 is a no-op for both IK jobs" {
+test "weight = 0 is identity: exactly for TwoBoneJob, to ozz's Est tolerance for AimJob" {
     const gpa = std.testing.allocator;
     try zozz.setAllocator(gpa);
     defer zozz.resetAllocator();
@@ -175,11 +175,14 @@ test "weight = 0 is a no-op for both IK jobs" {
         .mid_joint = &models[1],
         .end_joint = &models[2],
     }).run();
+    // IKTwoBoneJob::Run has an explicit `weight <= 0` early-out that assigns
+    // SimdQuaternion::identity() (ik_two_bone_job.cc), so this half is exact
+    // on every backend and is held to an exact bar.
     for ([_][4]f32{ two_bone.start_joint_correction, two_bone.mid_joint_correction }) |c| {
-        try std.testing.expectApproxEqAbs(@as(f32, 0), c[0], 1e-5);
-        try std.testing.expectApproxEqAbs(@as(f32, 0), c[1], 1e-5);
-        try std.testing.expectApproxEqAbs(@as(f32, 0), c[2], 1e-5);
-        try std.testing.expectApproxEqAbs(@as(f32, 1), c[3], 1e-5);
+        try std.testing.expectEqual(@as(f32, 0), c[0]);
+        try std.testing.expectEqual(@as(f32, 0), c[1]);
+        try std.testing.expectEqual(@as(f32, 0), c[2]);
+        try std.testing.expectEqual(@as(f32, 1), c[3]);
     }
 
     const joint_matrix = zozz.mat4_identity;
@@ -188,10 +191,53 @@ test "weight = 0 is a no-op for both IK jobs" {
         .weight = 0,
         .joint = &joint_matrix,
     }).run();
-    try std.testing.expectApproxEqAbs(@as(f32, 0), aim.joint_correction[0], 1e-5);
-    try std.testing.expectApproxEqAbs(@as(f32, 0), aim.joint_correction[1], 1e-5);
-    try std.testing.expectApproxEqAbs(@as(f32, 0), aim.joint_correction[2], 1e-5);
-    try std.testing.expectApproxEqAbs(@as(f32, 1), aim.joint_correction[3], 1e-5);
+    try expectIdentityToEstTolerance(aim.joint_correction);
+}
+
+/// ozz's `IKAimJob` has no weight-0 early-out: at any weight < 1 it returns
+/// `NormalizeEst4(Lerp(identity, q, weight))` (ik_aim_job.cc). `NormalizeEst4`
+/// is `_mm_rsqrt_ps` on the SSE backend, whose 12-bit estimate makes
+/// rsqrt(1.0) = 0.999755859375, so the "identity" it returns is identity only
+/// to ozz's OWN estimated-normalisation tolerance. That constant is the only
+/// correct bar here; a tighter one asserts something ozz does not promise.
+fn expectIdentityToEstTolerance(q: [4]f32) !void {
+    const tol = zozz.math.normalization_tolerance_est_sq;
+
+    // Normalised to est precision — ozz's own IsNormalizedEst4 predicate.
+    try std.testing.expect(zozz.math.simd_float4.isNormalizedEst4(q)[0] != 0);
+
+    // And identity to est precision: the rotation angle is 2*acos(|w|), and
+    // |w| >= 1 - tol bounds it. Comparing the components directly to (0,0,0,1)
+    // at the same bar says the same thing for a normalised quaternion.
+    try std.testing.expectApproxEqAbs(@as(f32, 0), q[0], tol);
+    try std.testing.expectApproxEqAbs(@as(f32, 0), q[1], tol);
+    try std.testing.expectApproxEqAbs(@as(f32, 0), q[2], tol);
+    try std.testing.expectApproxEqAbs(@as(f32, 1), @abs(q[3]), tol);
+}
+
+test "AimJob's weight-0 identity is exact on a scalar ozz backend and estimated on SSE" {
+    // The measured difference between the two backends ozz ships, pinned so it
+    // cannot be mistaken for a binding defect again. ozz has `ref` (scalar) and
+    // `sse` only -- no NEON -- so aarch64 runs `ref` and returns exactly 1.0,
+    // while x86_64 runs `sse` and returns rsqrt(1.0) = 0.999755859375.
+    const gpa = std.testing.allocator;
+    try zozz.setAllocator(gpa);
+    defer zozz.resetAllocator();
+
+    const joint_matrix = zozz.mat4_identity;
+    const aim = try (zozz.ik.AimJob{
+        .target = .{ 5, 5, 5 },
+        .weight = 0,
+        .joint = &joint_matrix,
+    }).run();
+
+    try expectIdentityToEstTolerance(aim.joint_correction);
+
+    // The estimate never OVER-shoots: rsqrt's estimate of 1/sqrt(1) is at or
+    // below 1, so w is in (1 - tol, 1]. A w above 1 would mean the mechanism
+    // recorded here is not the one running.
+    try std.testing.expect(@abs(aim.joint_correction[3]) <= 1.0);
+    try std.testing.expect(@abs(aim.joint_correction[3]) > 1.0 - zozz.math.normalization_tolerance_est_sq);
 }
 
 test "IK job defaults match ozz's own" {

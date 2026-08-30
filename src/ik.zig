@@ -5,6 +5,12 @@
 //! correction quaternion for the joint(s) it was pointed at. `applyCorrection`
 //! is the other half — it is what a corrected chain actually needs before the
 //! next model-space update.
+//!
+//! Precision: `TwoBoneJob` early-outs at `weight <= 0` and returns an exact
+//! identity. `AimJob` does not, and at any `weight < 1` ends in ozz's
+//! `NormalizeEst4`, so its correction is normalised — and at weight 0
+//! identity — only to `math.normalization_tolerance_est_sq`. Skip the job at
+//! weight 0 rather than running it for an identity, as ozz's own samples do.
 
 const std = @import("std");
 const c = @import("c.zig");
