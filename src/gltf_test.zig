@@ -193,7 +193,7 @@ test "gltf: the CLI driver is always unsupported (jsoncpp is not vendored)" {
     }
     if (zozz.options.options) {
         var interface = hostInterface();
-        const importer = try zozz.Importer.init(&interface);
+        var importer = try zozz.Importer.init(&interface);
         defer importer.deinit();
         try std.testing.expectError(zozz.Error.Unsupported, importer.run(&argv));
         return;
