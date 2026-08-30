@@ -132,10 +132,10 @@ ZozzResult SampleTrack(const Handle* track, float ratio, float* out) {
 }
 
 //===----------------------------------------------------------------------===//
-// Keyframe read-back, generic over the five track handle types. `ratios()`
-// gives the authoritative keyframe count: `values()` always matches it by
-// construction (TrackBuilder::Allocate sizes both spans together), and
-// `steps()` is a packed bitset sized in bytes rather than keys.
+// Keyframe read-back, generic over the five track handle types. Each returns
+// ozz's own span, borrowed: `ratios()` gives the authoritative keyframe count,
+// `values()` always matches it by construction (TrackBuilder::Allocate sizes
+// both spans together), and `steps()` is a packed bitset sized in BYTES.
 //===----------------------------------------------------------------------===//
 
 template <typename Handle>
@@ -143,40 +143,73 @@ int TrackNumKeyframes(const Handle* track) {
   return track == nullptr ? 0 : static_cast<int>(track->impl.ratios().size());
 }
 
+/// Every accessor below reports 0 and hands back nothing for a track that is
+/// not there, so a caller that ignores the count still reads an empty view.
+template <typename T>
+const T* EmptyView(size_t* out_count) {
+  if (out_count != nullptr) *out_count = 0;
+  return nullptr;
+}
+
 template <typename Handle>
-ZozzResult TrackRatios(const Handle* track, float* out, size_t count) {
-  if (track == nullptr || out == nullptr) return ZOZZ_RESULT_INVALID_ARGUMENT;
+const float* TrackRatios(const Handle* track, size_t* out_count) {
+  if (track == nullptr || out_count == nullptr) {
+    return EmptyView<float>(out_count);
+  }
   const ozz::span<const float> ratios = track->impl.ratios();
-  if (count < ratios.size()) return ZOZZ_RESULT_BUFFER_TOO_SMALL;
-  std::memcpy(out, ratios.data(), ratios.size() * sizeof(float));
-  return ZOZZ_RESULT_OK;
+  *out_count = ratios.size();
+  return ratios.data();
 }
 
-/// `out` accepts any pointer type wide enough to hold one ValueType per
-/// keyframe (a plain float* for FloatTrack, a float(*)[N] for the vector and
-/// quaternion tracks) — every call site passes its own array parameter
-/// straight through, which converts to void* implicitly.
-template <typename ValueType, int N, typename Handle>
-ZozzResult TrackValues(const Handle* track, void* out, size_t count) {
-  static_assert(sizeof(ValueType) == static_cast<size_t>(N) * sizeof(float),
-                "track value type does not match the output width");
-  if (track == nullptr || out == nullptr) return ZOZZ_RESULT_INVALID_ARGUMENT;
+template <typename ValueType, typename Handle>
+const ValueType* TrackValues(const Handle* track, size_t* out_count) {
+  if (track == nullptr || out_count == nullptr) {
+    return EmptyView<ValueType>(out_count);
+  }
   const ozz::span<const ValueType> values = track->impl.values();
-  if (count < values.size()) return ZOZZ_RESULT_BUFFER_TOO_SMALL;
-  std::memcpy(out, values.data(), values.size() * sizeof(ValueType));
-  return ZOZZ_RESULT_OK;
+  *out_count = values.size();
+  return values.data();
 }
 
-/// Decodes Track::steps() — one bit per key, bit i of byte i/8, packed
-/// least-significant-bit first by TrackBuilder (track_builder.cc) — into one
-/// ZozzTrackInterpolation per key, so a host never indexes the bitset itself.
+/// A vector or quaternion track's values as rows of N floats. ozz stores them
+/// as ValueType, which is N floats and nothing else, so the row view is the
+/// same bytes rather than a repacking — the static_assert is what says so.
+template <typename ValueType, int N, typename Handle>
+const float (*TrackValueRows(const Handle* track, size_t* out_count))[N] {
+  static_assert(sizeof(ValueType) == static_cast<size_t>(N) * sizeof(float),
+                "track value type does not match the row width");
+  return reinterpret_cast<const float(*)[N]>(
+      TrackValues<ValueType>(track, out_count));
+}
+
 template <typename Handle>
-ZozzResult TrackSteps(const Handle* track, ZozzTrackInterpolation* out,
-                      size_t count) {
-  if (track == nullptr || out == nullptr) return ZOZZ_RESULT_INVALID_ARGUMENT;
-  const size_t num_keys = track->impl.ratios().size();
-  if (count < num_keys) return ZOZZ_RESULT_BUFFER_TOO_SMALL;
+const uint8_t* TrackSteps(const Handle* track, size_t* out_count) {
+  if (track == nullptr || out_count == nullptr) {
+    return EmptyView<uint8_t>(out_count);
+  }
   const ozz::span<const uint8_t> steps = track->impl.steps();
+  *out_count = steps.size();
+  return steps.data();
+}
+
+}  // namespace
+
+extern "C" {
+
+//===----------------------------------------------------------------------===//
+// Steps decoding, shared by all five value types
+//===----------------------------------------------------------------------===//
+
+ZozzResult zozzTrackInterpolations(const uint8_t* steps, size_t bytes,
+                                   size_t num_keys, ZozzTrackInterpolation* out,
+                                   size_t count) {
+  if (num_keys == 0) return ZOZZ_RESULT_OK;
+  if (steps == nullptr || out == nullptr) return ZOZZ_RESULT_INVALID_ARGUMENT;
+  if (bytes * 8 < num_keys) return ZOZZ_RESULT_INVALID_ARGUMENT;
+  if (count < num_keys) return ZOZZ_RESULT_BUFFER_TOO_SMALL;
+
+  // TrackBuilder (track_builder.cc) packs one bit per key, bit i of byte i / 8,
+  // least-significant bit first. This is the one place that order is read.
   for (size_t i = 0; i < num_keys; ++i) {
     const bool is_step = ((steps[i / 8] >> (i % 8)) & 1u) != 0;
     out[i] = is_step ? ZOZZ_TRACK_INTERPOLATION_STEP
@@ -184,10 +217,6 @@ ZozzResult TrackSteps(const Handle* track, ZozzTrackInterpolation* out,
   }
   return ZOZZ_RESULT_OK;
 }
-
-}  // namespace
-
-extern "C" {
 
 //===----------------------------------------------------------------------===//
 // FloatTrack
@@ -218,19 +247,19 @@ int zozzFloatTrackNumKeyframes(const ZozzFloatTrack* track) {
   return TrackNumKeyframes(track);
 }
 
-ZozzResult zozzFloatTrackRatios(const ZozzFloatTrack* track, float* out,
-                                size_t count) {
-  return TrackRatios(track, out, count);
+const float* zozzFloatTrackRatios(const ZozzFloatTrack* track,
+                                  size_t* out_count) {
+  return TrackRatios(track, out_count);
 }
 
-ZozzResult zozzFloatTrackValues(const ZozzFloatTrack* track, float* out,
-                                size_t count) {
-  return TrackValues<float, 1>(track, out, count);
+const float* zozzFloatTrackValues(const ZozzFloatTrack* track,
+                                  size_t* out_count) {
+  return TrackValues<float>(track, out_count);
 }
 
-ZozzResult zozzFloatTrackSteps(const ZozzFloatTrack* track,
-                               ZozzTrackInterpolation* out, size_t count) {
-  return TrackSteps(track, out, count);
+const uint8_t* zozzFloatTrackSteps(const ZozzFloatTrack* track,
+                                   size_t* out_count) {
+  return TrackSteps(track, out_count);
 }
 
 //===----------------------------------------------------------------------===//
@@ -262,19 +291,19 @@ int zozzFloat2TrackNumKeyframes(const ZozzFloat2Track* track) {
   return TrackNumKeyframes(track);
 }
 
-ZozzResult zozzFloat2TrackRatios(const ZozzFloat2Track* track, float* out,
-                                 size_t count) {
-  return TrackRatios(track, out, count);
+const float* zozzFloat2TrackRatios(const ZozzFloat2Track* track,
+                                   size_t* out_count) {
+  return TrackRatios(track, out_count);
 }
 
-ZozzResult zozzFloat2TrackValues(const ZozzFloat2Track* track,
-                                 float out[][2], size_t count) {
-  return TrackValues<ozz::math::Float2, 2>(track, out, count);
+const float (*zozzFloat2TrackValues(const ZozzFloat2Track* track,
+                                    size_t* out_count))[2] {
+  return TrackValueRows<ozz::math::Float2, 2>(track, out_count);
 }
 
-ZozzResult zozzFloat2TrackSteps(const ZozzFloat2Track* track,
-                                ZozzTrackInterpolation* out, size_t count) {
-  return TrackSteps(track, out, count);
+const uint8_t* zozzFloat2TrackSteps(const ZozzFloat2Track* track,
+                                    size_t* out_count) {
+  return TrackSteps(track, out_count);
 }
 
 //===----------------------------------------------------------------------===//
@@ -306,19 +335,19 @@ int zozzFloat3TrackNumKeyframes(const ZozzFloat3Track* track) {
   return TrackNumKeyframes(track);
 }
 
-ZozzResult zozzFloat3TrackRatios(const ZozzFloat3Track* track, float* out,
-                                 size_t count) {
-  return TrackRatios(track, out, count);
+const float* zozzFloat3TrackRatios(const ZozzFloat3Track* track,
+                                   size_t* out_count) {
+  return TrackRatios(track, out_count);
 }
 
-ZozzResult zozzFloat3TrackValues(const ZozzFloat3Track* track,
-                                 float out[][3], size_t count) {
-  return TrackValues<ozz::math::Float3, 3>(track, out, count);
+const float (*zozzFloat3TrackValues(const ZozzFloat3Track* track,
+                                    size_t* out_count))[3] {
+  return TrackValueRows<ozz::math::Float3, 3>(track, out_count);
 }
 
-ZozzResult zozzFloat3TrackSteps(const ZozzFloat3Track* track,
-                                ZozzTrackInterpolation* out, size_t count) {
-  return TrackSteps(track, out, count);
+const uint8_t* zozzFloat3TrackSteps(const ZozzFloat3Track* track,
+                                    size_t* out_count) {
+  return TrackSteps(track, out_count);
 }
 
 //===----------------------------------------------------------------------===//
@@ -350,19 +379,19 @@ int zozzFloat4TrackNumKeyframes(const ZozzFloat4Track* track) {
   return TrackNumKeyframes(track);
 }
 
-ZozzResult zozzFloat4TrackRatios(const ZozzFloat4Track* track, float* out,
-                                 size_t count) {
-  return TrackRatios(track, out, count);
+const float* zozzFloat4TrackRatios(const ZozzFloat4Track* track,
+                                   size_t* out_count) {
+  return TrackRatios(track, out_count);
 }
 
-ZozzResult zozzFloat4TrackValues(const ZozzFloat4Track* track,
-                                 float out[][4], size_t count) {
-  return TrackValues<ozz::math::Float4, 4>(track, out, count);
+const float (*zozzFloat4TrackValues(const ZozzFloat4Track* track,
+                                    size_t* out_count))[4] {
+  return TrackValueRows<ozz::math::Float4, 4>(track, out_count);
 }
 
-ZozzResult zozzFloat4TrackSteps(const ZozzFloat4Track* track,
-                                ZozzTrackInterpolation* out, size_t count) {
-  return TrackSteps(track, out, count);
+const uint8_t* zozzFloat4TrackSteps(const ZozzFloat4Track* track,
+                                    size_t* out_count) {
+  return TrackSteps(track, out_count);
 }
 
 //===----------------------------------------------------------------------===//
@@ -397,20 +426,19 @@ int zozzQuaternionTrackNumKeyframes(const ZozzQuaternionTrack* track) {
   return TrackNumKeyframes(track);
 }
 
-ZozzResult zozzQuaternionTrackRatios(const ZozzQuaternionTrack* track,
-                                     float* out, size_t count) {
-  return TrackRatios(track, out, count);
+const float* zozzQuaternionTrackRatios(const ZozzQuaternionTrack* track,
+                                       size_t* out_count) {
+  return TrackRatios(track, out_count);
 }
 
-ZozzResult zozzQuaternionTrackValues(const ZozzQuaternionTrack* track,
-                                     float out[][4], size_t count) {
-  return TrackValues<ozz::math::Quaternion, 4>(track, out, count);
+const float (*zozzQuaternionTrackValues(const ZozzQuaternionTrack* track,
+                                        size_t* out_count))[4] {
+  return TrackValueRows<ozz::math::Quaternion, 4>(track, out_count);
 }
 
-ZozzResult zozzQuaternionTrackSteps(const ZozzQuaternionTrack* track,
-                                    ZozzTrackInterpolation* out,
-                                    size_t count) {
-  return TrackSteps(track, out, count);
+const uint8_t* zozzQuaternionTrackSteps(const ZozzQuaternionTrack* track,
+                                        size_t* out_count) {
+  return TrackSteps(track, out_count);
 }
 
 //===----------------------------------------------------------------------===//
