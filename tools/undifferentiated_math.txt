@@ -1,0 +1,23 @@
+# zozz — public functions of src/math.zig that src/mathref_test.zig does NOT
+# compare against the compiled ozz, and why.
+#
+# NAME<TAB>REASON. ci/check-mathref.sh recomputes which functions are covered
+# and fails on a name that is missing here, on a name here that is covered
+# after all, and on a name here that no longer exists.
+#
+# The differential fixture carries sixteen-byte registers, because every
+# operand ozz::math's SIMD layer takes is a whole number of them. A function
+# whose operand is not is not automatically excused -- Transform rides in three
+# registers, a Float3 in lane 0 of three more -- but it does need a shape the
+# fixture can carry, and the rows below say which do not.
+
+Box.fromPoints	Walks a strided buffer of points rather than taking registers; covering it means the fixture growing a second operand shape (a pointer plus a stride). Held by src/math_test.zig instead, against hand-computed bounds.
+Box.isValid	Takes an ozz::math::Box, a pair of Float3 aggregates rather than a register operand. Held by src/math_test.zig, which asserts Box.invalid is invalid and a merged box is not.
+Box.isInside	Takes a Box and a plain [3]f32; same aggregate shape as Box.isValid above. Held by src/math_test.zig against hand-computed containment.
+Box.merge	Takes and returns a Box; same aggregate shape as Box.isValid above. Held by src/math_test.zig, including the identity case against Box.invalid.
+Box.transform	Takes a Box and a Mat4; same aggregate shape as Box.isValid above. Held by src/math_test.zig against a hand-computed transformed box.
+Rect	A comptime type constructor, not an operation: it returns a struct, so there is no call for the fixture to make. Its methods are one-line accessors held by src/math_test.zig.
+quaternion.nlerpEst	ozz declares NLerpEst for SoaQuaternion only, so there is no single-quaternion original to differentiate against. Its body is quaternion.nlerp's, which is covered.
+simdImplementationName	Deliberately not a copy of ozz's backend string -- it names this port instead -- so the two are meant to differ and comparing them would assert the opposite.
+pointerStride	Offsets a pointer by bytes. The result is an address, not a value the fixture can carry back through a register.
+strmatch	Matches a string against a wildcard pattern. Strings are not registers; covering it means a separate fixture with its own operand shape.

@@ -101,6 +101,8 @@ jobs:
         run: ci/check-comments.sh
       - name: Coverage — every public name has a verdict
         run: ci/check-coverage.sh
+      - name: Differential maths — every function tested or explained
+        run: ci/check-mathref.sh
       - name: Every committed script is executable
         run: ci/check-executable.sh
 

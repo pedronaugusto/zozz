@@ -408,6 +408,12 @@ pub fn build(b: *std.Build) void {
         .file = b.path("tests/fixture.cpp"),
         .flags = cxx_flags,
     });
+    // ozz's own maths, reachable from a test so the hand port in src/math.zig
+    // has something other than itself to be compared against.
+    fixture.root_module.addCSourceFile(.{
+        .file = b.path("tests/mathref.cpp"),
+        .flags = cxx_flags,
+    });
     fixture.root_module.sanitize_c = if (options.sanitize_c) .full else .off;
     fixture.root_module.linkLibrary(lib);
 
@@ -452,6 +458,8 @@ pub fn build(b: *std.Build) void {
     // preprocessed here with the same macros the library was compiled with, or
     // the check would be comparing against something nobody ships.
     tests.root_module.addIncludePath(b.path("ffi"));
+    // tests/mathref.h, for the same reason and on the same module only.
+    tests.root_module.addIncludePath(b.path("tests"));
 
     const test_step = b.step("test", "Run zozz tests");
     test_step.dependOn(&b.addRunArtifact(tests).step);

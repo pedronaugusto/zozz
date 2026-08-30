@@ -253,6 +253,7 @@ test {
 
     // Behavioural tests, one file per area.
     _ = @import("math_test.zig");
+    _ = @import("mathref_test.zig");
     _ = @import("sampling_test.zig");
     _ = @import("blending_test.zig");
     _ = @import("ik_test.zig");

@@ -91,6 +91,11 @@ run 'comment standard' ci/check-comments.sh
 
 run 'coverage (every name has a verdict)' ci/check-coverage.sh
 
+# src/math.zig is a hand port, so what the differential test does NOT reach is
+# the part worth naming. A new maths function with no row and no reason stops
+# a push here rather than being noticed a release later.
+run 'differential maths (tested or explained)' ci/check-mathref.sh
+
 # Every number README.md and UPSTREAM.md publish, recomputed and compared. It
 # builds once (the test count is what the build reports, not a grep), so it
 # sits with the tests rather than with the one-second checks above.
