@@ -4,6 +4,15 @@ const std = @import("std");
 const c = @import("c.zig");
 const err = @import("error.zig");
 
+/// How a time outside a clip's [0, duration] maps onto it. `ratioAt` takes
+/// one; there is no default, because a clip carries no loop flag.
+pub const TimeMode = enum {
+    /// Time before the start holds the first pose, past the end the last.
+    clamp,
+    /// Time wraps, so the clip repeats forever in both directions.
+    loop,
+};
+
 pub const Animation = struct {
     handle: ?*c.Animation,
 
@@ -40,12 +49,19 @@ pub const Animation = struct {
         return std.mem.span(c.zozzAnimationName(self.handle.?));
     }
 
-    /// Converts a time in seconds to the unit ratio sampling expects.
-    /// Values outside the clip are clamped, matching ozz.
-    pub fn ratioAt(self: Animation, seconds: f32) f32 {
+    /// Converts a time in seconds to the unit ratio sampling expects. `mode`
+    /// is not optional: ozz stores no loop flag on an Animation, so the
+    /// caller states it here rather than in a `@mod` at each call site.
+    pub fn ratioAt(self: Animation, seconds: f32, mode: TimeMode) f32 {
         const total = self.duration();
-        if (!(total > 0)) return 0;
-        return std.math.clamp(seconds / total, 0, 1);
+        if (!(total > 0) or !std.math.isFinite(seconds)) return 0;
+        const raw = seconds / total;
+        return switch (mode) {
+            .clamp => std.math.clamp(raw, 0, 1),
+            // @mod takes the divisor's sign, so -0.25 maps to 0.75 and time
+            // before the clip's start plays its tail rather than its head.
+            .loop => @mod(raw, 1.0),
+        };
     }
 
     /// Number of SoA blocks matching `numTracks`: `(numTracks + 3) / 4`.

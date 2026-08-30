@@ -93,8 +93,20 @@ fn expectPipelineWorks(
     try std.testing.expect(clip.duration() > 0);
     try std.testing.expect(clip.numTracks() > 0);
     try std.testing.expect(clip.numTracks() <= joints);
-    try std.testing.expectEqual(@as(f32, 0), clip.ratioAt(0));
-    try std.testing.expectEqual(@as(f32, 1), clip.ratioAt(clip.duration() * 2));
+    try std.testing.expectEqual(@as(f32, 0), clip.ratioAt(0, .clamp));
+    try std.testing.expectEqual(@as(f32, 1), clip.ratioAt(clip.duration() * 2, .clamp));
+
+    // Looping wraps in both directions, and the seam is exact: two clips in
+    // is the start again, and a quarter clip BEFORE the start is three
+    // quarters through, not clamped to zero and not a negative ratio.
+    const total = clip.duration();
+    try std.testing.expectApproxEqAbs(@as(f32, 0), clip.ratioAt(total * 2, .loop), 1e-6);
+    try std.testing.expectApproxEqAbs(@as(f32, 0.5), clip.ratioAt(total * 2.5, .loop), 1e-6);
+    try std.testing.expectApproxEqAbs(@as(f32, 0.75), clip.ratioAt(-total * 0.25, .loop), 1e-6);
+    for ([_]zozz.TimeMode{ .clamp, .loop }) |mode| {
+        const r = clip.ratioAt(std.math.inf(f32), mode);
+        try std.testing.expect(r >= 0 and r <= 1);
+    }
 
     const pose = try gpa.alloc(zozz.SoaTransform, try zozz.soaBlocks(joints));
     defer gpa.free(pose);
