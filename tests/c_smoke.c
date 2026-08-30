@@ -8,6 +8,7 @@
 // Deliberately dependency-free — no test framework, no asset files.
 //===----------------------------------------------------------------------===//
 
+#include <math.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -391,6 +392,80 @@ static void test_track_triggering_on_the_stack(void) {
   CHECK(zozzTrackTriggeringIteratorValid(&iterator));
 
   zozzFloatTrackDestroy(track);
+}
+
+static void test_track_keyframe_views(void) {
+  // 12 keys spans two bytes of the steps bitset, so a bit-order mistake shows
+  // up past index 7 rather than passing on a single byte.
+  ZozzRawFloat3Track* raw = NULL;
+  CHECK(zozzRawFloat3TrackCreate(&raw) == ZOZZ_RESULT_OK);
+  if (raw == NULL) return;
+  const int keys = 12;
+  for (int i = 0; i < keys; ++i) {
+    const float ratio = (float)i / (float)(keys - 1);
+    const float value[3] = {(float)i, (float)-i, 0.5f};
+    CHECK(zozzRawFloat3TrackPushKeyframe(
+              raw,
+              (i % 2 == 0) ? ZOZZ_TRACK_INTERPOLATION_STEP
+                           : ZOZZ_TRACK_INTERPOLATION_LINEAR,
+              ratio, value) == ZOZZ_RESULT_OK);
+  }
+
+  ZozzFloat3Track* track = NULL;
+  CHECK(zozzFloat3TrackBuild(raw, &track) == ZOZZ_RESULT_OK);
+  zozzRawFloat3TrackDestroy(raw);
+  if (track == NULL) return;
+
+  CHECK(zozzFloat3TrackNumKeyframes(track) == keys);
+
+  size_t num_ratios = 0;
+  const float* ratios = zozzFloat3TrackRatios(track, &num_ratios);
+  size_t num_values = 0;
+  const float(*values)[3] = zozzFloat3TrackValues(track, &num_values);
+  CHECK(ratios != NULL && num_ratios == (size_t)keys);
+  CHECK(values != NULL && num_values == (size_t)keys);
+
+  // Borrowed views of ozz's own arrays: asking twice gives the same address.
+  CHECK(zozzFloat3TrackRatios(track, &num_ratios) == ratios);
+  CHECK(zozzFloat3TrackValues(track, &num_values) == values);
+
+  for (int i = 0; i < keys; ++i) {
+    CHECK(fabsf(ratios[i] - (float)i / (float)(keys - 1)) < 1e-6f);
+    CHECK(values[i][0] == (float)i);
+    CHECK(values[i][1] == (float)-i);
+  }
+
+  size_t step_bytes = 0;
+  const uint8_t* steps = zozzFloat3TrackSteps(track, &step_bytes);
+  CHECK(steps != NULL && step_bytes == 2);
+
+  ZozzTrackInterpolation modes[12];
+  CHECK(zozzTrackInterpolations(steps, step_bytes, (size_t)keys, modes,
+                                sizeof(modes) / sizeof(modes[0])) ==
+        ZOZZ_RESULT_OK);
+  for (int i = 0; i < keys; ++i) {
+    CHECK(modes[i] == ((i % 2 == 0) ? ZOZZ_TRACK_INTERPOLATION_STEP
+                                    : ZOZZ_TRACK_INTERPOLATION_LINEAR));
+  }
+
+  // A short output buffer is refused; a bitset too small for the key count is
+  // refused before it is indexed.
+  CHECK(zozzTrackInterpolations(steps, step_bytes, (size_t)keys, modes,
+                                (size_t)keys - 1) ==
+        ZOZZ_RESULT_BUFFER_TOO_SMALL);
+  CHECK(zozzTrackInterpolations(steps, 1, (size_t)keys, modes,
+                                sizeof(modes) / sizeof(modes[0])) ==
+        ZOZZ_RESULT_INVALID_ARGUMENT);
+
+  // A NULL track answers with an empty view rather than a count nobody set.
+  size_t none = 123;
+  CHECK(zozzFloat3TrackRatios(NULL, &none) == NULL && none == 0);
+  none = 123;
+  CHECK(zozzFloat3TrackValues(NULL, &none) == NULL && none == 0);
+  none = 123;
+  CHECK(zozzFloat3TrackSteps(NULL, &none) == NULL && none == 0);
+
+  zozzFloat3TrackDestroy(track);
 }
 
 static void test_archive_round_trip(void) {
@@ -780,6 +855,7 @@ int main(void) {
   test_joint_weight_packing();
   test_sampling_context();
   test_track_triggering_on_the_stack();
+  test_track_keyframe_views();
   test_archive_round_trip();
   test_raw_archive_round_trip();
   test_archive_stream_rejection();

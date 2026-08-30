@@ -63,24 +63,34 @@ test "a float track's keyframe read-back matches what was authored, across a bit
 
     try std.testing.expectEqual(@as(u32, count), track.numKeyframes());
 
-    const ratios = try track.ratios(gpa);
-    defer gpa.free(ratios);
-    const values = try track.values(gpa);
-    defer gpa.free(values);
-    const steps = try track.steps(gpa);
-    defer gpa.free(steps);
-
+    const ratios = track.ratios();
+    const values = track.values();
     try std.testing.expectEqual(@as(usize, count), ratios.len);
     try std.testing.expectEqual(@as(usize, count), values.len);
-    try std.testing.expectEqual(@as(usize, count), steps.len);
+
+    // 12 keys is 2 bytes of bitset, and the byte count is what steps() reports.
+    try std.testing.expectEqual(@as(usize, 2), track.steps().len);
+
+    var decoded: [count]zozz.TrackInterpolation = undefined;
+    const modes = try track.interpolations(&decoded);
+    try std.testing.expectEqual(@as(usize, count), modes.len);
 
     for (0..count) |i| {
         const expected_ratio: f32 = @as(f32, @floatFromInt(i)) / @as(f32, @floatFromInt(count - 1));
         try std.testing.expectApproxEqAbs(expected_ratio, ratios[i], 1e-6);
         try std.testing.expectEqual(@as(f32, @floatFromInt(i)), values[i]);
         const expected: zozz.TrackInterpolation = if (i % 2 == 0) .step else .linear;
-        try std.testing.expectEqual(expected, steps[i]);
+        try std.testing.expectEqual(expected, modes[i]);
     }
+
+    // The three views are ozz's own arrays, not copies made per call: the
+    // same call twice hands back the same addresses.
+    try std.testing.expectEqual(ratios.ptr, track.ratios().ptr);
+    try std.testing.expectEqual(values.ptr, track.values().ptr);
+
+    // A buffer shorter than the keyframe count is refused, not truncated.
+    var too_small: [count - 1]zozz.TrackInterpolation = undefined;
+    try std.testing.expectError(error.BufferTooSmall, track.interpolations(&too_small));
 }
 
 test "a float3 track's keyframe read-back matches what was authored" {
@@ -99,23 +109,19 @@ test "a float3 track's keyframe read-back matches what was authored" {
 
     try std.testing.expectEqual(@as(u32, 3), track.numKeyframes());
 
-    const ratios = try track.ratios(gpa);
-    defer gpa.free(ratios);
-    try std.testing.expectEqualSlices(f32, &.{ 0.0, 0.5, 1.0 }, ratios);
+    try std.testing.expectEqualSlices(f32, &.{ 0.0, 0.5, 1.0 }, track.ratios());
 
-    const values = try track.values(gpa);
-    defer gpa.free(values);
+    const values = track.values();
     try std.testing.expectEqual(@as(usize, 3), values.len);
     try std.testing.expectEqual([3]f32{ 1, 2, 3 }, values[0]);
     try std.testing.expectEqual([3]f32{ -1, -2, -3 }, values[1]);
     try std.testing.expectEqual([3]f32{ 0, 0, 0 }, values[2]);
 
-    const steps = try track.steps(gpa);
-    defer gpa.free(steps);
+    var decoded: [3]zozz.TrackInterpolation = undefined;
     try std.testing.expectEqualSlices(
         zozz.TrackInterpolation,
         &.{ .linear, .step, .linear },
-        steps,
+        try track.interpolations(&decoded),
     );
 }
 
@@ -135,8 +141,7 @@ test "a quaternion track's keyframe read-back preserves x, y, z, w order" {
     var track = try raw.build();
     defer track.deinit();
 
-    const values = try track.values(gpa);
-    defer gpa.free(values);
+    const values = track.values();
     try std.testing.expectEqual(@as(usize, 2), values.len);
     try std.testing.expectEqual([4]f32{ 0, 0, 0, 1 }, values[0]);
     try std.testing.expectApproxEqAbs(@as(f32, 0.0), values[1][0], 1e-6);

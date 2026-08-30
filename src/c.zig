@@ -580,9 +580,9 @@ pub extern fn zozzFloatTrackDestroy(track: ?*FloatTrack) void;
 pub extern fn zozzFloatTrackName(track: ?*const FloatTrack) [*:0]const u8;
 pub extern fn zozzFloatTrackSample(track: *const FloatTrack, ratio: f32, out: *f32) Result;
 pub extern fn zozzFloatTrackNumKeyframes(track: ?*const FloatTrack) c_int;
-pub extern fn zozzFloatTrackRatios(track: ?*const FloatTrack, out: [*]f32, count: usize) Result;
-pub extern fn zozzFloatTrackValues(track: ?*const FloatTrack, out: [*]f32, count: usize) Result;
-pub extern fn zozzFloatTrackSteps(track: ?*const FloatTrack, out: [*]TrackInterpolation, count: usize) Result;
+pub extern fn zozzFloatTrackRatios(track: ?*const FloatTrack, out_count: *usize) ?[*]const f32;
+pub extern fn zozzFloatTrackValues(track: ?*const FloatTrack, out_count: *usize) ?[*]const f32;
+pub extern fn zozzFloatTrackSteps(track: ?*const FloatTrack, out_count: *usize) ?[*]const u8;
 
 pub extern fn zozzFloat2TrackLoadFile(path: [*:0]const u8, out: **Float2Track) Result;
 pub extern fn zozzFloat2TrackLoadMemory(data: [*]const u8, size: usize, out: **Float2Track) Result;
@@ -590,9 +590,9 @@ pub extern fn zozzFloat2TrackDestroy(track: ?*Float2Track) void;
 pub extern fn zozzFloat2TrackName(track: ?*const Float2Track) [*:0]const u8;
 pub extern fn zozzFloat2TrackSample(track: *const Float2Track, ratio: f32, out: *[2]f32) Result;
 pub extern fn zozzFloat2TrackNumKeyframes(track: ?*const Float2Track) c_int;
-pub extern fn zozzFloat2TrackRatios(track: ?*const Float2Track, out: [*]f32, count: usize) Result;
-pub extern fn zozzFloat2TrackValues(track: ?*const Float2Track, out: [*][2]f32, count: usize) Result;
-pub extern fn zozzFloat2TrackSteps(track: ?*const Float2Track, out: [*]TrackInterpolation, count: usize) Result;
+pub extern fn zozzFloat2TrackRatios(track: ?*const Float2Track, out_count: *usize) ?[*]const f32;
+pub extern fn zozzFloat2TrackValues(track: ?*const Float2Track, out_count: *usize) ?[*]const [2]f32;
+pub extern fn zozzFloat2TrackSteps(track: ?*const Float2Track, out_count: *usize) ?[*]const u8;
 
 pub extern fn zozzFloat3TrackLoadFile(path: [*:0]const u8, out: **Float3Track) Result;
 pub extern fn zozzFloat3TrackLoadMemory(data: [*]const u8, size: usize, out: **Float3Track) Result;
@@ -600,9 +600,9 @@ pub extern fn zozzFloat3TrackDestroy(track: ?*Float3Track) void;
 pub extern fn zozzFloat3TrackName(track: ?*const Float3Track) [*:0]const u8;
 pub extern fn zozzFloat3TrackSample(track: *const Float3Track, ratio: f32, out: *[3]f32) Result;
 pub extern fn zozzFloat3TrackNumKeyframes(track: ?*const Float3Track) c_int;
-pub extern fn zozzFloat3TrackRatios(track: ?*const Float3Track, out: [*]f32, count: usize) Result;
-pub extern fn zozzFloat3TrackValues(track: ?*const Float3Track, out: [*][3]f32, count: usize) Result;
-pub extern fn zozzFloat3TrackSteps(track: ?*const Float3Track, out: [*]TrackInterpolation, count: usize) Result;
+pub extern fn zozzFloat3TrackRatios(track: ?*const Float3Track, out_count: *usize) ?[*]const f32;
+pub extern fn zozzFloat3TrackValues(track: ?*const Float3Track, out_count: *usize) ?[*]const [3]f32;
+pub extern fn zozzFloat3TrackSteps(track: ?*const Float3Track, out_count: *usize) ?[*]const u8;
 
 pub extern fn zozzFloat4TrackLoadFile(path: [*:0]const u8, out: **Float4Track) Result;
 pub extern fn zozzFloat4TrackLoadMemory(data: [*]const u8, size: usize, out: **Float4Track) Result;
@@ -610,9 +610,9 @@ pub extern fn zozzFloat4TrackDestroy(track: ?*Float4Track) void;
 pub extern fn zozzFloat4TrackName(track: ?*const Float4Track) [*:0]const u8;
 pub extern fn zozzFloat4TrackSample(track: *const Float4Track, ratio: f32, out: *[4]f32) Result;
 pub extern fn zozzFloat4TrackNumKeyframes(track: ?*const Float4Track) c_int;
-pub extern fn zozzFloat4TrackRatios(track: ?*const Float4Track, out: [*]f32, count: usize) Result;
-pub extern fn zozzFloat4TrackValues(track: ?*const Float4Track, out: [*][4]f32, count: usize) Result;
-pub extern fn zozzFloat4TrackSteps(track: ?*const Float4Track, out: [*]TrackInterpolation, count: usize) Result;
+pub extern fn zozzFloat4TrackRatios(track: ?*const Float4Track, out_count: *usize) ?[*]const f32;
+pub extern fn zozzFloat4TrackValues(track: ?*const Float4Track, out_count: *usize) ?[*]const [4]f32;
+pub extern fn zozzFloat4TrackSteps(track: ?*const Float4Track, out_count: *usize) ?[*]const u8;
 
 pub extern fn zozzQuaternionTrackLoadFile(path: [*:0]const u8, out: **QuaternionTrack) Result;
 pub extern fn zozzQuaternionTrackLoadMemory(data: [*]const u8, size: usize, out: **QuaternionTrack) Result;
@@ -620,9 +620,18 @@ pub extern fn zozzQuaternionTrackDestroy(track: ?*QuaternionTrack) void;
 pub extern fn zozzQuaternionTrackName(track: ?*const QuaternionTrack) [*:0]const u8;
 pub extern fn zozzQuaternionTrackSample(track: *const QuaternionTrack, ratio: f32, out: *[4]f32) Result;
 pub extern fn zozzQuaternionTrackNumKeyframes(track: ?*const QuaternionTrack) c_int;
-pub extern fn zozzQuaternionTrackRatios(track: ?*const QuaternionTrack, out: [*]f32, count: usize) Result;
-pub extern fn zozzQuaternionTrackValues(track: ?*const QuaternionTrack, out: [*][4]f32, count: usize) Result;
-pub extern fn zozzQuaternionTrackSteps(track: ?*const QuaternionTrack, out: [*]TrackInterpolation, count: usize) Result;
+pub extern fn zozzQuaternionTrackRatios(track: ?*const QuaternionTrack, out_count: *usize) ?[*]const f32;
+pub extern fn zozzQuaternionTrackValues(track: ?*const QuaternionTrack, out_count: *usize) ?[*]const [4]f32;
+pub extern fn zozzQuaternionTrackSteps(track: ?*const QuaternionTrack, out_count: *usize) ?[*]const u8;
+
+/// Decodes any track's packed steps bitset; see the header for the bit order.
+pub extern fn zozzTrackInterpolations(
+    steps: [*]const u8,
+    bytes: usize,
+    num_keys: usize,
+    out: [*]TrackInterpolation,
+    count: usize,
+) Result;
 
 pub extern fn zozzFloatTrackTriggeringJobRun(
     track: *const FloatTrack,

@@ -52,34 +52,50 @@ pub const FloatTrack = struct {
         return @intCast(c.zozzFloatTrackNumKeyframes(self.handle.?));
     }
 
-    /// Each keyframe's ratio, ascending. Allocated with `allocator`; caller
-    /// frees the result.
-    pub fn ratios(self: FloatTrack, allocator: std.mem.Allocator) err.Error![]f32 {
-        const out = allocator.alloc(f32, self.numKeyframes()) catch return err.Error.OutOfMemory;
-        errdefer allocator.free(out);
-        try err.check(c.zozzFloatTrackRatios(self.handle.?, out.ptr, out.len));
-        return out;
+    /// Each keyframe's ratio, ascending. ozz's own array, borrowed: valid
+    /// while the track is alive, and empty for a track with no keyframes.
+    pub fn ratios(self: FloatTrack) []const f32 {
+        var count: usize = 0;
+        const ptr = c.zozzFloatTrackRatios(self.handle.?, &count) orelse return &.{};
+        return ptr[0..count];
     }
 
     /// Each keyframe's authored value, index-aligned with `ratios` —
-    /// `out[i]` is the value AT keyframe i, not an interpolated sample.
-    /// Allocated with `allocator`; caller frees the result.
-    pub fn values(self: FloatTrack, allocator: std.mem.Allocator) err.Error![]f32 {
-        const out = allocator.alloc(f32, self.numKeyframes()) catch return err.Error.OutOfMemory;
-        errdefer allocator.free(out);
-        try err.check(c.zozzFloatTrackValues(self.handle.?, out.ptr, out.len));
-        return out;
+    /// element i is the value AT keyframe i, not an interpolated sample.
+    /// Borrowed like `ratios`.
+    pub fn values(self: FloatTrack) []const f32 {
+        var count: usize = 0;
+        const ptr = c.zozzFloatTrackValues(self.handle.?, &count) orelse return &.{};
+        return ptr[0..count];
     }
 
-    /// Each keyframe's interpolation mode, index-aligned with `ratios`.
-    /// Allocated with `allocator`; caller frees the result.
-    pub fn steps(self: FloatTrack, allocator: std.mem.Allocator) err.Error![]c.TrackInterpolation {
-        const out = allocator.alloc(c.TrackInterpolation, self.numKeyframes()) catch return err.Error.OutOfMemory;
-        errdefer allocator.free(out);
-        try err.check(c.zozzFloatTrackSteps(self.handle.?, out.ptr, out.len));
-        return out;
+    /// ozz's packed interpolation bitset, borrowed: one BIT per keyframe, so
+    /// this is sized in BYTES. `interpolations` decodes it.
+    pub fn steps(self: FloatTrack) []const u8 {
+        var count: usize = 0;
+        const ptr = c.zozzFloatTrackSteps(self.handle.?, &count) orelse return &.{};
+        return ptr[0..count];
+    }
+
+    /// Each keyframe's interpolation mode, index-aligned with `ratios`,
+    /// decoded into `out`, which must hold at least `numKeyframes` entries.
+    pub fn interpolations(self: FloatTrack, out: []c.TrackInterpolation) err.Error![]c.TrackInterpolation {
+        return decodeSteps(self.steps(), self.numKeyframes(), out);
     }
 };
+
+/// The one decode of ozz's packed steps bitset, shared by all five track
+/// types: the bit order lives in the C ABI, not repeated here.
+fn decodeSteps(step_bits: []const u8, num_keys: u32, out: []c.TrackInterpolation) err.Error![]c.TrackInterpolation {
+    try err.check(c.zozzTrackInterpolations(
+        step_bits.ptr,
+        step_bits.len,
+        num_keys,
+        out.ptr,
+        out.len,
+    ));
+    return out[0..num_keys];
+}
 
 /// The C entry points for one vector track value type, gathered so the four
 /// same-shaped tracks (`Float2Track`, `Float3Track`, `Float4Track`,
@@ -93,9 +109,9 @@ fn VectorOps(comptime Handle: type, comptime n: usize) type {
         name: fn (?*const Handle) callconv(.c) [*:0]const u8,
         sample: fn (*const Handle, f32, *[n]f32) callconv(.c) c.Result,
         numKeyframes: fn (?*const Handle) callconv(.c) c_int,
-        ratios: fn (?*const Handle, [*]f32, usize) callconv(.c) c.Result,
-        values: fn (?*const Handle, [*][n]f32, usize) callconv(.c) c.Result,
-        steps: fn (?*const Handle, [*]c.TrackInterpolation, usize) callconv(.c) c.Result,
+        ratios: fn (?*const Handle, *usize) callconv(.c) ?[*]const f32,
+        values: fn (?*const Handle, *usize) callconv(.c) ?[*]const [n]f32,
+        steps: fn (?*const Handle, *usize) callconv(.c) ?[*]const u8,
     };
 }
 
@@ -145,32 +161,35 @@ fn VectorTrack(comptime Handle: type, comptime n: usize, comptime ops: VectorOps
             return @intCast(ops.numKeyframes(self.handle.?));
         }
 
-        /// Each keyframe's ratio, ascending. Allocated with `allocator`;
-        /// caller frees the result.
-        pub fn ratios(self: Self, allocator: std.mem.Allocator) err.Error![]f32 {
-            const out = allocator.alloc(f32, self.numKeyframes()) catch return err.Error.OutOfMemory;
-            errdefer allocator.free(out);
-            try err.check(ops.ratios(self.handle.?, out.ptr, out.len));
-            return out;
+        /// Each keyframe's ratio, ascending. ozz's own array, borrowed:
+        /// valid while the track is alive, empty for a keyframe-less track.
+        pub fn ratios(self: Self) []const f32 {
+            var count: usize = 0;
+            const ptr = ops.ratios(self.handle.?, &count) orelse return &.{};
+            return ptr[0..count];
         }
 
         /// Each keyframe's authored value, index-aligned with `ratios` —
-        /// `out[i]` is the value AT keyframe i, not an interpolated sample.
-        /// Allocated with `allocator`; caller frees the result.
-        pub fn values(self: Self, allocator: std.mem.Allocator) err.Error![][n]f32 {
-            const out = allocator.alloc([n]f32, self.numKeyframes()) catch return err.Error.OutOfMemory;
-            errdefer allocator.free(out);
-            try err.check(ops.values(self.handle.?, out.ptr, out.len));
-            return out;
+        /// element i is the value AT keyframe i, not an interpolated
+        /// sample. Borrowed like `ratios`.
+        pub fn values(self: Self) []const [n]f32 {
+            var count: usize = 0;
+            const ptr = ops.values(self.handle.?, &count) orelse return &.{};
+            return ptr[0..count];
         }
 
-        /// Each keyframe's interpolation mode, index-aligned with `ratios`.
-        /// Allocated with `allocator`; caller frees the result.
-        pub fn steps(self: Self, allocator: std.mem.Allocator) err.Error![]c.TrackInterpolation {
-            const out = allocator.alloc(c.TrackInterpolation, self.numKeyframes()) catch return err.Error.OutOfMemory;
-            errdefer allocator.free(out);
-            try err.check(ops.steps(self.handle.?, out.ptr, out.len));
-            return out;
+        /// ozz's packed interpolation bitset, borrowed: one BIT per
+        /// keyframe, so this is sized in BYTES. `interpolations` decodes it.
+        pub fn steps(self: Self) []const u8 {
+            var count: usize = 0;
+            const ptr = ops.steps(self.handle.?, &count) orelse return &.{};
+            return ptr[0..count];
+        }
+
+        /// Each keyframe's interpolation mode, index-aligned with `ratios`,
+        /// decoded into `out`, which must hold `numKeyframes` entries.
+        pub fn interpolations(self: Self, out: []c.TrackInterpolation) err.Error![]c.TrackInterpolation {
+            return decodeSteps(self.steps(), self.numKeyframes(), out);
         }
     };
 }
