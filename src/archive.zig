@@ -42,7 +42,7 @@ pub fn nativeEndianness() Endianness {
 /// Every archive is scoped to one logical file: `init`, save everything that
 /// belongs together, `deinit`.
 pub const OArchive = struct {
-    handle: *c.OArchive,
+    handle: ?*c.OArchive,
 
     pub fn init(stream: *const Stream, endianness: Endianness) err.Error!OArchive {
         var handle: *c.OArchive = undefined;
@@ -50,30 +50,31 @@ pub const OArchive = struct {
         return .{ .handle = handle };
     }
 
-    pub fn deinit(self: OArchive) void {
-        c.zozzOArchiveDestroy(self.handle);
+    pub fn deinit(self: *OArchive) void {
+        if (self.handle) |handle| c.zozzOArchiveDestroy(handle);
+        self.handle = null;
     }
 
     /// Writes `data` untyped and unswapped, for framing custom data around
     /// the tagged objects below.
     pub fn saveBinary(self: OArchive, data: []const u8) err.Error!void {
-        try err.check(c.zozzOArchiveSaveBinary(self.handle, data.ptr, data.len));
+        try err.check(c.zozzOArchiveSaveBinary(self.handle.?, data.ptr, data.len));
     }
 
     pub fn saveInt32(self: OArchive, value: i32) err.Error!void {
-        try err.check(c.zozzOArchiveSaveInt32(self.handle, value));
+        try err.check(c.zozzOArchiveSaveInt32(self.handle.?, value));
     }
 
     pub fn saveFloat(self: OArchive, value: f32) err.Error!void {
-        try err.check(c.zozzOArchiveSaveFloat(self.handle, value));
+        try err.check(c.zozzOArchiveSaveFloat(self.handle.?, value));
     }
 
     pub fn saveSkeleton(self: OArchive, skeleton: Skeleton) err.Error!void {
-        try err.check(c.zozzOArchiveSaveSkeleton(self.handle, skeleton.handle));
+        try err.check(c.zozzOArchiveSaveSkeleton(self.handle.?, skeleton.handle.?));
     }
 
     pub fn saveAnimation(self: OArchive, animation: Animation) err.Error!void {
-        try err.check(c.zozzOArchiveSaveAnimation(self.handle, animation.handle));
+        try err.check(c.zozzOArchiveSaveAnimation(self.handle.?, animation.handle.?));
     }
 
     /// Writes a tagged, versioned runtime track — the same archive shape
@@ -82,23 +83,23 @@ pub const OArchive = struct {
     /// (and its Float2/3/4 and Quaternion siblings) has a way to leave the
     /// process it was built in.
     pub fn saveFloatTrack(self: OArchive, track: FloatTrack) err.Error!void {
-        try err.check(c.zozzOArchiveSaveFloatTrack(self.handle, track.handle));
+        try err.check(c.zozzOArchiveSaveFloatTrack(self.handle.?, track.handle.?));
     }
 
     pub fn saveFloat2Track(self: OArchive, track: Float2Track) err.Error!void {
-        try err.check(c.zozzOArchiveSaveFloat2Track(self.handle, track.handle));
+        try err.check(c.zozzOArchiveSaveFloat2Track(self.handle.?, track.handle.?));
     }
 
     pub fn saveFloat3Track(self: OArchive, track: Float3Track) err.Error!void {
-        try err.check(c.zozzOArchiveSaveFloat3Track(self.handle, track.handle));
+        try err.check(c.zozzOArchiveSaveFloat3Track(self.handle.?, track.handle.?));
     }
 
     pub fn saveFloat4Track(self: OArchive, track: Float4Track) err.Error!void {
-        try err.check(c.zozzOArchiveSaveFloat4Track(self.handle, track.handle));
+        try err.check(c.zozzOArchiveSaveFloat4Track(self.handle.?, track.handle.?));
     }
 
     pub fn saveQuaternionTrack(self: OArchive, track: QuaternionTrack) err.Error!void {
-        try err.check(c.zozzOArchiveSaveQuaternionTrack(self.handle, track.handle));
+        try err.check(c.zozzOArchiveSaveQuaternionTrack(self.handle.?, track.handle.?));
     }
 };
 
@@ -108,7 +109,7 @@ pub const OArchive = struct {
 /// Every archive is scoped to one logical file, read back in the order it
 /// was written: `init`, load everything that belongs together, `deinit`.
 pub const IArchive = struct {
-    handle: *c.IArchive,
+    handle: ?*c.IArchive,
 
     pub fn init(stream: *const Stream) err.Error!IArchive {
         var handle: *c.IArchive = undefined;
@@ -116,44 +117,45 @@ pub const IArchive = struct {
         return .{ .handle = handle };
     }
 
-    pub fn deinit(self: IArchive) void {
-        c.zozzIArchiveDestroy(self.handle);
+    pub fn deinit(self: *IArchive) void {
+        if (self.handle) |handle| c.zozzIArchiveDestroy(handle);
+        self.handle = null;
     }
 
     /// True when the stream was written in the opposite byte order from this
     /// platform's. Loads swap transparently; this matters only for raw bytes
     /// read back through `loadBinary`.
     pub fn endianSwap(self: IArchive) bool {
-        return c.zozzIArchiveEndianSwap(self.handle);
+        return c.zozzIArchiveEndianSwap(self.handle.?);
     }
 
     /// Reads `data.len` untyped bytes into `data`, unswapped — the read twin
     /// of `OArchive.saveBinary`.
     pub fn loadBinary(self: IArchive, data: []u8) err.Error!void {
-        try err.check(c.zozzIArchiveLoadBinary(self.handle, data.ptr, data.len));
+        try err.check(c.zozzIArchiveLoadBinary(self.handle.?, data.ptr, data.len));
     }
 
     pub fn loadInt32(self: IArchive) err.Error!i32 {
         var value: i32 = undefined;
-        try err.check(c.zozzIArchiveLoadInt32(self.handle, &value));
+        try err.check(c.zozzIArchiveLoadInt32(self.handle.?, &value));
         return value;
     }
 
     pub fn loadFloat(self: IArchive) err.Error!f32 {
         var value: f32 = undefined;
-        try err.check(c.zozzIArchiveLoadFloat(self.handle, &value));
+        try err.check(c.zozzIArchiveLoadFloat(self.handle.?, &value));
         return value;
     }
 
     pub fn loadSkeleton(self: IArchive) err.Error!Skeleton {
         var handle: *c.Skeleton = undefined;
-        try err.check(c.zozzIArchiveLoadSkeleton(self.handle, &handle));
+        try err.check(c.zozzIArchiveLoadSkeleton(self.handle.?, &handle));
         return .{ .handle = handle };
     }
 
     pub fn loadAnimation(self: IArchive) err.Error!Animation {
         var handle: *c.Animation = undefined;
-        try err.check(c.zozzIArchiveLoadAnimation(self.handle, &handle));
+        try err.check(c.zozzIArchiveLoadAnimation(self.handle.?, &handle));
         return .{ .handle = handle };
     }
 
@@ -162,31 +164,31 @@ pub const IArchive = struct {
     /// the save side.
     pub fn loadFloatTrack(self: IArchive) err.Error!FloatTrack {
         var handle: *c.FloatTrack = undefined;
-        try err.check(c.zozzIArchiveLoadFloatTrack(self.handle, &handle));
+        try err.check(c.zozzIArchiveLoadFloatTrack(self.handle.?, &handle));
         return .{ .handle = handle };
     }
 
     pub fn loadFloat2Track(self: IArchive) err.Error!Float2Track {
         var handle: *c.Float2Track = undefined;
-        try err.check(c.zozzIArchiveLoadFloat2Track(self.handle, &handle));
+        try err.check(c.zozzIArchiveLoadFloat2Track(self.handle.?, &handle));
         return .{ .handle = handle };
     }
 
     pub fn loadFloat3Track(self: IArchive) err.Error!Float3Track {
         var handle: *c.Float3Track = undefined;
-        try err.check(c.zozzIArchiveLoadFloat3Track(self.handle, &handle));
+        try err.check(c.zozzIArchiveLoadFloat3Track(self.handle.?, &handle));
         return .{ .handle = handle };
     }
 
     pub fn loadFloat4Track(self: IArchive) err.Error!Float4Track {
         var handle: *c.Float4Track = undefined;
-        try err.check(c.zozzIArchiveLoadFloat4Track(self.handle, &handle));
+        try err.check(c.zozzIArchiveLoadFloat4Track(self.handle.?, &handle));
         return .{ .handle = handle };
     }
 
     pub fn loadQuaternionTrack(self: IArchive) err.Error!QuaternionTrack {
         var handle: *c.QuaternionTrack = undefined;
-        try err.check(c.zozzIArchiveLoadQuaternionTrack(self.handle, &handle));
+        try err.check(c.zozzIArchiveLoadQuaternionTrack(self.handle.?, &handle));
         return .{ .handle = handle };
     }
 
@@ -195,62 +197,62 @@ pub const IArchive = struct {
     /// different `testX`, and a true result is free to `loadSkeleton` right
     /// after.
     pub fn testSkeleton(self: IArchive) bool {
-        return c.zozzIArchiveTestSkeleton(self.handle);
+        return c.zozzIArchiveTestSkeleton(self.handle.?);
     }
 
     pub fn testAnimation(self: IArchive) bool {
-        return c.zozzIArchiveTestAnimation(self.handle);
+        return c.zozzIArchiveTestAnimation(self.handle.?);
     }
 
     pub fn testFloatTrack(self: IArchive) bool {
-        return c.zozzIArchiveTestFloatTrack(self.handle);
+        return c.zozzIArchiveTestFloatTrack(self.handle.?);
     }
 
     pub fn testFloat2Track(self: IArchive) bool {
-        return c.zozzIArchiveTestFloat2Track(self.handle);
+        return c.zozzIArchiveTestFloat2Track(self.handle.?);
     }
 
     pub fn testFloat3Track(self: IArchive) bool {
-        return c.zozzIArchiveTestFloat3Track(self.handle);
+        return c.zozzIArchiveTestFloat3Track(self.handle.?);
     }
 
     pub fn testFloat4Track(self: IArchive) bool {
-        return c.zozzIArchiveTestFloat4Track(self.handle);
+        return c.zozzIArchiveTestFloat4Track(self.handle.?);
     }
 
     pub fn testQuaternionTrack(self: IArchive) bool {
-        return c.zozzIArchiveTestQuaternionTrack(self.handle);
+        return c.zozzIArchiveTestQuaternionTrack(self.handle.?);
     }
 };
 
 /// Writes `skeleton` alone to a new file at `path`.
 pub fn saveSkeletonToFile(skeleton: Skeleton, path: [*:0]const u8) err.Error!void {
-    try err.check(c.zozzSkeletonSaveFile(skeleton.handle, path));
+    try err.check(c.zozzSkeletonSaveFile(skeleton.handle.?, path));
 }
 
 /// Writes `animation` alone to a new file at `path`.
 pub fn saveAnimationToFile(animation: Animation, path: [*:0]const u8) err.Error!void {
-    try err.check(c.zozzAnimationSaveFile(animation.handle, path));
+    try err.check(c.zozzAnimationSaveFile(animation.handle.?, path));
 }
 
 /// Writes `track` alone to a new file at `path`. One function per track
 /// value type, matching `saveSkeletonToFile` / `saveAnimationToFile`.
 pub fn saveFloatTrackToFile(track: FloatTrack, path: [*:0]const u8) err.Error!void {
-    try err.check(c.zozzFloatTrackSaveFile(track.handle, path));
+    try err.check(c.zozzFloatTrackSaveFile(track.handle.?, path));
 }
 
 pub fn saveFloat2TrackToFile(track: Float2Track, path: [*:0]const u8) err.Error!void {
-    try err.check(c.zozzFloat2TrackSaveFile(track.handle, path));
+    try err.check(c.zozzFloat2TrackSaveFile(track.handle.?, path));
 }
 
 pub fn saveFloat3TrackToFile(track: Float3Track, path: [*:0]const u8) err.Error!void {
-    try err.check(c.zozzFloat3TrackSaveFile(track.handle, path));
+    try err.check(c.zozzFloat3TrackSaveFile(track.handle.?, path));
 }
 
 pub fn saveFloat4TrackToFile(track: Float4Track, path: [*:0]const u8) err.Error!void {
-    try err.check(c.zozzFloat4TrackSaveFile(track.handle, path));
+    try err.check(c.zozzFloat4TrackSaveFile(track.handle.?, path));
 }
 
 pub fn saveQuaternionTrackToFile(track: QuaternionTrack, path: [*:0]const u8) err.Error!void {
-    try err.check(c.zozzQuaternionTrackSaveFile(track.handle, path));
+    try err.check(c.zozzQuaternionTrackSaveFile(track.handle.?, path));
 }

@@ -18,13 +18,13 @@ test "a float track returns keyframe values exactly and interpolates between the
     try zozz.setAllocator(gpa);
     defer zozz.resetAllocator() catch unreachable;
 
-    const raw = try zozz.RawFloatTrack.init();
+    var raw = try zozz.RawFloatTrack.init();
     defer raw.deinit();
     try raw.pushKeyframe(.linear, 0.0, 0.0);
     try raw.pushKeyframe(.linear, 0.5, 10.0);
     try raw.pushKeyframe(.linear, 1.0, 0.0);
 
-    const track = try buildTrack(raw);
+    var track = try buildTrack(raw);
     defer track.deinit();
 
     // Exact keyframes.
@@ -48,7 +48,7 @@ test "a float track's keyframe read-back matches what was authored, across a bit
     // silently passing with fewer keys. front()/back() sit exactly at ratio 0
     // and 1, so the builder patches nothing in: the built track holds exactly
     // these 12 keys, in order.
-    const raw = try zozz.RawFloatTrack.init();
+    var raw = try zozz.RawFloatTrack.init();
     defer raw.deinit();
     const count = 12;
     for (0..count) |i| {
@@ -58,7 +58,7 @@ test "a float track's keyframe read-back matches what was authored, across a bit
         try raw.pushKeyframe(interpolation, ratio, value);
     }
 
-    const track = try buildTrack(raw);
+    var track = try buildTrack(raw);
     defer track.deinit();
 
     try std.testing.expectEqual(@as(u32, count), track.numKeyframes());
@@ -88,13 +88,13 @@ test "a float3 track's keyframe read-back matches what was authored" {
     try zozz.setAllocator(gpa);
     defer zozz.resetAllocator() catch unreachable;
 
-    const raw = try zozz.RawFloat3Track.init();
+    var raw = try zozz.RawFloat3Track.init();
     defer raw.deinit();
     try raw.pushKeyframe(.linear, 0.0, .{ 1, 2, 3 });
     try raw.pushKeyframe(.step, 0.5, .{ -1, -2, -3 });
     try raw.pushKeyframe(.linear, 1.0, .{ 0, 0, 0 });
 
-    const track = try raw.build();
+    var track = try raw.build();
     defer track.deinit();
 
     try std.testing.expectEqual(@as(u32, 3), track.numKeyframes());
@@ -127,12 +127,12 @@ test "a quaternion track's keyframe read-back preserves x, y, z, w order" {
     // A 90-degree turn about Z: identity, then (0, 0, sin45, cos45) — w LAST,
     // matching every other quaternion in this package.
     const half_turn: f32 = std.math.sqrt2 / 2.0;
-    const raw = try zozz.RawQuaternionTrack.init();
+    var raw = try zozz.RawQuaternionTrack.init();
     defer raw.deinit();
     try raw.pushKeyframe(.linear, 0.0, .{ 0, 0, 0, 1 });
     try raw.pushKeyframe(.linear, 1.0, .{ 0, 0, half_turn, half_turn });
 
-    const track = try raw.build();
+    var track = try raw.build();
     defer track.deinit();
 
     const values = try track.values(gpa);
@@ -152,17 +152,17 @@ test "the triggering iterator yields the edges of a step function, in order" {
 
     // A square wave: 0, 1, 0, 1 held over each quarter, step interpolation
     // so the transition sits exactly at each keyframe's ratio.
-    const raw = try zozz.RawFloatTrack.init();
+    var raw = try zozz.RawFloatTrack.init();
     defer raw.deinit();
     try raw.pushKeyframe(.step, 0.0, 0.0);
     try raw.pushKeyframe(.step, 0.25, 1.0);
     try raw.pushKeyframe(.step, 0.5, 0.0);
     try raw.pushKeyframe(.step, 0.75, 1.0);
 
-    const track = try buildTrack(raw);
+    var track = try buildTrack(raw);
     defer track.deinit();
 
-    const triggering = try zozz.TrackTriggering.init(track, 0.0, 1.0, 0.5);
+    var triggering = try zozz.TrackTriggering.init(track, 0.0, 1.0, 0.5);
     defer triggering.deinit();
 
     var edges: [8]zozz.TrackEdge = undefined;
@@ -195,7 +195,7 @@ test "the track optimizer reduces keyframe count within tolerance of the origina
     try zozz.setAllocator(gpa);
     defer zozz.resetAllocator() catch unreachable;
 
-    const raw = try zozz.RawFloatTrack.init();
+    var raw = try zozz.RawFloatTrack.init();
     defer raw.deinit();
     // 11 co-linear points on a ramp from 0 to 10: every interior point is
     // exactly reproducible by interpolating its neighbours, so an optimizer
@@ -206,15 +206,15 @@ test "the track optimizer reduces keyframe count within tolerance of the origina
     }
     try std.testing.expectEqual(@as(u32, 11), raw.numKeyframes());
 
-    const optimized = try zozz.RawFloatTrack.init();
+    var optimized = try zozz.RawFloatTrack.init();
     defer optimized.deinit();
     try raw.optimize(1e-3, optimized);
 
     try std.testing.expect(optimized.numKeyframes() < raw.numKeyframes());
 
-    const original_track = try buildTrack(raw);
+    var original_track = try buildTrack(raw);
     defer original_track.deinit();
-    const optimized_track = try buildTrack(optimized);
+    var optimized_track = try buildTrack(optimized);
     defer optimized_track.deinit();
 
     var ratio: f32 = 0.0;

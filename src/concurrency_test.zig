@@ -31,7 +31,7 @@ const Fixture = struct {
     animation: zozz.Animation,
 
     fn init() !Fixture {
-        const raw_skeleton = try zozz.RawSkeleton.init();
+        var raw_skeleton = try zozz.RawSkeleton.init();
         defer raw_skeleton.deinit();
         var parent: ?u32 = null;
         var names: [joint_count][3:0]u8 = undefined;
@@ -41,10 +41,10 @@ const Fixture = struct {
             local.translation = .{ if (i == 0) 0 else 1, 0, 0 };
             parent = try raw_skeleton.addJoint(parent, &names[i], local);
         }
-        const skeleton = try raw_skeleton.build();
+        var skeleton = try raw_skeleton.build();
         errdefer skeleton.deinit();
 
-        const raw_animation = try zozz.RawAnimation.init(joint_count, 1.0, "concurrent");
+        var raw_animation = try zozz.RawAnimation.init(joint_count, 1.0, "concurrent");
         defer raw_animation.deinit();
         try raw_animation.pushTranslation(0, 0.0, .{ 0, 0, 0 });
         try raw_animation.pushTranslation(0, 1.0, .{ travel, 0, 0 });
@@ -53,7 +53,7 @@ const Fixture = struct {
         return .{ .skeleton = skeleton, .animation = animation };
     }
 
-    fn deinit(self: Fixture) void {
+    fn deinit(self: *Fixture) void {
         self.animation.deinit();
         self.skeleton.deinit();
     }
@@ -85,7 +85,7 @@ fn work(fixture: *const Fixture, first_error: *std.atomic.Value(u16)) void {
 
 fn frame(fixture: *const Fixture, worker: *Worker, ratio: f32) !void {
     try fixture.skeleton.restPoseSoa(&worker.rest);
-    const context = try zozz.SamplingContext.init(joint_count);
+    var context = try zozz.SamplingContext.init(joint_count);
     defer context.deinit();
 
     const sampling = zozz.SamplingJob{
@@ -125,7 +125,7 @@ test "distinct handles are usable from several threads at once" {
     try zozz.resetAllocator();
     try zozz.setAllocator(debug_allocator.allocator());
 
-    const fixture = try Fixture.init();
+    var fixture = try Fixture.init();
     var first_error: std.atomic.Value(u16) = .init(0);
 
     var threads: [worker_count]std.Thread = undefined;

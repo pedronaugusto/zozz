@@ -237,7 +237,7 @@ test "the seam refuses to change allocator while blocks it produced are live" {
 
     // Allocated through ozz's own seam, so the counter sees it: a raw call to
     // `allocate` here would bypass the adapter that does the counting.
-    const context = try @import("sampling.zig").SamplingContext.init(8);
+    var context = try @import("sampling.zig").SamplingContext.init(8);
     try std.testing.expect(liveBlocks() > 0);
 
     try std.testing.expectError(error.AllocatorInUse, resetAllocator());

@@ -27,7 +27,7 @@ fn expectVec3(expected: [3]f32, actual: [3]f32, tolerance: f32) !void {
 /// `.skeleton` reference below is measured against; the other two references
 /// must ignore it.
 fn buildSkeleton() !zozz.Skeleton {
-    const raw = try zozz.RawSkeleton.init();
+    var raw = try zozz.RawSkeleton.init();
     defer raw.deinit();
     const root = try raw.addJoint(null, "root", translated(1, 0, 0));
     _ = try raw.addJoint(root, "child", translated(0, 1, 0));
@@ -45,7 +45,7 @@ fn rootTranslationAt(time: f32) [3]f32 {
 }
 
 fn buildWalk() !zozz.RawAnimation {
-    const raw = try zozz.RawAnimation.init(2, duration, "walk");
+    var raw = try zozz.RawAnimation.init(2, duration, "walk");
     errdefer raw.deinit();
     for (key_times) |time| {
         try raw.pushTranslation(0, time, rootTranslationAt(time));
@@ -79,23 +79,23 @@ test "extracting root motion yields the root's translation, and the clip no long
     try zozz.setAllocator(gpa);
     defer zozz.resetAllocator() catch unreachable;
 
-    const skel = try buildSkeleton();
+    var skel = try buildSkeleton();
     defer skel.deinit();
-    const input = try buildWalk();
+    var input = try buildWalk();
     defer input.deinit();
 
-    const extractor = try zozz.MotionExtractor.init();
+    var extractor = try zozz.MotionExtractor.init();
     defer extractor.deinit();
     try extractor.setRootJoint(0);
     try std.testing.expectEqual(@as(u32, 0), extractor.rootJoint());
     try extractor.setPositionSettings(positionSettings(.absolute, true));
     try extractor.setRotationSettings(no_rotation);
 
-    const motion_position = try zozz.RawFloat3Track.init();
+    var motion_position = try zozz.RawFloat3Track.init();
     defer motion_position.deinit();
-    const motion_rotation = try zozz.RawQuaternionTrack.init();
+    var motion_rotation = try zozz.RawQuaternionTrack.init();
     defer motion_rotation.deinit();
-    const output = try zozz.RawAnimation.init(2, duration, null);
+    var output = try zozz.RawAnimation.init(2, duration, null);
     defer output.deinit();
 
     try extractor.run(input, skel, motion_position, motion_rotation, output);
@@ -105,7 +105,7 @@ test "extracting root motion yields the root's translation, and the clip no long
     // at t/duration, and a host sampling the two together has to convert.
     try std.testing.expectEqual(@as(u32, key_times.len), motion_position.numKeyframes());
 
-    const position_track = try motion_position.build();
+    var position_track = try motion_position.build();
     defer position_track.deinit();
 
     // The motion IS the root's X and Z, unshifted (reference = absolute).
@@ -142,27 +142,27 @@ test "the residual clip and the extracted motion recompose the original" {
     try zozz.setAllocator(gpa);
     defer zozz.resetAllocator() catch unreachable;
 
-    const skel = try buildSkeleton();
+    var skel = try buildSkeleton();
     defer skel.deinit();
-    const input = try buildWalk();
+    var input = try buildWalk();
     defer input.deinit();
 
-    const extractor = try zozz.MotionExtractor.init();
+    var extractor = try zozz.MotionExtractor.init();
     defer extractor.deinit();
     // `.skeleton` this time, so the reference is a non-zero offset and a
     // recomposition that quietly dropped it would show.
     try extractor.setPositionSettings(positionSettings(.skeleton, true));
     try extractor.setRotationSettings(no_rotation);
 
-    const motion_position = try zozz.RawFloat3Track.init();
+    var motion_position = try zozz.RawFloat3Track.init();
     defer motion_position.deinit();
-    const motion_rotation = try zozz.RawQuaternionTrack.init();
+    var motion_rotation = try zozz.RawQuaternionTrack.init();
     defer motion_rotation.deinit();
-    const output = try zozz.RawAnimation.init(2, duration, null);
+    var output = try zozz.RawAnimation.init(2, duration, null);
     defer output.deinit();
     try extractor.run(input, skel, motion_position, motion_rotation, output);
 
-    const position_track = try motion_position.build();
+    var position_track = try motion_position.build();
     defer position_track.deinit();
 
     // This is the whole reason the bake exists: a runtime that samples the
@@ -186,12 +186,12 @@ test "the reference setting decides what the extracted motion is measured from" 
     try zozz.setAllocator(gpa);
     defer zozz.resetAllocator() catch unreachable;
 
-    const skel = try buildSkeleton();
+    var skel = try buildSkeleton();
     defer skel.deinit();
-    const input = try buildWalk();
+    var input = try buildWalk();
     defer input.deinit();
 
-    const extractor = try zozz.MotionExtractor.init();
+    var extractor = try zozz.MotionExtractor.init();
     defer extractor.deinit();
     try extractor.setRotationSettings(no_rotation);
 
@@ -212,15 +212,15 @@ test "the reference setting decides what the extracted motion is measured from" 
         try std.testing.expectEqual(case.reference, read_back.reference);
         try std.testing.expect(read_back.x and !read_back.y and read_back.z);
 
-        const motion_position = try zozz.RawFloat3Track.init();
+        var motion_position = try zozz.RawFloat3Track.init();
         defer motion_position.deinit();
-        const motion_rotation = try zozz.RawQuaternionTrack.init();
+        var motion_rotation = try zozz.RawQuaternionTrack.init();
         defer motion_rotation.deinit();
-        const output = try zozz.RawAnimation.init(2, duration, null);
+        var output = try zozz.RawAnimation.init(2, duration, null);
         defer output.deinit();
         try extractor.run(input, skel, motion_position, motion_rotation, output);
 
-        const track = try motion_position.build();
+        var track = try motion_position.build();
         defer track.deinit();
 
         try expectVec3(.{ case.at_zero, 0, 0 }, try track.sample(0), 1e-4);

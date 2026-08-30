@@ -21,7 +21,7 @@ const animation_mod = @import("animation.zig");
 
 /// A skeleton under construction: a flat list of (parent, name, rest) joints.
 pub const RawSkeleton = struct {
-    handle: *c.RawSkeleton,
+    handle: ?*c.RawSkeleton,
 
     pub fn init() err.Error!RawSkeleton {
         var handle: *c.RawSkeleton = undefined;
@@ -29,8 +29,9 @@ pub const RawSkeleton = struct {
         return .{ .handle = handle };
     }
 
-    pub fn deinit(self: RawSkeleton) void {
-        c.zozzRawSkeletonDestroy(self.handle);
+    pub fn deinit(self: *RawSkeleton) void {
+        if (self.handle) |handle| c.zozzRawSkeletonDestroy(handle);
+        self.handle = null;
     }
 
     /// Appends a joint and returns its insertion index. `parent` is null for
@@ -44,12 +45,12 @@ pub const RawSkeleton = struct {
     ) err.Error!u32 {
         var index: i32 = undefined;
         const parent_c: i32 = if (parent) |p| @intCast(p) else -1;
-        try err.check(c.zozzRawSkeletonAddJoint(self.handle, parent_c, name, &rest, &index));
+        try err.check(c.zozzRawSkeletonAddJoint(self.handle.?, parent_c, name, &rest, &index));
         return @intCast(index);
     }
 
     pub fn numJoints(self: RawSkeleton) u32 {
-        return @intCast(c.zozzRawSkeletonNumJoints(self.handle));
+        return @intCast(c.zozzRawSkeletonNumJoints(self.handle.?));
     }
 
     /// Borrowed name of the joint at insertion index `joint` — the index
@@ -57,14 +58,14 @@ pub const RawSkeleton = struct {
     /// produces. Null if `joint` is out of range. Valid only while `self` is
     /// alive.
     pub fn jointName(self: RawSkeleton, joint: u32) ?[:0]const u8 {
-        const name = c.zozzRawSkeletonJointName(self.handle, @intCast(joint)) orelse return null;
+        const name = c.zozzRawSkeletonJointName(self.handle.?, @intCast(joint)) orelse return null;
         return std.mem.span(name);
     }
 
     /// Parent's insertion index, or null for a root. Out-of-range indices
     /// also report null; check `numJoints` when the difference matters.
     pub fn jointParent(self: RawSkeleton, joint: u32) ?u32 {
-        const parent = c.zozzRawSkeletonJointParent(self.handle, @intCast(joint));
+        const parent = c.zozzRawSkeletonJointParent(self.handle.?, @intCast(joint));
         return if (parent < 0) null else @intCast(parent);
     }
 
@@ -72,7 +73,7 @@ pub const RawSkeleton = struct {
     /// index `joint` — exactly what was last passed to `addJoint` for it.
     pub fn jointRest(self: RawSkeleton, joint: u32) err.Error!math.Transform {
         var out: math.Transform = undefined;
-        try err.check(c.zozzRawSkeletonJointRest(self.handle, @intCast(joint), &out));
+        try err.check(c.zozzRawSkeletonJointRest(self.handle.?, @intCast(joint), &out));
         return out;
     }
 
@@ -100,7 +101,7 @@ pub const RawSkeleton = struct {
             }
         };
         try err.check(c.zozzRawSkeletonIterateJointsBreadthFirst(
-            self.handle,
+            self.handle.?,
             &Trampoline.call,
             @ptrCast(context),
         ));
@@ -110,14 +111,14 @@ pub const RawSkeleton = struct {
     /// consumed; it may be built again or extended further.
     pub fn build(self: RawSkeleton) err.Error!skeleton_mod.Skeleton {
         var handle: *c.Skeleton = undefined;
-        try err.check(c.zozzSkeletonBuild(self.handle, &handle));
+        try err.check(c.zozzSkeletonBuild(self.handle.?, &handle));
         return .{ .handle = handle };
     }
 };
 
 /// An animation under construction: per-track keyed T/R/S channels.
 pub const RawAnimation = struct {
-    handle: *c.RawAnimation,
+    handle: ?*c.RawAnimation,
 
     /// `num_tracks` is fixed for the clip's lifetime; `duration` is seconds,
     /// finite and positive. `name` may be null for an unnamed clip.
@@ -127,40 +128,41 @@ pub const RawAnimation = struct {
         return .{ .handle = handle };
     }
 
-    pub fn deinit(self: RawAnimation) void {
-        c.zozzRawAnimationDestroy(self.handle);
+    pub fn deinit(self: *RawAnimation) void {
+        if (self.handle) |handle| c.zozzRawAnimationDestroy(handle);
+        self.handle = null;
     }
 
     pub fn numTracks(self: RawAnimation) u32 {
-        return @intCast(c.zozzRawAnimationNumTracks(self.handle));
+        return @intCast(c.zozzRawAnimationNumTracks(self.handle.?));
     }
 
     pub fn duration(self: RawAnimation) f32 {
-        return c.zozzRawAnimationDuration(self.handle);
+        return c.zozzRawAnimationDuration(self.handle.?);
     }
 
     /// Appends one translation key. `time` must lie within `[0, duration]`;
     /// keys must arrive in non-decreasing time order per channel (violations
     /// surface at `build` as `error.InvalidData`).
     pub fn pushTranslation(self: RawAnimation, track: u32, time: f32, value: [3]f32) err.Error!void {
-        try err.check(c.zozzRawAnimationPushTranslation(self.handle, @intCast(track), time, &value));
+        try err.check(c.zozzRawAnimationPushTranslation(self.handle.?, @intCast(track), time, &value));
     }
 
     /// Appends one rotation key: a quaternion in (x, y, z, w) order — w LAST.
     pub fn pushRotation(self: RawAnimation, track: u32, time: f32, value: [4]f32) err.Error!void {
-        try err.check(c.zozzRawAnimationPushRotation(self.handle, @intCast(track), time, &value));
+        try err.check(c.zozzRawAnimationPushRotation(self.handle.?, @intCast(track), time, &value));
     }
 
     /// Appends one scale key.
     pub fn pushScale(self: RawAnimation, track: u32, time: f32, value: [3]f32) err.Error!void {
-        try err.check(c.zozzRawAnimationPushScale(self.handle, @intCast(track), time, &value));
+        try err.check(c.zozzRawAnimationPushScale(self.handle.?, @intCast(track), time, &value));
     }
 
     /// Validates and builds a compressed runtime animation. The raw animation
     /// is not consumed.
     pub fn build(self: RawAnimation) err.Error!animation_mod.Animation {
         var handle: *c.Animation = undefined;
-        try err.check(c.zozzAnimationBuild(self.handle, &handle));
+        try err.check(c.zozzAnimationBuild(self.handle.?, &handle));
         return .{ .handle = handle };
     }
 
@@ -170,7 +172,7 @@ pub const RawAnimation = struct {
     /// `Animation` at runtime.
     pub fn sampleTrack(self: RawAnimation, track: u32, time: f32) err.Error!math.Transform {
         var out: math.Transform = undefined;
-        try err.check(c.zozzRawAnimationSampleTrack(self.handle, @intCast(track), time, &out));
+        try err.check(c.zozzRawAnimationSampleTrack(self.handle.?, @intCast(track), time, &out));
         return out;
     }
 
@@ -178,18 +180,18 @@ pub const RawAnimation = struct {
     /// entries; slots past the track count are filled with the identity
     /// transform.
     pub fn sample(self: RawAnimation, time: f32, out: []math.Transform) err.Error!void {
-        try err.check(c.zozzRawAnimationSample(self.handle, time, out.ptr, out.len));
+        try err.check(c.zozzRawAnimationSample(self.handle.?, time, out.ptr, out.len));
     }
 
     /// The sorted, de-duplicated union of every keyframe time across all
     /// tracks, allocated with `allocator`. Caller frees the result.
     pub fn extractTimePoints(self: RawAnimation, allocator: std.mem.Allocator) err.Error![]f32 {
         var count: usize = undefined;
-        try err.check(c.zozzRawAnimationExtractTimePoints(self.handle, null, 0, &count));
+        try err.check(c.zozzRawAnimationExtractTimePoints(self.handle.?, null, 0, &count));
 
         const out = allocator.alloc(f32, count) catch return err.Error.OutOfMemory;
         errdefer allocator.free(out);
-        try err.check(c.zozzRawAnimationExtractTimePoints(self.handle, out.ptr, out.len, &count));
+        try err.check(c.zozzRawAnimationExtractTimePoints(self.handle.?, out.ptr, out.len, &count));
         return out;
     }
 
@@ -207,8 +209,8 @@ pub const RawAnimation = struct {
     ) err.Error![]ModelSpaceSample {
         var count: usize = undefined;
         try err.check(c.zozzRawAnimationSampleTrackModelSpace(
-            self.handle,
-            skeleton.handle,
+            self.handle.?,
+            skeleton.handle.?,
             @intCast(joint),
             null,
             0,
@@ -218,8 +220,8 @@ pub const RawAnimation = struct {
         const out = allocator.alloc(ModelSpaceSample, count) catch return err.Error.OutOfMemory;
         errdefer allocator.free(out);
         try err.check(c.zozzRawAnimationSampleTrackModelSpace(
-            self.handle,
-            skeleton.handle,
+            self.handle.?,
+            skeleton.handle.?,
             @intCast(joint),
             out.ptr,
             out.len,
@@ -248,7 +250,7 @@ fn restAt(translation: [3]f32) math.Transform {
 }
 
 test "builder: a depth-first insertion round-trips names, parents and rest pose" {
-    const raw = try RawSkeleton.init();
+    var raw = try RawSkeleton.init();
     defer raw.deinit();
 
     // root -> spine -> {arm_l, arm_r}, inserted depth-first.
@@ -258,7 +260,7 @@ test "builder: a depth-first insertion round-trips names, parents and rest pose"
     _ = try raw.addJoint(spine, "arm_r", restAt(.{ 0.5, 0.5, 0 }));
     try std.testing.expectEqual(@as(u32, 4), raw.numJoints());
 
-    const built = try raw.build();
+    var built = try raw.build();
     defer built.deinit();
 
     try std.testing.expectEqual(@as(u32, 4), built.numJoints());
@@ -278,7 +280,7 @@ test "builder: a depth-first insertion round-trips names, parents and rest pose"
 }
 
 test "builder: a non-depth-first insertion is reindexed depth-first" {
-    const raw = try RawSkeleton.init();
+    var raw = try RawSkeleton.init();
     defer raw.deinit();
 
     // Insertion order: root, a, b, c(child of a). Depth-first order walks a's
@@ -288,7 +290,7 @@ test "builder: a non-depth-first insertion is reindexed depth-first" {
     _ = try raw.addJoint(root, "b", math.transform_identity);
     _ = try raw.addJoint(a, "c", math.transform_identity);
 
-    const built = try raw.build();
+    var built = try raw.build();
     defer built.deinit();
 
     try std.testing.expectEqualStrings("root", built.jointName(0).?);
@@ -298,7 +300,7 @@ test "builder: a non-depth-first insertion is reindexed depth-first" {
 }
 
 test "raw skeleton read-back is addressed by insertion index, not the built order" {
-    const raw = try RawSkeleton.init();
+    var raw = try RawSkeleton.init();
     defer raw.deinit();
 
     // Same non-depth-first insertion as the test above: root, a, b,
@@ -333,7 +335,7 @@ test "raw skeleton read-back is addressed by insertion index, not the built orde
 }
 
 test "raw skeleton breadth-first traversal is per-subtree, not a single global level order" {
-    const raw = try RawSkeleton.init();
+    var raw = try RawSkeleton.init();
     defer raw.deinit();
 
     // Two roots, asymmetric depth: root_a -> a1 -> a1a is two levels deep;
@@ -375,14 +377,14 @@ test "raw skeleton breadth-first traversal is per-subtree, not a single global l
 }
 
 test "builder: a built animation samples what was authored" {
-    const raw_skel = try RawSkeleton.init();
+    var raw_skel = try RawSkeleton.init();
     defer raw_skel.deinit();
     const root = try raw_skel.addJoint(null, "root", math.transform_identity);
     _ = try raw_skel.addJoint(root, "child", restAt(.{ 0, 1, 0 }));
-    const skel = try raw_skel.build();
+    var skel = try raw_skel.build();
     defer skel.deinit();
 
-    const raw_anim = try RawAnimation.init(2, 2.0, "authored");
+    var raw_anim = try RawAnimation.init(2, 2.0, "authored");
     defer raw_anim.deinit();
     // Root translates 0 -> (4, 0, 0) linearly; both tracks fully keyed.
     for (0..2) |track| {
@@ -392,14 +394,14 @@ test "builder: a built animation samples what was authored" {
         try raw_anim.pushRotation(@intCast(track), 0.0, .{ 0, 0, 0, 1 });
         try raw_anim.pushScale(@intCast(track), 0.0, .{ 1, 1, 1 });
     }
-    const clip = try raw_anim.build();
+    var clip = try raw_anim.build();
     defer clip.deinit();
     try std.testing.expectEqual(@as(f32, 2.0), clip.duration());
     try std.testing.expectEqual(@as(u32, 2), clip.numTracks());
 
     // Two joints fit in one SoA block, on the stack.
     var pose: [1]math.SoaTransform = undefined;
-    const context = try sampling_mod.SamplingContext.initForSkeleton(skel);
+    var context = try sampling_mod.SamplingContext.initForSkeleton(skel);
     defer context.deinit();
 
     // Tolerance is the builder's compression, not sampling noise: ozz stores
@@ -420,22 +422,22 @@ test "builder: an empty track bakes identity, not the rest pose" {
     // "unanimated joints hold the rest pose": ozz's AnimationBuilder writes
     // identity keys for a track with no keys (animation_builder.cc, CopyRaw),
     // and it cannot do otherwise — a RawAnimation never sees a skeleton.
-    const raw_skel = try RawSkeleton.init();
+    var raw_skel = try RawSkeleton.init();
     defer raw_skel.deinit();
     const root = try raw_skel.addJoint(null, "root", math.transform_identity);
     _ = try raw_skel.addJoint(root, "still", restAt(.{ 5, 5, 5 }));
-    const skel = try raw_skel.build();
+    var skel = try raw_skel.build();
     defer skel.deinit();
 
-    const raw_anim = try RawAnimation.init(2, 1.0, null);
+    var raw_anim = try RawAnimation.init(2, 1.0, null);
     defer raw_anim.deinit();
     try raw_anim.pushTranslation(0, 0.0, .{ 1, 0, 0 });
     // Track 1: no keys at all.
-    const clip = try raw_anim.build();
+    var clip = try raw_anim.build();
     defer clip.deinit();
 
     var pose: [1]math.SoaTransform = undefined;
-    const context = try sampling_mod.SamplingContext.initForSkeleton(skel);
+    var context = try sampling_mod.SamplingContext.initForSkeleton(skel);
     defer context.deinit();
 
     // Seed the pose with the rest pose, then sample: the empty track has
@@ -449,7 +451,7 @@ test "builder: an empty track bakes identity, not the rest pose" {
 }
 
 test "builder: validation failures are errors, not asserts" {
-    const raw_skel = try RawSkeleton.init();
+    var raw_skel = try RawSkeleton.init();
     defer raw_skel.deinit();
 
     // Parent index that does not exist yet.
@@ -465,7 +467,7 @@ test "builder: validation failures are errors, not asserts" {
     try std.testing.expectError(error.InvalidArgument, RawAnimation.init(1, 0.0, null));
     try std.testing.expectError(error.InvalidArgument, RawAnimation.init(1, std.math.nan(f32), null));
 
-    const raw_anim = try RawAnimation.init(1, 1.0, null);
+    var raw_anim = try RawAnimation.init(1, 1.0, null);
     defer raw_anim.deinit();
     // Out-of-range track, out-of-range time, non-finite value.
     try std.testing.expectError(error.InvalidArgument, raw_anim.pushTranslation(1, 0.0, .{ 0, 0, 0 }));

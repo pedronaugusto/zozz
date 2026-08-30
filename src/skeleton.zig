@@ -17,7 +17,7 @@ pub const no_parent = c.no_parent;
 pub const max_joints = c.max_joints;
 
 pub const Skeleton = struct {
-    handle: *c.Skeleton,
+    handle: ?*c.Skeleton,
 
     /// Loads a skeleton from a `.ozz` file on disk.
     ///
@@ -37,36 +37,37 @@ pub const Skeleton = struct {
         return .{ .handle = handle };
     }
 
-    pub fn deinit(self: Skeleton) void {
-        c.zozzSkeletonDestroy(self.handle);
+    pub fn deinit(self: *Skeleton) void {
+        if (self.handle) |handle| c.zozzSkeletonDestroy(handle);
+        self.handle = null;
     }
 
     pub fn numJoints(self: Skeleton) u32 {
-        return @intCast(c.zozzSkeletonNumJoints(self.handle));
+        return @intCast(c.zozzSkeletonNumJoints(self.handle.?));
     }
 
     /// Number of SoA blocks the skeleton occupies: `(numJoints + 3) / 4`.
     pub fn numSoaJoints(self: Skeleton) u32 {
-        return @intCast(c.zozzSkeletonNumSoaJoints(self.handle));
+        return @intCast(c.zozzSkeletonNumSoaJoints(self.handle.?));
     }
 
     /// Borrowed joint name, or null when `joint` is out of range. Valid only
     /// while the skeleton is alive.
     pub fn jointName(self: Skeleton, joint: u32) ?[:0]const u8 {
-        const name = c.zozzSkeletonJointName(self.handle, @intCast(joint)) orelse return null;
+        const name = c.zozzSkeletonJointName(self.handle.?, @intCast(joint)) orelse return null;
         return std.mem.span(name);
     }
 
     /// Parent joint index, or `no_parent` for a root. Out-of-range indices
     /// also report `no_parent`; check `numJoints` when the difference matters.
     pub fn jointParent(self: Skeleton, joint: u32) i16 {
-        return c.zozzSkeletonJointParent(self.handle, @intCast(joint));
+        return c.zozzSkeletonJointParent(self.handle.?, @intCast(joint));
     }
 
     /// Writes the rest pose as local transforms. `out` must hold at least
     /// `numJoints` entries.
     pub fn restPose(self: Skeleton, out: []math.Transform) err.Error!void {
-        try err.check(c.zozzSkeletonRestPose(self.handle, out.ptr, out.len));
+        try err.check(c.zozzSkeletonRestPose(self.handle.?, out.ptr, out.len));
     }
 
     /// Copies ozz's own `joint_rest_poses` into `out`, no transpose. Seed a
@@ -74,6 +75,6 @@ pub const Skeleton = struct {
     /// skeleton's joints: the ones the clip misses keep the rest pose.
     /// `out` must hold at least `numSoaJoints` blocks.
     pub fn restPoseSoa(self: Skeleton, out: []math.SoaTransform) err.Error!void {
-        try err.check(c.zozzSkeletonRestPoseSoa(self.handle, out.ptr, out.len));
+        try err.check(c.zozzSkeletonRestPoseSoa(self.handle.?, out.ptr, out.len));
     }
 };

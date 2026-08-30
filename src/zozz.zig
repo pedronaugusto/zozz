@@ -355,6 +355,24 @@ test "result names are never null" {
     }
 }
 
+test "a handle destroyed twice is freed once" {
+    const gpa = std.testing.allocator;
+    try setAllocator(gpa);
+    defer resetAllocator() catch unreachable;
+
+    // `deinit` takes a pointer and nulls the handle, so the second call has
+    // nothing to free. Under the testing allocator a second free is a failure
+    // rather than an opinion, and the live-block count says the first one
+    // happened at all.
+    var context = try SamplingContext.init(8);
+    try std.testing.expect(allocatorLiveBlocks() > 0);
+    context.deinit();
+    try std.testing.expectEqual(@as(usize, 0), allocatorLiveBlocks());
+    context.deinit();
+    try std.testing.expectEqual(@as(usize, 0), allocatorLiveBlocks());
+    try std.testing.expect(context.handle == null);
+}
+
 test "loaders reject malformed input instead of parsing it" {
     const gpa = std.testing.allocator;
     try setAllocator(gpa);

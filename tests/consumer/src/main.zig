@@ -28,12 +28,12 @@ pub fn main() !void {
 
     // Author a two-joint skeleton and a clip that translates its root, using
     // the offline builders — no asset files, so this runs anywhere.
-    const raw_skeleton = try zozz.RawSkeleton.init();
+    var raw_skeleton = try zozz.RawSkeleton.init();
     defer raw_skeleton.deinit();
     const root = try raw_skeleton.addJoint(null, "root", zozz.transform_identity);
     _ = try raw_skeleton.addJoint(root, "child", restAt(.{ 0, 1, 0 }));
 
-    const skeleton = try raw_skeleton.build();
+    var skeleton = try raw_skeleton.build();
     defer skeleton.deinit();
     if (skeleton.numJoints() != 2) return error.WrongJointCount;
     if (skeleton.jointParent(0) != zozz.no_parent) return error.RootHasAParent;
@@ -43,7 +43,7 @@ pub fn main() !void {
     // IDENTITY rather than the rest pose, because a raw animation never sees
     // a skeleton — so a consumer whose rule is "unanimated joints hold the
     // rest pose" has to author those keys, exactly as here.
-    const raw_clip = try zozz.RawAnimation.init(2, 2.0, "walk");
+    var raw_clip = try zozz.RawAnimation.init(2, 2.0, "walk");
     defer raw_clip.deinit();
     try raw_clip.pushTranslation(0, 0.0, .{ 0, 0, 0 });
     try raw_clip.pushTranslation(0, 2.0, .{ 4, 0, 0 });
@@ -53,12 +53,12 @@ pub fn main() !void {
         try raw_clip.pushScale(@intCast(track), 0.0, .{ 1, 1, 1 });
     }
 
-    const clip = try raw_clip.build();
+    var clip = try raw_clip.build();
     defer clip.deinit();
 
     // The caller owns the pose: two joints are one SoA block, on the stack.
     var pose: [1]zozz.SoaTransform = undefined;
-    const context = try zozz.SamplingContext.initForSkeleton(skeleton);
+    var context = try zozz.SamplingContext.initForSkeleton(skeleton);
     defer context.deinit();
 
     try skeleton.restPoseSoa(&pose);

@@ -37,10 +37,13 @@ try zozz.setAllocator(gpa);
 // blocks this one produced are still live.
 defer zozz.resetAllocator() catch |e| std.debug.panic("zozz: {s}", .{@errorName(e)});
 
-const skeleton = try zozz.Skeleton.initFromFile("skeleton.ozz");
+// A handle is destroyed through a pointer, so it is a `var`: `deinit`
+// nulls it, which makes a second destroy a no-op and a use after it a
+// checked panic rather than a read of freed memory.
+var skeleton = try zozz.Skeleton.initFromFile("skeleton.ozz");
 defer skeleton.deinit();
 
-const clip = try zozz.Animation.initFromFile("walk.ozz");
+var clip = try zozz.Animation.initFromFile("walk.ozz");
 defer clip.deinit();
 
 // The caller owns the pose. It can be a stack array, an arena slice, or a
@@ -48,7 +51,7 @@ defer clip.deinit();
 const pose = try gpa.alloc(zozz.SoaTransform, try zozz.soaBlocks(skeleton.numJoints()));
 defer gpa.free(pose);
 
-const context = try zozz.SamplingContext.initForSkeleton(skeleton);
+var context = try zozz.SamplingContext.initForSkeleton(skeleton);
 defer context.deinit();
 
 // Per frame:
@@ -334,12 +337,12 @@ NaN ratio that is refused.
 | **21** | installed public headers |
 | **89** | ozz public names with a binding |
 | **418** | ozz public names in the bound areas |
-| **174** | Zig tests `zig build test` executes |
+| **175** | Zig tests `zig build test` executes |
 | **10** | tests it skips, each needing a build option or an on-disk asset |
 | **119** | assertions in the standalone C smoke test |
 | **39** | vendored ozz translation units `build.zig` compiles |
 | **20** | zozz C++ translation units (`ffi/*.cpp`) |
-| **11850** | Zig source lines (`src/`) |
+| **11895** | Zig source lines (`src/`) |
 | **8242** | C++ source lines (`ffi/`) |
 | **18** | deliberate drifts `ci/check-abi-drift.sh` must refuse |
 | **17** | steps `ci/run.sh` runs |
