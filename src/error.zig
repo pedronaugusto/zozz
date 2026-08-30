@@ -26,6 +26,9 @@ pub const Error = error{
     /// The entry point exists but its build option is off: the library was
     /// compiled without the code it needs.
     Unsupported,
+    /// A different allocator was offered while blocks the installed one
+    /// produced are still live. Destroy what is outstanding first.
+    AllocatorInUse,
 };
 
 /// Turns a C result into a Zig error, or void on success.
@@ -46,6 +49,7 @@ pub fn check(result: c.Result) Error!void {
         .skeleton_mismatch => Error.SkeletonMismatch,
         .invalid_data => Error.InvalidData,
         .unsupported => Error.Unsupported,
+        .allocator_in_use => Error.AllocatorInUse,
     };
 }
 

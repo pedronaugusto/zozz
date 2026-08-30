@@ -146,11 +146,20 @@ static void test_version(void) {
 }
 
 static void test_result_names(void) {
-  for (int i = 0; i <= (int)ZOZZ_RESULT_SKELETON_MISMATCH; ++i) {
+  // Bounded by what the library reports, not by an enumerator spelled here: a
+  // hand-written bound stops at whichever result was last when it was
+  // written, and this one had stopped four results short.
+  ZozzAbiLayout layout;
+  zozzAbiLayout(&layout);
+  CHECK(layout.result_count > 0);
+  for (uint32_t i = 0; i < layout.result_count; ++i) {
     const char* name = zozzResultName((ZozzResult)i);
     CHECK(name != NULL);
     CHECK(strlen(name) > 0);
+    CHECK(strcmp(name, "unknown result") != 0);
   }
+  CHECK(strcmp(zozzResultName((ZozzResult)layout.result_count),
+               "unknown result") == 0);
 }
 
 static void test_abi_layout(void) {
@@ -163,7 +172,7 @@ static void test_abi_layout(void) {
   CHECK(layout.float4x4_size == (uint32_t)sizeof(ZozzFloat4x4));
   CHECK(layout.float4x4_align == 16);
   CHECK(layout.allocator_size == (uint32_t)sizeof(ZozzAllocator));
-  CHECK(layout.result_count == (uint32_t)ZOZZ_RESULT_UNSUPPORTED + 1u);
+  CHECK(layout.result_count == (uint32_t)ZOZZ_RESULT_ALLOCATOR_IN_USE + 1u);
 }
 
 static void test_allocator_rejects_incomplete(void) {
@@ -521,6 +530,34 @@ static void test_archive_stream_rejection(void) {
   mem_stream_free(&mem);
 }
 
+/// The seam refuses to hand outstanding blocks to a different allocator, and
+/// says so rather than corrupting a heap two calls later. A second allocator
+/// differing only in `user` is enough to be a different allocator, which is
+/// what a host dispatching through `user` depends on.
+static void test_allocator_swap_refused_while_blocks_are_live(
+    const ZozzAllocator* installed_allocator) {
+  ZozzSamplingContext* context = NULL;
+  Counters other_counters = {0, 0};
+  ZozzAllocator other = *installed_allocator;
+  other.user = &other_counters;
+
+  CHECK(zozzAllocatorLiveBlocks() == 0);
+  CHECK(zozzSamplingContextCreate(8, &context) == ZOZZ_RESULT_OK);
+  CHECK(zozzAllocatorLiveBlocks() > 0);
+
+  CHECK(zozzSetAllocator(&other) == ZOZZ_RESULT_ALLOCATOR_IN_USE);
+  CHECK(zozzSetAllocator(NULL) == ZOZZ_RESULT_ALLOCATOR_IN_USE);
+  // Refused means untouched: the allocator that produced the block is still
+  // the one that will free it.
+  test_allocator_getter_reports_the_installed_allocator(installed_allocator);
+  // Reinstalling the identical allocator is not a swap.
+  CHECK(zozzSetAllocator(installed_allocator) == ZOZZ_RESULT_OK);
+  CHECK(other_counters.allocations == 0);
+
+  zozzSamplingContextDestroy(context);
+  CHECK(zozzAllocatorLiveBlocks() == 0);
+}
+
 int main(void) {
   Counters counters = {0, 0};
   ZozzAllocator allocator;
@@ -538,6 +575,8 @@ int main(void) {
   CHECK(zozzSetAllocator(&allocator) == ZOZZ_RESULT_OK);
   test_allocator_getter_reports_the_installed_allocator(&allocator);
 
+  test_allocator_swap_refused_while_blocks_are_live(&allocator);
+
   test_bad_input();
   test_pose_round_trip();
   test_joint_weight_packing();
@@ -550,6 +589,7 @@ int main(void) {
   CHECK(counters.allocations > 0);
   CHECK(counters.allocations == counters.frees);
 
+  CHECK(zozzAllocatorLiveBlocks() == 0);
   CHECK(zozzSetAllocator(NULL) == ZOZZ_RESULT_OK);
   test_allocator_getter_reports_not_installed();
 

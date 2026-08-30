@@ -53,7 +53,7 @@ fn normalize(v: [3]f32) [3]f32 {
 test "two-bone IK moves the end effector toward the target, and reaches an in-range one" {
     const gpa = std.testing.allocator;
     try zozz.setAllocator(gpa);
-    defer zozz.resetAllocator();
+    defer zozz.resetAllocator() catch unreachable;
 
     // A two-bone chain lying flat along +X, each bone length 1: fully
     // extended reach is 2.
@@ -125,7 +125,7 @@ test "two-bone IK moves the end effector toward the target, and reaches an in-ra
 test "aim IK points the forward axis at the target" {
     const gpa = std.testing.allocator;
     try zozz.setAllocator(gpa);
-    defer zozz.resetAllocator();
+    defer zozz.resetAllocator() catch unreachable;
 
     var pose: [1]zozz.SoaTransform = undefined;
     try zozz.pose.setIdentity(&pose);
@@ -153,7 +153,7 @@ test "aim IK points the forward axis at the target" {
 test "weight = 0 is identity: exactly for TwoBoneJob, to ozz's Est tolerance for AimJob" {
     const gpa = std.testing.allocator;
     try zozz.setAllocator(gpa);
-    defer zozz.resetAllocator();
+    defer zozz.resetAllocator() catch unreachable;
 
     const raw = try zozz.RawSkeleton.init();
     defer raw.deinit();
@@ -222,7 +222,7 @@ test "AimJob's weight-0 identity is exact on a scalar ozz backend and estimated 
     // while x86_64 runs `sse` and returns rsqrt(1.0) = 0.999755859375.
     const gpa = std.testing.allocator;
     try zozz.setAllocator(gpa);
-    defer zozz.resetAllocator();
+    defer zozz.resetAllocator() catch unreachable;
 
     const joint_matrix = zozz.mat4_identity;
     const aim = try (zozz.ik.AimJob{

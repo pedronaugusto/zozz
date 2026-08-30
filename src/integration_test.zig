@@ -164,7 +164,7 @@ fn expectPipelineWorks(
 test "the full pipeline runs against synthetic assets" {
     const gpa = std.testing.allocator;
     try zozz.setAllocator(gpa);
-    defer zozz.resetAllocator();
+    defer zozz.resetAllocator() catch unreachable;
 
     const skeleton_blob = try FixtureBlob.init(zozzFixtureSkeleton);
     defer skeleton_blob.deinit();
@@ -190,7 +190,7 @@ test "the full pipeline runs against synthetic assets" {
 test "a sampling context can be reused across clips after invalidation" {
     const gpa = std.testing.allocator;
     try zozz.setAllocator(gpa);
-    defer zozz.resetAllocator();
+    defer zozz.resetAllocator() catch unreachable;
 
     const skeleton_blob = try FixtureBlob.init(zozzFixtureSkeleton);
     defer skeleton_blob.deinit();
@@ -224,7 +224,7 @@ test "a sampling context can be reused across clips after invalidation" {
 test "a sampling context can be resized in place and go on sampling correctly" {
     const gpa = std.testing.allocator;
     try zozz.setAllocator(gpa);
-    defer zozz.resetAllocator();
+    defer zozz.resetAllocator() catch unreachable;
 
     const skeleton_blob = try FixtureBlob.init(zozzFixtureSkeleton);
     defer skeleton_blob.deinit();
@@ -264,7 +264,7 @@ test "a sampling context can be resized in place and go on sampling correctly" {
 test "a pose smaller than the animation is refused" {
     const gpa = std.testing.allocator;
     try zozz.setAllocator(gpa);
-    defer zozz.resetAllocator();
+    defer zozz.resetAllocator() catch unreachable;
 
     const skeleton_blob = try FixtureBlob.init(zozzFixtureSkeleton);
     defer skeleton_blob.deinit();
@@ -303,7 +303,7 @@ test "the full pipeline runs against .ozz files on disk" {
 
     const gpa = std.testing.allocator;
     try zozz.setAllocator(gpa);
-    defer zozz.resetAllocator();
+    defer zozz.resetAllocator() catch unreachable;
 
     var skeleton_buf: [std.fs.max_path_bytes]u8 = undefined;
     var animation_buf: [std.fs.max_path_bytes]u8 = undefined;
@@ -331,7 +331,7 @@ test "a truncated archive is refused rather than trusted" {
 
     const gpa = std.testing.allocator;
     try zozz.setAllocator(gpa);
-    defer zozz.resetAllocator();
+    defer zozz.resetAllocator() catch unreachable;
 
     const skeleton_blob = try FixtureBlob.init(zozzFixtureSkeleton);
     defer skeleton_blob.deinit();
@@ -399,7 +399,7 @@ const WriteBuffer = struct {
 test "an animation written through the archive and read back compares equal to the original" {
     const gpa = std.testing.allocator;
     try zozz.setAllocator(gpa);
-    defer zozz.resetAllocator();
+    defer zozz.resetAllocator() catch unreachable;
 
     const animation_blob = try FixtureBlob.init(zozzFixtureAnimation);
     defer animation_blob.deinit();

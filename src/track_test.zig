@@ -16,7 +16,7 @@ fn buildTrack(raw: zozz.RawFloatTrack) !zozz.FloatTrack {
 test "a float track returns keyframe values exactly and interpolates between them" {
     const gpa = std.testing.allocator;
     try zozz.setAllocator(gpa);
-    defer zozz.resetAllocator();
+    defer zozz.resetAllocator() catch unreachable;
 
     const raw = try zozz.RawFloatTrack.init();
     defer raw.deinit();
@@ -40,7 +40,7 @@ test "a float track returns keyframe values exactly and interpolates between the
 test "a float track's keyframe read-back matches what was authored, across a bitset byte boundary" {
     const gpa = std.testing.allocator;
     try zozz.setAllocator(gpa);
-    defer zozz.resetAllocator();
+    defer zozz.resetAllocator() catch unreachable;
 
     // 12 keys — more than the 8 in one byte of the packed steps bitset
     // (Track::steps(), one bit per key) — alternating step/linear, so an
@@ -86,7 +86,7 @@ test "a float track's keyframe read-back matches what was authored, across a bit
 test "a float3 track's keyframe read-back matches what was authored" {
     const gpa = std.testing.allocator;
     try zozz.setAllocator(gpa);
-    defer zozz.resetAllocator();
+    defer zozz.resetAllocator() catch unreachable;
 
     const raw = try zozz.RawFloat3Track.init();
     defer raw.deinit();
@@ -122,7 +122,7 @@ test "a float3 track's keyframe read-back matches what was authored" {
 test "a quaternion track's keyframe read-back preserves x, y, z, w order" {
     const gpa = std.testing.allocator;
     try zozz.setAllocator(gpa);
-    defer zozz.resetAllocator();
+    defer zozz.resetAllocator() catch unreachable;
 
     // A 90-degree turn about Z: identity, then (0, 0, sin45, cos45) — w LAST,
     // matching every other quaternion in this package.
@@ -148,7 +148,7 @@ test "a quaternion track's keyframe read-back preserves x, y, z, w order" {
 test "the triggering iterator yields the edges of a step function, in order" {
     const gpa = std.testing.allocator;
     try zozz.setAllocator(gpa);
-    defer zozz.resetAllocator();
+    defer zozz.resetAllocator() catch unreachable;
 
     // A square wave: 0, 1, 0, 1 held over each quarter, step interpolation
     // so the transition sits exactly at each keyframe's ratio.
@@ -193,7 +193,7 @@ test "the triggering iterator yields the edges of a step function, in order" {
 test "the track optimizer reduces keyframe count within tolerance of the original" {
     const gpa = std.testing.allocator;
     try zozz.setAllocator(gpa);
-    defer zozz.resetAllocator();
+    defer zozz.resetAllocator() catch unreachable;
 
     const raw = try zozz.RawFloatTrack.init();
     defer raw.deinit();
