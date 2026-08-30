@@ -240,14 +240,29 @@ ZOZZ_API ZozzResult zozzQuaternionTrackSteps(const ZozzQuaternionTrack* track,
 // other value types). Evaluation is lazy: each edge is computed the first time
 // the iterator reaches it.
 //
-// zozzFloatTrackTriggeringJobRun allocates the iterator through the installed
-// allocator; it must be destroyed explicitly, like any other handle. It
-// borrows `track`, which must stay alive and unchanged for as long as the
-// iterator is used, including every Next call. Usage: Run to get an iterator,
-// loop while Valid, Get each edge, Next to advance, then Destroy.
+// The iterator is CALLER-OWNED storage, as it is in ozz, where the job and its
+// iterator are ordinary stack objects. Declare a ZozzTrackTriggeringIterator,
+// hand its address to Run, loop while Valid, Get each edge, Next to advance.
+// There is nothing to destroy. It borrows `track`, which must stay alive and
+// unchanged for as long as the iterator is used, including every Next call.
 //===----------------------------------------------------------------------===//
 
-typedef struct ZozzTrackTriggeringIterator ZozzTrackTriggeringIterator;
+/// Bytes of caller storage one triggering session needs. ozz's job holds the
+/// query and its iterator holds a pointer back to that job, so the two live
+/// or die together and this is the size of both plus the two guard words
+/// below. Deliberately a little larger than ozz 0.17.0 needs, because the
+/// number is in a public header; the static_assert in zozz_abi.cpp is what
+/// makes it correct, and zozzAbiLayout reports what was compiled.
+#define ZOZZ_TRACK_TRIGGERING_ITERATOR_SIZE 96
+
+/// One triggering session's storage. OPAQUE: read it only through the calls
+/// below. It contains a pointer into ITSELF, so it must not be copied or moved
+/// once Run has initialised it — every call checks the address it was
+/// initialised at, along with a guard word, and answers
+/// ZOZZ_RESULT_INVALID_ARGUMENT for storage that was moved or never run.
+typedef struct ZOZZ_ALIGN16 ZozzTrackTriggeringIterator {
+  unsigned char storage[ZOZZ_TRACK_TRIGGERING_ITERATOR_SIZE];
+} ZozzTrackTriggeringIterator;
 
 /// One detected threshold crossing.
 typedef struct ZozzTrackEdge {
@@ -258,33 +273,31 @@ typedef struct ZozzTrackEdge {
   bool rising;
 } ZozzTrackEdge;
 
-/// Runs edge-triggering over [from, to] of `track` for `threshold`
-/// crossings; any finite range/order works. `*out` is a new iterator at the
-/// first edge on success, or past-end if `from == to` or none exists; step
-/// with zozzTrackTriggeringIteratorNext. **Cyclic: the loop seam is an edge
-/// too** — ratio 1 wraps to ratio 0, so a value still off-threshold at the
-/// end fires one more edge, landing at `from`, not the end.
+/// Initialises `out` and positions it on the first edge of [from, to] of
+/// `track` for `threshold` crossings; any finite range/order works. Past-end
+/// if `from == to` or no edge exists; step with
+/// zozzTrackTriggeringIteratorNext. **Cyclic: the loop seam is an edge too**
+/// — ratio 1 wraps to ratio 0, so a value still off-threshold at the end
+/// fires one more edge, landing at `from`, not the end.
 ZOZZ_API ZozzResult zozzFloatTrackTriggeringJobRun(
     const ZozzFloatTrack* track, float from, float to, float threshold,
-    ZozzTrackTriggeringIterator** out);
-
-ZOZZ_API void zozzTrackTriggeringIteratorDestroy(
-    ZozzTrackTriggeringIterator* iterator);
+    ZozzTrackTriggeringIterator* out);
 
 /// True if `iterator` refers to a real edge (safe to pass to
-/// zozzTrackTriggeringIteratorGet); false once the sequence is exhausted, or
-/// if `iterator` is NULL.
+/// zozzTrackTriggeringIteratorGet); false once the sequence is exhausted, if
+/// `iterator` is NULL, or if its storage was never run or has been moved.
 ZOZZ_API bool zozzTrackTriggeringIteratorValid(
     const ZozzTrackTriggeringIterator* iterator);
 
 /// Advances to the next edge. Returns ZOZZ_RESULT_INVALID_ARGUMENT, without
-/// advancing, if `iterator` is NULL or already past the end — there is
-/// nothing to advance to.
+/// advancing, if `iterator` is NULL, was never run, has been moved, or is
+/// already past the end — there is nothing to advance to.
 ZOZZ_API ZozzResult zozzTrackTriggeringIteratorNext(
     ZozzTrackTriggeringIterator* iterator);
 
 /// Reads the edge `iterator` currently refers to. Returns
-/// ZOZZ_RESULT_INVALID_ARGUMENT if `iterator` is NULL or past the end.
+/// ZOZZ_RESULT_INVALID_ARGUMENT if `iterator` is NULL, was never run, has
+/// been moved, or is past the end.
 ZOZZ_API ZozzResult zozzTrackTriggeringIteratorGet(
     const ZozzTrackTriggeringIterator* iterator, ZozzTrackEdge* out);
 

@@ -227,6 +227,16 @@ pub const QuaternionTrack = VectorTrack(c.QuaternionTrack, 4, .{
 
 //=============================================================================
 // Edge triggering
+//
+// A triggering session is CALLER-OWNED storage, as in ozz, where the job and
+// its iterator are ordinary stack objects. Declare one `undefined`, `run` it,
+// and there is nothing to free:
+//
+//     var edges: zozz.TrackTriggering = undefined;
+//     try edges.run(track, 0, 1, 0.5);
+//     while (edges.valid()) : (try edges.next()) {
+//         const edge = try edges.get();
+//     }
 //=============================================================================
 
 /// One detected threshold crossing, as reported by `TrackTriggering`.
@@ -238,48 +248,43 @@ pub const TrackEdge = struct {
     rising: bool,
 };
 
-/// A live edge-triggering session over a `FloatTrack`: detects where the
-/// track's value crosses a threshold across a ratio range.
+/// A live edge-triggering session over a `FloatTrack`, borrowing the track
+/// passed to `run`, which must outlive it — including every `next`.
 ///
-/// Borrows the track passed to `init` — the track must outlive this iterator,
-/// including every call to `next`.
+/// It contains a pointer into ITSELF, so it must not be copied or moved once
+/// `run` has initialised it. A copy, or storage that was never `run`, fails
+/// the guard the C side checks on every call: `Error.InvalidArgument`.
 pub const TrackTriggering = struct {
-    handle: ?*c.TrackTriggeringIterator,
+    state: c.TrackTriggeringIterator,
 
     /// Runs edge-triggering over the ratio range [from, to] of `track`,
-    /// detecting crossings of `threshold`. `from`, `to` and `threshold` may be
-    /// any finite values, in any order: a `to` before `from` scans backward,
-    /// and a range wider than 1 loops over the track more than once. The
-    /// returned iterator is already positioned at the first edge, or past the
-    /// end if `from == to` or no edge exists — check `valid` before `get`.
-    pub fn init(track: FloatTrack, from: f32, to: f32, threshold: f32) err.Error!TrackTriggering {
-        var handle: *c.TrackTriggeringIterator = undefined;
-        try err.check(c.zozzFloatTrackTriggeringJobRun(track.handle.?, from, to, threshold, &handle));
-        return .{ .handle = handle };
+    /// detecting crossings of `threshold`. Any finite values, in any order: a
+    /// `to` before `from` scans backward, and a range wider than 1 loops over
+    /// the track more than once. On return the session sits on the first
+    /// edge, or past the end if `from == to` or no edge exists — check
+    /// `valid` before `get`. By pointer: the storage records its own address.
+    pub fn run(self: *TrackTriggering, track: FloatTrack, from: f32, to: f32, threshold: f32) err.Error!void {
+        try err.check(c.zozzFloatTrackTriggeringJobRun(track.handle.?, from, to, threshold, &self.state));
     }
 
-    pub fn deinit(self: *TrackTriggering) void {
-        if (self.handle) |handle| c.zozzTrackTriggeringIteratorDestroy(handle);
-        self.handle = null;
-    }
-
-    /// True if the iterator refers to a real edge (safe to pass to `get`);
-    /// false once the sequence is exhausted.
-    pub fn valid(self: TrackTriggering) bool {
-        return c.zozzTrackTriggeringIteratorValid(self.handle.?);
+    /// True if the session refers to a real edge (safe to pass to `get`);
+    /// false once the sequence is exhausted, or if it was never `run` or has
+    /// been copied since.
+    pub fn valid(self: *const TrackTriggering) bool {
+        return c.zozzTrackTriggeringIteratorValid(&self.state);
     }
 
     /// Advances to the next edge. Returns `Error.InvalidArgument`, without
-    /// advancing, if the iterator is already past the end.
-    pub fn next(self: TrackTriggering) err.Error!void {
-        try err.check(c.zozzTrackTriggeringIteratorNext(self.handle.?));
+    /// advancing, if the session is already past the end.
+    pub fn next(self: *TrackTriggering) err.Error!void {
+        try err.check(c.zozzTrackTriggeringIteratorNext(&self.state));
     }
 
-    /// Reads the edge the iterator currently refers to. Returns
-    /// `Error.InvalidArgument` if the iterator is past the end.
-    pub fn get(self: TrackTriggering) err.Error!TrackEdge {
+    /// Reads the edge the session currently refers to. Returns
+    /// `Error.InvalidArgument` if it is past the end.
+    pub fn get(self: *const TrackTriggering) err.Error!TrackEdge {
         var edge: c.TrackEdge = undefined;
-        try err.check(c.zozzTrackTriggeringIteratorGet(self.handle.?, &edge));
+        try err.check(c.zozzTrackTriggeringIteratorGet(&self.state, &edge));
         return .{ .ratio = edge.ratio, .rising = edge.rising };
     }
 };

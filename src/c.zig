@@ -174,6 +174,9 @@ pub const AbiLayout = extern struct {
     blending_layer_offset_joint_weights: u32,
     blending_layer_offset_num_joint_weights: u32,
 
+    track_triggering_size: u32,
+    track_triggering_align: u32,
+
     allocator_size: u32,
     allocator_align: u32,
     allocator_offset_allocate: u32,
@@ -200,6 +203,11 @@ pub const no_parent: i16 = -1;
 /// `ZOZZ_MAX_JOINTS`; `ffi/zozz_abi.cpp` static_asserts it against ozz.
 pub const max_joints: c_int = 1024;
 
+/// Bytes of caller storage one edge-triggering session needs. Mirrors
+/// `ZOZZ_TRACK_TRIGGERING_ITERATOR_SIZE`; `ffi/zozz_track.cpp` static_asserts
+/// it against ozz's own TrackTriggeringJob and Iterator.
+pub const track_triggering_iterator_size: c_int = 96;
+
 //=============================================================================
 // Callback types
 //=============================================================================
@@ -225,7 +233,14 @@ pub const Float2Track = opaque {};
 pub const Float3Track = opaque {};
 pub const Float4Track = opaque {};
 pub const QuaternionTrack = opaque {};
-pub const TrackTriggeringIterator = opaque {};
+/// Caller-owned storage for one triggering session,
+/// `ZozzTrackTriggeringIterator`. Opaque bytes: the C++ side placement-news
+/// ozz's job and its iterator into them. Size and alignment are compared
+/// against the compiled library through `AbiLayout.track_triggering_size`
+/// and `_align`.
+pub const TrackTriggeringIterator = extern struct {
+    storage: [@intCast(track_triggering_iterator_size)]u8 align(16),
+};
 
 //=============================================================================
 // Track plain data
@@ -614,9 +629,8 @@ pub extern fn zozzFloatTrackTriggeringJobRun(
     from: f32,
     to: f32,
     threshold: f32,
-    out: **TrackTriggeringIterator,
+    out: *TrackTriggeringIterator,
 ) Result;
-pub extern fn zozzTrackTriggeringIteratorDestroy(iterator: ?*TrackTriggeringIterator) void;
 pub extern fn zozzTrackTriggeringIteratorValid(iterator: ?*const TrackTriggeringIterator) bool;
 pub extern fn zozzTrackTriggeringIteratorNext(iterator: *TrackTriggeringIterator) Result;
 pub extern fn zozzTrackTriggeringIteratorGet(iterator: *const TrackTriggeringIterator, out: *TrackEdge) Result;

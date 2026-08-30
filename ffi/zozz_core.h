@@ -320,6 +320,9 @@ typedef struct ZozzAbiLayout {
   uint32_t blending_layer_offset_joint_weights;
   uint32_t blending_layer_offset_num_joint_weights;
 
+  uint32_t track_triggering_size;
+  uint32_t track_triggering_align;
+
   uint32_t allocator_size;
   uint32_t allocator_align;
   uint32_t allocator_offset_allocate;

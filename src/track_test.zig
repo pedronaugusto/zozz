@@ -162,8 +162,10 @@ test "the triggering iterator yields the edges of a step function, in order" {
     var track = try buildTrack(raw);
     defer track.deinit();
 
-    var triggering = try zozz.TrackTriggering.init(track, 0.0, 1.0, 0.5);
-    defer triggering.deinit();
+    // On the stack, and nothing to free: the allocator assertion at the end
+    // of this test is what proves the session took nothing from it.
+    var triggering: zozz.TrackTriggering = undefined;
+    try triggering.run(track, 0.0, 1.0, 0.5);
 
     var edges: [8]zozz.TrackEdge = undefined;
     var count: usize = 0;
@@ -188,6 +190,46 @@ test "the triggering iterator yields the edges of a step function, in order" {
     try std.testing.expect(!edges[2].rising);
     try std.testing.expectApproxEqAbs(@as(f32, 0.75), edges[3].ratio, 1e-3);
     try std.testing.expect(edges[3].rising);
+
+    // Past the end is an error, not an assert inside ozz.
+    try std.testing.expectError(error.InvalidArgument, triggering.next());
+    try std.testing.expectError(error.InvalidArgument, triggering.get());
+}
+
+test "triggering storage that was never run, or was copied, is refused" {
+    const gpa = std.testing.allocator;
+    try zozz.setAllocator(gpa);
+    defer zozz.resetAllocator() catch unreachable;
+
+    var raw = try zozz.RawFloatTrack.init();
+    defer raw.deinit();
+    try raw.pushKeyframe(.step, 0.0, 0.0);
+    try raw.pushKeyframe(.step, 0.5, 1.0);
+    var track = try buildTrack(raw);
+    defer track.deinit();
+
+    // Storage the caller owns can be in any state, including one no call ever
+    // wrote. Zeroed here rather than left `undefined`, because a test must not
+    // read uninitialised memory to prove the guard works; the guard word is
+    // what rejects it either way.
+    var never_run: zozz.TrackTriggering = std.mem.zeroes(zozz.TrackTriggering);
+    try std.testing.expect(!never_run.valid());
+    try std.testing.expectError(error.InvalidArgument, never_run.next());
+    try std.testing.expectError(error.InvalidArgument, never_run.get());
+
+    var session: zozz.TrackTriggering = undefined;
+    try session.run(track, 0.0, 1.0, 0.5);
+    try std.testing.expect(session.valid());
+
+    // A COPY holds a pointer into the original, so ozz would compare it
+    // against the wrong job and walk the wrong storage. It is refused instead.
+    var moved = session;
+    try std.testing.expect(!moved.valid());
+    try std.testing.expectError(error.InvalidArgument, moved.next());
+    try std.testing.expectError(error.InvalidArgument, moved.get());
+
+    // The original is untouched by any of that.
+    try std.testing.expect(session.valid());
 }
 
 test "the track optimizer reduces keyframe count within tolerance of the original" {
