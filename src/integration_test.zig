@@ -98,7 +98,7 @@ fn expectPipelineWorks(
 
     const pose = try gpa.alloc(zozz.SoaTransform, try zozz.soaBlocks(joints));
     defer gpa.free(pose);
-    const context = try zozz.SamplingContext.initForSkeleton(skeleton);
+    var context = try zozz.SamplingContext.initForSkeleton(skeleton);
     defer context.deinit();
     try std.testing.expect(context.maxTracks() >= joints);
 
@@ -171,9 +171,9 @@ test "the full pipeline runs against synthetic assets" {
     const animation_blob = try FixtureBlob.init(zozzFixtureAnimation);
     defer animation_blob.deinit();
 
-    const skeleton = try zozz.Skeleton.initFromMemory(skeleton_blob.bytes);
+    var skeleton = try zozz.Skeleton.initFromMemory(skeleton_blob.bytes);
     defer skeleton.deinit();
-    const clip = try zozz.Animation.initFromMemory(animation_blob.bytes);
+    var clip = try zozz.Animation.initFromMemory(animation_blob.bytes);
     defer clip.deinit();
 
     // The fixture's shape is known, so assert it exactly — this catches a
@@ -197,10 +197,10 @@ test "a sampling context can be reused across clips after invalidation" {
     const animation_blob = try FixtureBlob.init(zozzFixtureAnimation);
     defer animation_blob.deinit();
 
-    const skeleton = try zozz.Skeleton.initFromMemory(skeleton_blob.bytes);
+    var skeleton = try zozz.Skeleton.initFromMemory(skeleton_blob.bytes);
     defer skeleton.deinit();
 
-    const context = try zozz.SamplingContext.initForSkeleton(skeleton);
+    var context = try zozz.SamplingContext.initForSkeleton(skeleton);
     defer context.deinit();
     var pose: [1]zozz.SoaTransform = undefined;
 
@@ -208,7 +208,7 @@ test "a sampling context can be reused across clips after invalidation" {
     // detects a clip change by pointer identity, so this is exactly the case
     // invalidate() exists for.
     for (0..3) |_| {
-        const clip = try zozz.Animation.initFromMemory(animation_blob.bytes);
+        var clip = try zozz.Animation.initFromMemory(animation_blob.bytes);
         defer clip.deinit();
 
         context.invalidate();
@@ -231,9 +231,9 @@ test "a sampling context can be resized in place and go on sampling correctly" {
     const animation_blob = try FixtureBlob.init(zozzFixtureAnimation);
     defer animation_blob.deinit();
 
-    const skeleton = try zozz.Skeleton.initFromMemory(skeleton_blob.bytes);
+    var skeleton = try zozz.Skeleton.initFromMemory(skeleton_blob.bytes);
     defer skeleton.deinit();
-    const clip = try zozz.Animation.initFromMemory(animation_blob.bytes);
+    var clip = try zozz.Animation.initFromMemory(animation_blob.bytes);
     defer clip.deinit();
 
     // Oversized on purpose — as if sized for a different, bigger skeleton —
@@ -241,7 +241,7 @@ test "a sampling context can be resized in place and go on sampling correctly" {
     // is the whole point of resize(); the capacity actually changing, and
     // the context still sampling correctly afterwards, is what proves it
     // really re-allocated rather than being a no-op.
-    const context = try zozz.SamplingContext.init(40);
+    var context = try zozz.SamplingContext.init(40);
     defer context.deinit();
     try std.testing.expect(context.maxTracks() >= 40);
 
@@ -271,12 +271,12 @@ test "a pose smaller than the animation is refused" {
     const animation_blob = try FixtureBlob.init(zozzFixtureAnimation);
     defer animation_blob.deinit();
 
-    const skeleton = try zozz.Skeleton.initFromMemory(skeleton_blob.bytes);
+    var skeleton = try zozz.Skeleton.initFromMemory(skeleton_blob.bytes);
     defer skeleton.deinit();
-    const clip = try zozz.Animation.initFromMemory(animation_blob.bytes);
+    var clip = try zozz.Animation.initFromMemory(animation_blob.bytes);
     defer clip.deinit();
 
-    const context = try zozz.SamplingContext.initForSkeleton(skeleton);
+    var context = try zozz.SamplingContext.initForSkeleton(skeleton);
     defer context.deinit();
 
     // Zero blocks: the fixture's four joints need one. A span too short is
@@ -341,7 +341,8 @@ test "a truncated archive is refused rather than trusted" {
     var len: usize = 1;
     while (len < skeleton_blob.bytes.len) : (len += 1) {
         if (zozz.Skeleton.initFromMemory(skeleton_blob.bytes[0..len])) |loaded| {
-            loaded.deinit();
+            var accepted = loaded;
+            accepted.deinit();
             std.debug.print("truncated skeleton accepted at {d} bytes\n", .{len});
             return error.TestUnexpectedResult;
         } else |_| {}
@@ -350,7 +351,8 @@ test "a truncated archive is refused rather than trusted" {
     len = 1;
     while (len < animation_blob.bytes.len) : (len += 1) {
         if (zozz.Animation.initFromMemory(animation_blob.bytes[0..len])) |loaded| {
-            loaded.deinit();
+            var accepted = loaded;
+            accepted.deinit();
             std.debug.print("truncated animation accepted at {d} bytes\n", .{len});
             return error.TestUnexpectedResult;
         } else |_| {}
@@ -358,9 +360,9 @@ test "a truncated archive is refused rather than trusted" {
 
     // The complete archives must still load, so the test cannot pass by
     // rejecting everything.
-    const whole_skeleton = try zozz.Skeleton.initFromMemory(skeleton_blob.bytes);
+    var whole_skeleton = try zozz.Skeleton.initFromMemory(skeleton_blob.bytes);
     whole_skeleton.deinit();
-    const whole_animation = try zozz.Animation.initFromMemory(animation_blob.bytes);
+    var whole_animation = try zozz.Animation.initFromMemory(animation_blob.bytes);
     whole_animation.deinit();
 }
 
@@ -404,14 +406,14 @@ test "an animation written through the archive and read back compares equal to t
     const animation_blob = try FixtureBlob.init(zozzFixtureAnimation);
     defer animation_blob.deinit();
 
-    const original = try zozz.Animation.initFromMemory(animation_blob.bytes);
+    var original = try zozz.Animation.initFromMemory(animation_blob.bytes);
     defer original.deinit();
 
     var buffer: WriteBuffer = .{ .gpa = gpa };
     defer buffer.deinit();
     const bridge = buffer.stream();
 
-    const archive = try zozz.OArchive.init(&bridge, zozz.nativeEndianness());
+    var archive = try zozz.OArchive.init(&bridge, zozz.nativeEndianness());
     try archive.saveAnimation(original);
     archive.deinit();
 
@@ -420,7 +422,7 @@ test "an animation written through the archive and read back compares equal to t
     // similarly-shaped one.
     try std.testing.expectEqualSlices(u8, animation_blob.bytes, buffer.list.items);
 
-    const roundtripped = try zozz.Animation.initFromMemory(buffer.list.items);
+    var roundtripped = try zozz.Animation.initFromMemory(buffer.list.items);
     defer roundtripped.deinit();
 
     try std.testing.expectEqualStrings(original.name(), roundtripped.name());
@@ -431,9 +433,9 @@ test "an animation written through the archive and read back compares equal to t
     // metadata. Two contexts, one per clip instance, sidestep the
     // pointer-identity cache invalidation a single shared context would need
     // on every swap between the two.
-    const context_a = try zozz.SamplingContext.init(original.numTracks());
+    var context_a = try zozz.SamplingContext.init(original.numTracks());
     defer context_a.deinit();
-    const context_b = try zozz.SamplingContext.init(roundtripped.numTracks());
+    var context_b = try zozz.SamplingContext.init(roundtripped.numTracks());
     defer context_b.deinit();
     var pose_a: [1]zozz.SoaTransform = undefined;
     var pose_b: [1]zozz.SoaTransform = undefined;

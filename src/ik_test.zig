@@ -57,12 +57,12 @@ test "two-bone IK moves the end effector toward the target, and reaches an in-ra
 
     // A two-bone chain lying flat along +X, each bone length 1: fully
     // extended reach is 2.
-    const raw = try zozz.RawSkeleton.init();
+    var raw = try zozz.RawSkeleton.init();
     defer raw.deinit();
     const start = try raw.addJoint(null, "start", translated(0, 0, 0));
     const mid = try raw.addJoint(start, "mid", translated(1, 0, 0));
     _ = try raw.addJoint(mid, "end", translated(1, 0, 0));
-    const skel = try raw.build();
+    var skel = try raw.build();
     defer skel.deinit();
 
     // Three joints fit in one SoA block.
@@ -155,12 +155,12 @@ test "weight = 0 is identity: exactly for TwoBoneJob, to ozz's Est tolerance for
     try zozz.setAllocator(gpa);
     defer zozz.resetAllocator() catch unreachable;
 
-    const raw = try zozz.RawSkeleton.init();
+    var raw = try zozz.RawSkeleton.init();
     defer raw.deinit();
     const start = try raw.addJoint(null, "start", translated(0, 0, 0));
     const mid = try raw.addJoint(start, "mid", translated(1, 0, 0));
     _ = try raw.addJoint(mid, "end", translated(1, 0, 0));
-    const skel = try raw.build();
+    var skel = try raw.build();
     defer skel.deinit();
     // Three joints fit in one SoA block.
     var pose: [1]zozz.SoaTransform = undefined;

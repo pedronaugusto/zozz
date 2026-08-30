@@ -11,7 +11,7 @@ const c = @import("c.zig");
 const err = @import("error.zig");
 
 pub const FloatTrack = struct {
-    handle: *c.FloatTrack,
+    handle: ?*c.FloatTrack,
 
     /// Loads a track from a `.ozz` file on disk.
     pub fn initFromFile(path: [*:0]const u8) err.Error!FloatTrack {
@@ -28,27 +28,28 @@ pub const FloatTrack = struct {
         return .{ .handle = handle };
     }
 
-    pub fn deinit(self: FloatTrack) void {
-        c.zozzFloatTrackDestroy(self.handle);
+    pub fn deinit(self: *FloatTrack) void {
+        if (self.handle) |handle| c.zozzFloatTrackDestroy(handle);
+        self.handle = null;
     }
 
     /// Borrowed track name; "" if unnamed. Valid only while the track is
     /// alive.
     pub fn name(self: FloatTrack) [:0]const u8 {
-        return std.mem.span(c.zozzFloatTrackName(self.handle));
+        return std.mem.span(c.zozzFloatTrackName(self.handle.?));
     }
 
     /// Samples the track at `ratio` (out-of-range values are clamped by ozz).
     /// An empty track samples as 0.
     pub fn sample(self: FloatTrack, ratio: f32) err.Error!f32 {
         var out: f32 = undefined;
-        try err.check(c.zozzFloatTrackSample(self.handle, ratio, &out));
+        try err.check(c.zozzFloatTrackSample(self.handle.?, ratio, &out));
         return out;
     }
 
     /// Number of authored keyframes.
     pub fn numKeyframes(self: FloatTrack) u32 {
-        return @intCast(c.zozzFloatTrackNumKeyframes(self.handle));
+        return @intCast(c.zozzFloatTrackNumKeyframes(self.handle.?));
     }
 
     /// Each keyframe's ratio, ascending. Allocated with `allocator`; caller
@@ -56,7 +57,7 @@ pub const FloatTrack = struct {
     pub fn ratios(self: FloatTrack, allocator: std.mem.Allocator) err.Error![]f32 {
         const out = allocator.alloc(f32, self.numKeyframes()) catch return err.Error.OutOfMemory;
         errdefer allocator.free(out);
-        try err.check(c.zozzFloatTrackRatios(self.handle, out.ptr, out.len));
+        try err.check(c.zozzFloatTrackRatios(self.handle.?, out.ptr, out.len));
         return out;
     }
 
@@ -66,7 +67,7 @@ pub const FloatTrack = struct {
     pub fn values(self: FloatTrack, allocator: std.mem.Allocator) err.Error![]f32 {
         const out = allocator.alloc(f32, self.numKeyframes()) catch return err.Error.OutOfMemory;
         errdefer allocator.free(out);
-        try err.check(c.zozzFloatTrackValues(self.handle, out.ptr, out.len));
+        try err.check(c.zozzFloatTrackValues(self.handle.?, out.ptr, out.len));
         return out;
     }
 
@@ -75,7 +76,7 @@ pub const FloatTrack = struct {
     pub fn steps(self: FloatTrack, allocator: std.mem.Allocator) err.Error![]c.TrackInterpolation {
         const out = allocator.alloc(c.TrackInterpolation, self.numKeyframes()) catch return err.Error.OutOfMemory;
         errdefer allocator.free(out);
-        try err.check(c.zozzFloatTrackSteps(self.handle, out.ptr, out.len));
+        try err.check(c.zozzFloatTrackSteps(self.handle.?, out.ptr, out.len));
         return out;
     }
 };
@@ -100,7 +101,7 @@ fn VectorOps(comptime Handle: type, comptime n: usize) type {
 
 fn VectorTrack(comptime Handle: type, comptime n: usize, comptime ops: VectorOps(Handle, n)) type {
     return struct {
-        handle: *Handle,
+        handle: ?*Handle,
 
         const Self = @This();
 
@@ -119,14 +120,15 @@ fn VectorTrack(comptime Handle: type, comptime n: usize, comptime ops: VectorOps
             return .{ .handle = handle };
         }
 
-        pub fn deinit(self: Self) void {
-            ops.destroy(self.handle);
+        pub fn deinit(self: *Self) void {
+            if (self.handle) |handle| ops.destroy(handle);
+            self.handle = null;
         }
 
         /// Borrowed track name; "" if unnamed. Valid only while the track is
         /// alive.
         pub fn name(self: Self) [:0]const u8 {
-            return std.mem.span(ops.name(self.handle));
+            return std.mem.span(ops.name(self.handle.?));
         }
 
         /// Samples the track at `ratio` (out-of-range values are clamped by
@@ -134,13 +136,13 @@ fn VectorTrack(comptime Handle: type, comptime n: usize, comptime ops: VectorOps
         /// for a vector, the identity quaternion for `QuaternionTrack`).
         pub fn sample(self: Self, ratio: f32) err.Error![n]f32 {
             var out: [n]f32 = undefined;
-            try err.check(ops.sample(self.handle, ratio, &out));
+            try err.check(ops.sample(self.handle.?, ratio, &out));
             return out;
         }
 
         /// Number of authored keyframes.
         pub fn numKeyframes(self: Self) u32 {
-            return @intCast(ops.numKeyframes(self.handle));
+            return @intCast(ops.numKeyframes(self.handle.?));
         }
 
         /// Each keyframe's ratio, ascending. Allocated with `allocator`;
@@ -148,7 +150,7 @@ fn VectorTrack(comptime Handle: type, comptime n: usize, comptime ops: VectorOps
         pub fn ratios(self: Self, allocator: std.mem.Allocator) err.Error![]f32 {
             const out = allocator.alloc(f32, self.numKeyframes()) catch return err.Error.OutOfMemory;
             errdefer allocator.free(out);
-            try err.check(ops.ratios(self.handle, out.ptr, out.len));
+            try err.check(ops.ratios(self.handle.?, out.ptr, out.len));
             return out;
         }
 
@@ -158,7 +160,7 @@ fn VectorTrack(comptime Handle: type, comptime n: usize, comptime ops: VectorOps
         pub fn values(self: Self, allocator: std.mem.Allocator) err.Error![][n]f32 {
             const out = allocator.alloc([n]f32, self.numKeyframes()) catch return err.Error.OutOfMemory;
             errdefer allocator.free(out);
-            try err.check(ops.values(self.handle, out.ptr, out.len));
+            try err.check(ops.values(self.handle.?, out.ptr, out.len));
             return out;
         }
 
@@ -167,7 +169,7 @@ fn VectorTrack(comptime Handle: type, comptime n: usize, comptime ops: VectorOps
         pub fn steps(self: Self, allocator: std.mem.Allocator) err.Error![]c.TrackInterpolation {
             const out = allocator.alloc(c.TrackInterpolation, self.numKeyframes()) catch return err.Error.OutOfMemory;
             errdefer allocator.free(out);
-            try err.check(ops.steps(self.handle, out.ptr, out.len));
+            try err.check(ops.steps(self.handle.?, out.ptr, out.len));
             return out;
         }
     };
@@ -242,7 +244,7 @@ pub const TrackEdge = struct {
 /// Borrows the track passed to `init` — the track must outlive this iterator,
 /// including every call to `next`.
 pub const TrackTriggering = struct {
-    handle: *c.TrackTriggeringIterator,
+    handle: ?*c.TrackTriggeringIterator,
 
     /// Runs edge-triggering over the ratio range [from, to] of `track`,
     /// detecting crossings of `threshold`. `from`, `to` and `threshold` may be
@@ -252,31 +254,32 @@ pub const TrackTriggering = struct {
     /// end if `from == to` or no edge exists — check `valid` before `get`.
     pub fn init(track: FloatTrack, from: f32, to: f32, threshold: f32) err.Error!TrackTriggering {
         var handle: *c.TrackTriggeringIterator = undefined;
-        try err.check(c.zozzFloatTrackTriggeringJobRun(track.handle, from, to, threshold, &handle));
+        try err.check(c.zozzFloatTrackTriggeringJobRun(track.handle.?, from, to, threshold, &handle));
         return .{ .handle = handle };
     }
 
-    pub fn deinit(self: TrackTriggering) void {
-        c.zozzTrackTriggeringIteratorDestroy(self.handle);
+    pub fn deinit(self: *TrackTriggering) void {
+        if (self.handle) |handle| c.zozzTrackTriggeringIteratorDestroy(handle);
+        self.handle = null;
     }
 
     /// True if the iterator refers to a real edge (safe to pass to `get`);
     /// false once the sequence is exhausted.
     pub fn valid(self: TrackTriggering) bool {
-        return c.zozzTrackTriggeringIteratorValid(self.handle);
+        return c.zozzTrackTriggeringIteratorValid(self.handle.?);
     }
 
     /// Advances to the next edge. Returns `Error.InvalidArgument`, without
     /// advancing, if the iterator is already past the end.
     pub fn next(self: TrackTriggering) err.Error!void {
-        try err.check(c.zozzTrackTriggeringIteratorNext(self.handle));
+        try err.check(c.zozzTrackTriggeringIteratorNext(self.handle.?));
     }
 
     /// Reads the edge the iterator currently refers to. Returns
     /// `Error.InvalidArgument` if the iterator is past the end.
     pub fn get(self: TrackTriggering) err.Error!TrackEdge {
         var edge: c.TrackEdge = undefined;
-        try err.check(c.zozzTrackTriggeringIteratorGet(self.handle, &edge));
+        try err.check(c.zozzTrackTriggeringIteratorGet(self.handle.?, &edge));
         return .{ .ratio = edge.ratio, .rising = edge.rising };
     }
 };

@@ -75,7 +75,7 @@ test "SILENT suppresses the diagnostic ozz logs for a version-mismatched skeleto
     var sink: Sink = .{ .gpa = gpa };
     defer sink.deinit();
     const bridge = sink.stream();
-    const archive = try zozz.OArchive.init(&bridge, zozz.nativeEndianness());
+    var archive = try zozz.OArchive.init(&bridge, zozz.nativeEndianness());
     try archive.saveBinary("ozz-skeleton\x00");
     try archive.saveInt32(999);
     archive.deinit();

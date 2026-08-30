@@ -20,7 +20,7 @@ pub const ParseResult = c.OptionsParseResult;
 /// `parseCommandLine`; destroying it releases its own reference to whatever
 /// is still registered (see `Option`'s doc comment).
 pub const OptionsParser = struct {
-    handle: *c.OptionsParser,
+    handle: ?*c.OptionsParser,
 
     pub fn init() err.Error!OptionsParser {
         var handle: *c.OptionsParser = undefined;
@@ -28,8 +28,9 @@ pub const OptionsParser = struct {
         return .{ .handle = handle };
     }
 
-    pub fn deinit(self: OptionsParser) void {
-        c.zozzOptionsParserDestroy(self.handle);
+    pub fn deinit(self: *OptionsParser) void {
+        if (self.handle) |handle| c.zozzOptionsParserDestroy(handle);
+        self.handle = null;
     }
 
     /// Sets usage/version, then parses `argv[1..]` against every option
@@ -44,7 +45,7 @@ pub const OptionsParser = struct {
     ) err.Error!ParseResult {
         var result: ParseResult = undefined;
         try err.check(c.zozzOptionsParserParseCommandLine(
-            self.handle,
+            self.handle.?,
             @intCast(argv.len),
             argv.ptr,
             version_string,
@@ -57,45 +58,45 @@ pub const OptionsParser = struct {
     /// Writes the usage/help screen directly to stdout — the same one a
     /// `--help` argument to `parseCommandLine` writes.
     pub fn help(self: OptionsParser) err.Error!void {
-        try err.check(c.zozzOptionsParserHelp(self.handle));
+        try err.check(c.zozzOptionsParserHelp(self.handle.?));
     }
 
     /// Fails on a duplicate name, a duplicate registration of `option`, or a
     /// full parser (see `maxOptions`).
     pub fn register(self: OptionsParser, option: *c.Option) err.Error!void {
-        try err.check(c.zozzOptionsParserRegister(self.handle, option));
+        try err.check(c.zozzOptionsParserRegister(self.handle.?, option));
     }
 
     /// Fails if `option` is not currently registered with `self`.
     pub fn unregister(self: OptionsParser, option: *c.Option) err.Error!void {
-        try err.check(c.zozzOptionsParserUnregister(self.handle, option));
+        try err.check(c.zozzOptionsParserUnregister(self.handle.?, option));
     }
 
     pub fn setUsage(self: OptionsParser, usage_string: ?[*:0]const u8) err.Error!void {
-        try err.check(c.zozzOptionsParserSetUsage(self.handle, usage_string));
+        try err.check(c.zozzOptionsParserSetUsage(self.handle.?, usage_string));
     }
 
     pub fn usage(self: OptionsParser) [:0]const u8 {
-        return std.mem.span(c.zozzOptionsParserUsage(self.handle));
+        return std.mem.span(c.zozzOptionsParserUsage(self.handle.?));
     }
 
     pub fn setVersion(self: OptionsParser, version_string: ?[*:0]const u8) err.Error!void {
-        try err.check(c.zozzOptionsParserSetVersion(self.handle, version_string));
+        try err.check(c.zozzOptionsParserSetVersion(self.handle.?, version_string));
     }
 
     /// Capacity for custom options (excludes the built-in --help/--version).
     pub fn maxOptions(self: OptionsParser) u32 {
-        return @intCast(c.zozzOptionsParserMaxOptions(self.handle));
+        return @intCast(c.zozzOptionsParserMaxOptions(self.handle.?));
     }
 
     /// "" until `parseCommandLine` has run once.
     pub fn executableName(self: OptionsParser) [:0]const u8 {
-        return std.mem.span(c.zozzOptionsParserExecutableName(self.handle));
+        return std.mem.span(c.zozzOptionsParserExecutableName(self.handle.?));
     }
 
     /// "" until `parseCommandLine` has run once.
     pub fn executablePath(self: OptionsParser) [:0]const u8 {
-        return std.mem.span(c.zozzOptionsParserExecutablePath(self.handle));
+        return std.mem.span(c.zozzOptionsParserExecutablePath(self.handle.?));
     }
 };
 
@@ -121,7 +122,7 @@ fn optionRestoreDefault(handle: *c.Option) err.Error!void {
 }
 
 pub const IntOption = struct {
-    handle: *c.Option,
+    handle: ?*c.Option,
 
     /// `name` and `help` are borrowed for the life of the option (ozz stores
     /// the pointers it is given, not copies).
@@ -131,42 +132,43 @@ pub const IntOption = struct {
         return .{ .handle = handle };
     }
 
-    pub fn deinit(self: IntOption) void {
-        c.zozzOptionDestroy(self.handle);
+    pub fn deinit(self: *IntOption) void {
+        if (self.handle) |handle| c.zozzOptionDestroy(handle);
+        self.handle = null;
     }
 
     pub fn value(self: IntOption) err.Error!i32 {
         var out: i32 = undefined;
-        try err.check(c.zozzIntOptionValue(self.handle, &out));
+        try err.check(c.zozzIntOptionValue(self.handle.?, &out));
         return out;
     }
 
     /// The default this option was created with, unchanged by parsing.
     pub fn default(self: IntOption) err.Error!i32 {
         var out: i32 = undefined;
-        try err.check(c.zozzIntOptionDefault(self.handle, &out));
+        try err.check(c.zozzIntOptionDefault(self.handle.?, &out));
         return out;
     }
 
     pub fn name(self: IntOption) [:0]const u8 {
-        return optionName(self.handle);
+        return optionName(self.handle.?);
     }
     pub fn help(self: IntOption) [:0]const u8 {
-        return optionHelp(self.handle);
+        return optionHelp(self.handle.?);
     }
     pub fn required(self: IntOption) bool {
-        return optionRequired(self.handle);
+        return optionRequired(self.handle.?);
     }
     pub fn statisfied(self: IntOption) bool {
-        return optionStatisfied(self.handle);
+        return optionStatisfied(self.handle.?);
     }
     pub fn restoreDefault(self: IntOption) err.Error!void {
-        try optionRestoreDefault(self.handle);
+        try optionRestoreDefault(self.handle.?);
     }
 };
 
 pub const FloatOption = struct {
-    handle: *c.Option,
+    handle: ?*c.Option,
 
     pub fn init(option_name: [*:0]const u8, option_help: ?[*:0]const u8, default_value: f32, option_required: bool) err.Error!FloatOption {
         var handle: *c.Option = undefined;
@@ -174,42 +176,43 @@ pub const FloatOption = struct {
         return .{ .handle = handle };
     }
 
-    pub fn deinit(self: FloatOption) void {
-        c.zozzOptionDestroy(self.handle);
+    pub fn deinit(self: *FloatOption) void {
+        if (self.handle) |handle| c.zozzOptionDestroy(handle);
+        self.handle = null;
     }
 
     pub fn value(self: FloatOption) err.Error!f32 {
         var out: f32 = undefined;
-        try err.check(c.zozzFloatOptionValue(self.handle, &out));
+        try err.check(c.zozzFloatOptionValue(self.handle.?, &out));
         return out;
     }
 
     /// The default this option was created with, unchanged by parsing.
     pub fn default(self: FloatOption) err.Error!f32 {
         var out: f32 = undefined;
-        try err.check(c.zozzFloatOptionDefault(self.handle, &out));
+        try err.check(c.zozzFloatOptionDefault(self.handle.?, &out));
         return out;
     }
 
     pub fn name(self: FloatOption) [:0]const u8 {
-        return optionName(self.handle);
+        return optionName(self.handle.?);
     }
     pub fn help(self: FloatOption) [:0]const u8 {
-        return optionHelp(self.handle);
+        return optionHelp(self.handle.?);
     }
     pub fn required(self: FloatOption) bool {
-        return optionRequired(self.handle);
+        return optionRequired(self.handle.?);
     }
     pub fn statisfied(self: FloatOption) bool {
-        return optionStatisfied(self.handle);
+        return optionStatisfied(self.handle.?);
     }
     pub fn restoreDefault(self: FloatOption) err.Error!void {
-        try optionRestoreDefault(self.handle);
+        try optionRestoreDefault(self.handle.?);
     }
 };
 
 pub const BoolOption = struct {
-    handle: *c.Option,
+    handle: ?*c.Option,
 
     pub fn init(option_name: [*:0]const u8, option_help: ?[*:0]const u8, default_value: bool, option_required: bool) err.Error!BoolOption {
         var handle: *c.Option = undefined;
@@ -217,42 +220,43 @@ pub const BoolOption = struct {
         return .{ .handle = handle };
     }
 
-    pub fn deinit(self: BoolOption) void {
-        c.zozzOptionDestroy(self.handle);
+    pub fn deinit(self: *BoolOption) void {
+        if (self.handle) |handle| c.zozzOptionDestroy(handle);
+        self.handle = null;
     }
 
     pub fn value(self: BoolOption) err.Error!bool {
         var out: bool = undefined;
-        try err.check(c.zozzBoolOptionValue(self.handle, &out));
+        try err.check(c.zozzBoolOptionValue(self.handle.?, &out));
         return out;
     }
 
     /// The default this option was created with, unchanged by parsing.
     pub fn default(self: BoolOption) err.Error!bool {
         var out: bool = undefined;
-        try err.check(c.zozzBoolOptionDefault(self.handle, &out));
+        try err.check(c.zozzBoolOptionDefault(self.handle.?, &out));
         return out;
     }
 
     pub fn name(self: BoolOption) [:0]const u8 {
-        return optionName(self.handle);
+        return optionName(self.handle.?);
     }
     pub fn help(self: BoolOption) [:0]const u8 {
-        return optionHelp(self.handle);
+        return optionHelp(self.handle.?);
     }
     pub fn required(self: BoolOption) bool {
-        return optionRequired(self.handle);
+        return optionRequired(self.handle.?);
     }
     pub fn statisfied(self: BoolOption) bool {
-        return optionStatisfied(self.handle);
+        return optionStatisfied(self.handle.?);
     }
     pub fn restoreDefault(self: BoolOption) err.Error!void {
-        try optionRestoreDefault(self.handle);
+        try optionRestoreDefault(self.handle.?);
     }
 };
 
 pub const StringOption = struct {
-    handle: *c.Option,
+    handle: ?*c.Option,
 
     /// `default_value` is borrowed the same way `name`/`help` are.
     pub fn init(option_name: [*:0]const u8, option_help: ?[*:0]const u8, default_value: ?[*:0]const u8, option_required: bool) err.Error!StringOption {
@@ -261,8 +265,9 @@ pub const StringOption = struct {
         return .{ .handle = handle };
     }
 
-    pub fn deinit(self: StringOption) void {
-        c.zozzOptionDestroy(self.handle);
+    pub fn deinit(self: *StringOption) void {
+        if (self.handle) |handle| c.zozzOptionDestroy(handle);
+        self.handle = null;
     }
 
     /// Borrowed: the default_value pointer until a command line is parsed,
@@ -270,7 +275,7 @@ pub const StringOption = struct {
     /// from — valid only as long as that buffer is.
     pub fn value(self: StringOption) err.Error![:0]const u8 {
         var out: [*:0]const u8 = undefined;
-        try err.check(c.zozzStringOptionValue(self.handle, &out));
+        try err.check(c.zozzStringOptionValue(self.handle.?, &out));
         return std.mem.span(out);
     }
 
@@ -278,23 +283,23 @@ pub const StringOption = struct {
     /// Borrowed the same way `name` is.
     pub fn default(self: StringOption) err.Error![:0]const u8 {
         var out: [*:0]const u8 = undefined;
-        try err.check(c.zozzStringOptionDefault(self.handle, &out));
+        try err.check(c.zozzStringOptionDefault(self.handle.?, &out));
         return std.mem.span(out);
     }
 
     pub fn name(self: StringOption) [:0]const u8 {
-        return optionName(self.handle);
+        return optionName(self.handle.?);
     }
     pub fn help(self: StringOption) [:0]const u8 {
-        return optionHelp(self.handle);
+        return optionHelp(self.handle.?);
     }
     pub fn required(self: StringOption) bool {
-        return optionRequired(self.handle);
+        return optionRequired(self.handle.?);
     }
     pub fn statisfied(self: StringOption) bool {
-        return optionStatisfied(self.handle);
+        return optionStatisfied(self.handle.?);
     }
     pub fn restoreDefault(self: StringOption) err.Error!void {
-        try optionRestoreDefault(self.handle);
+        try optionRestoreDefault(self.handle.?);
     }
 };

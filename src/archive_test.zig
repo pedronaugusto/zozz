@@ -146,23 +146,23 @@ test "a skeleton written and read back compares equal to the original" {
     try zozz.setAllocator(gpa);
     defer zozz.resetAllocator() catch unreachable;
 
-    const raw = try zozz.RawSkeleton.init();
+    var raw = try zozz.RawSkeleton.init();
     defer raw.deinit();
     const root = try raw.addJoint(null, "root", restAt(.{ 0, 0, 0 }));
     const spine = try raw.addJoint(root, "spine", restAt(.{ 0, 1, 0 }));
     _ = try raw.addJoint(spine, "arm_l", restAt(.{ -0.5, 0.5, 0 }));
     _ = try raw.addJoint(spine, "arm_r", restAt(.{ 0.5, 0.5, 0 }));
-    const original = try raw.build();
+    var original = try raw.build();
     defer original.deinit();
 
     var sink: MemorySink = .{ .gpa = gpa };
     defer sink.deinit();
     const bridge = sink.stream();
-    const archive = try zozz.OArchive.init(&bridge, zozz.nativeEndianness());
+    var archive = try zozz.OArchive.init(&bridge, zozz.nativeEndianness());
     try archive.saveSkeleton(original);
     archive.deinit();
 
-    const roundtripped = try zozz.Skeleton.initFromMemory(sink.list.items);
+    var roundtripped = try zozz.Skeleton.initFromMemory(sink.list.items);
     defer roundtripped.deinit();
 
     try std.testing.expectEqual(original.numJoints(), roundtripped.numJoints());
@@ -194,7 +194,7 @@ test "an animation written and read back compares equal, in metadata and in samp
     try zozz.setAllocator(gpa);
     defer zozz.resetAllocator() catch unreachable;
 
-    const raw = try zozz.RawAnimation.init(2, 2.0, "roundtrip");
+    var raw = try zozz.RawAnimation.init(2, 2.0, "roundtrip");
     defer raw.deinit();
     for (0..2) |track| {
         const x: f32 = if (track == 0) 4 else -3;
@@ -204,17 +204,17 @@ test "an animation written and read back compares equal, in metadata and in samp
         try raw.pushRotation(@intCast(track), 2.0, .{ 0, 0, 0.7071068, 0.7071068 });
         try raw.pushScale(@intCast(track), 0.0, .{ 1, 1, 1 });
     }
-    const original = try raw.build();
+    var original = try raw.build();
     defer original.deinit();
 
     var sink: MemorySink = .{ .gpa = gpa };
     defer sink.deinit();
     const bridge = sink.stream();
-    const archive = try zozz.OArchive.init(&bridge, zozz.nativeEndianness());
+    var archive = try zozz.OArchive.init(&bridge, zozz.nativeEndianness());
     try archive.saveAnimation(original);
     archive.deinit();
 
-    const roundtripped = try zozz.Animation.initFromMemory(sink.list.items);
+    var roundtripped = try zozz.Animation.initFromMemory(sink.list.items);
     defer roundtripped.deinit();
 
     try std.testing.expectEqual(original.duration(), roundtripped.duration());
@@ -223,9 +223,9 @@ test "an animation written and read back compares equal, in metadata and in samp
 
     // Two contexts, one per clip instance, sidestep the pointer-identity
     // cache invalidation a single shared context would need on every swap.
-    const context_a = try zozz.SamplingContext.init(original.numTracks());
+    var context_a = try zozz.SamplingContext.init(original.numTracks());
     defer context_a.deinit();
-    const context_b = try zozz.SamplingContext.init(roundtripped.numTracks());
+    var context_b = try zozz.SamplingContext.init(roundtripped.numTracks());
     defer context_b.deinit();
     // Two tracks fit in one SoA block.
     var pose_a: [1]zozz.SoaTransform = undefined;
@@ -252,11 +252,11 @@ test "a short write is reported as an error, not a truncated file that loads" {
     try zozz.setAllocator(gpa);
     defer zozz.resetAllocator() catch unreachable;
 
-    const raw = try zozz.RawSkeleton.init();
+    var raw = try zozz.RawSkeleton.init();
     defer raw.deinit();
     const root = try raw.addJoint(null, "root", restAt(.{ 0, 0, 0 }));
     _ = try raw.addJoint(root, "child", restAt(.{ 0, 1, 0 }));
-    const skeleton = try raw.build();
+    var skeleton = try raw.build();
     defer skeleton.deinit();
 
     // Lets the archive's leading endianness byte through, then starves
@@ -266,7 +266,7 @@ test "a short write is reported as an error, not a truncated file that loads" {
     defer sink.deinit();
     const bridge = sink.stream();
 
-    const archive = try zozz.OArchive.init(&bridge, zozz.nativeEndianness());
+    var archive = try zozz.OArchive.init(&bridge, zozz.nativeEndianness());
     const result = archive.saveSkeleton(skeleton);
     archive.deinit();
 
@@ -274,7 +274,8 @@ test "a short write is reported as an error, not a truncated file that loads" {
 
     // What did make it through must not be mistaken for a complete archive.
     if (zozz.Skeleton.initFromMemory(sink.list.items)) |loaded| {
-        loaded.deinit();
+        var accepted = loaded;
+        accepted.deinit();
         return error.TestUnexpectedResult;
     } else |_| {}
 }
@@ -284,22 +285,22 @@ test "a float track written and read back samples identically to the original" {
     try zozz.setAllocator(gpa);
     defer zozz.resetAllocator() catch unreachable;
 
-    const raw = try zozz.RawFloatTrack.init();
+    var raw = try zozz.RawFloatTrack.init();
     defer raw.deinit();
     try raw.pushKeyframe(.linear, 0.0, 0.0);
     try raw.pushKeyframe(.linear, 0.5, 10.0);
     try raw.pushKeyframe(.linear, 1.0, -4.0);
-    const original = try raw.build();
+    var original = try raw.build();
     defer original.deinit();
 
     var sink: MemorySink = .{ .gpa = gpa };
     defer sink.deinit();
     const bridge = sink.stream();
-    const archive = try zozz.OArchive.init(&bridge, zozz.nativeEndianness());
+    var archive = try zozz.OArchive.init(&bridge, zozz.nativeEndianness());
     try archive.saveFloatTrack(original);
     archive.deinit();
 
-    const roundtripped = try zozz.FloatTrack.initFromMemory(sink.list.items);
+    var roundtripped = try zozz.FloatTrack.initFromMemory(sink.list.items);
     defer roundtripped.deinit();
 
     var ratio: f32 = 0.0;
@@ -315,21 +316,21 @@ test "a quaternion track written and read back samples identically to the origin
     try zozz.setAllocator(gpa);
     defer zozz.resetAllocator() catch unreachable;
 
-    const raw = try zozz.RawQuaternionTrack.init();
+    var raw = try zozz.RawQuaternionTrack.init();
     defer raw.deinit();
     try raw.pushKeyframe(.linear, 0.0, .{ 0, 0, 0, 1 });
     try raw.pushKeyframe(.linear, 1.0, .{ 0, 0, 0.7071068, 0.7071068 });
-    const original = try raw.build();
+    var original = try raw.build();
     defer original.deinit();
 
     var sink: MemorySink = .{ .gpa = gpa };
     defer sink.deinit();
     const bridge = sink.stream();
-    const archive = try zozz.OArchive.init(&bridge, zozz.nativeEndianness());
+    var archive = try zozz.OArchive.init(&bridge, zozz.nativeEndianness());
     try archive.saveQuaternionTrack(original);
     archive.deinit();
 
-    const roundtripped = try zozz.QuaternionTrack.initFromMemory(sink.list.items);
+    var roundtripped = try zozz.QuaternionTrack.initFromMemory(sink.list.items);
     defer roundtripped.deinit();
 
     var ratio: f32 = 0.0;
@@ -345,27 +346,27 @@ test "a skeleton and an animation written into one archive round-trip back throu
     try zozz.setAllocator(gpa);
     defer zozz.resetAllocator() catch unreachable;
 
-    const raw_skeleton = try zozz.RawSkeleton.init();
+    var raw_skeleton = try zozz.RawSkeleton.init();
     defer raw_skeleton.deinit();
     const root = try raw_skeleton.addJoint(null, "root", restAt(.{ 0, 0, 0 }));
     _ = try raw_skeleton.addJoint(root, "child", restAt(.{ 0, 1, 0 }));
-    const original_skeleton = try raw_skeleton.build();
+    var original_skeleton = try raw_skeleton.build();
     defer original_skeleton.deinit();
 
-    const raw_animation = try zozz.RawAnimation.init(1, 1.0, "mixed");
+    var raw_animation = try zozz.RawAnimation.init(1, 1.0, "mixed");
     defer raw_animation.deinit();
     try raw_animation.pushTranslation(0, 0.0, .{ 0, 0, 0 });
     try raw_animation.pushTranslation(0, 1.0, .{ 1, 0, 0 });
     try raw_animation.pushRotation(0, 0.0, .{ 0, 0, 0, 1 });
     try raw_animation.pushScale(0, 0.0, .{ 1, 1, 1 });
-    const original_animation = try raw_animation.build();
+    var original_animation = try raw_animation.build();
     defer original_animation.deinit();
 
     var mem: MemoryStream = .{ .gpa = gpa };
     defer mem.deinit();
     const bridge = mem.stream();
 
-    const out_archive = try zozz.OArchive.init(&bridge, zozz.nativeEndianness());
+    var out_archive = try zozz.OArchive.init(&bridge, zozz.nativeEndianness());
     try out_archive.saveSkeleton(original_skeleton);
     try out_archive.saveAnimation(original_animation);
     out_archive.deinit();
@@ -373,11 +374,11 @@ test "a skeleton and an animation written into one archive round-trip back throu
     // The same host resource, rewound — a real host would re-open or re-seek
     // whatever `mem` stands in for.
     mem.pos = 0;
-    const in_archive = try zozz.IArchive.init(&bridge);
+    var in_archive = try zozz.IArchive.init(&bridge);
 
-    const roundtripped_skeleton = try in_archive.loadSkeleton();
+    var roundtripped_skeleton = try in_archive.loadSkeleton();
     defer roundtripped_skeleton.deinit();
-    const roundtripped_animation = try in_archive.loadAnimation();
+    var roundtripped_animation = try in_archive.loadAnimation();
     defer roundtripped_animation.deinit();
     in_archive.deinit();
 
@@ -401,22 +402,22 @@ test "TestTag answers without consuming, so the real type can still be loaded af
     try zozz.setAllocator(gpa);
     defer zozz.resetAllocator() catch unreachable;
 
-    const raw = try zozz.RawSkeleton.init();
+    var raw = try zozz.RawSkeleton.init();
     defer raw.deinit();
     _ = try raw.addJoint(null, "root", restAt(.{ 0, 0, 0 }));
-    const original = try raw.build();
+    var original = try raw.build();
     defer original.deinit();
 
     var mem: MemoryStream = .{ .gpa = gpa };
     defer mem.deinit();
     const bridge = mem.stream();
 
-    const out_archive = try zozz.OArchive.init(&bridge, zozz.nativeEndianness());
+    var out_archive = try zozz.OArchive.init(&bridge, zozz.nativeEndianness());
     try out_archive.saveSkeleton(original);
     out_archive.deinit();
 
     mem.pos = 0;
-    const in_archive = try zozz.IArchive.init(&bridge);
+    var in_archive = try zozz.IArchive.init(&bridge);
     defer in_archive.deinit();
 
     // Wrong guesses first, each one a no-op on the read position.
@@ -428,7 +429,7 @@ test "TestTag answers without consuming, so the real type can still be loaded af
     try std.testing.expect(in_archive.testSkeleton());
 
     // None of the above consumed anything: the object still loads.
-    const loaded = try in_archive.loadSkeleton();
+    var loaded = try in_archive.loadSkeleton();
     defer loaded.deinit();
     try std.testing.expectEqual(original.numJoints(), loaded.numJoints());
 }
@@ -467,7 +468,7 @@ test "a stream missing a callback its direction needs is rejected, not crashed i
     write_only.read = null;
     write_only.seek = null;
     write_only.tell = null;
-    const archive = try zozz.OArchive.init(&write_only, zozz.nativeEndianness());
+    var archive = try zozz.OArchive.init(&write_only, zozz.nativeEndianness());
     archive.deinit();
 }
 
@@ -476,11 +477,11 @@ test "an archive written with the opposite endianness byte-swaps its fields, and
     try zozz.setAllocator(gpa);
     defer zozz.resetAllocator() catch unreachable;
 
-    const raw = try zozz.RawSkeleton.init();
+    var raw = try zozz.RawSkeleton.init();
     defer raw.deinit();
     const root = try raw.addJoint(null, "root", restAt(.{ 0, 0, 0 }));
     _ = try raw.addJoint(root, "child", restAt(.{ 0, 1, 0 }));
-    const original = try raw.build();
+    var original = try raw.build();
     defer original.deinit();
 
     const native = zozz.nativeEndianness();
@@ -490,7 +491,7 @@ test "an archive written with the opposite endianness byte-swaps its fields, and
     defer native_sink.deinit();
     {
         const bridge = native_sink.stream();
-        const archive_native = try zozz.OArchive.init(&bridge, native);
+        var archive_native = try zozz.OArchive.init(&bridge, native);
         try archive_native.saveSkeleton(original);
         archive_native.deinit();
     }
@@ -499,7 +500,7 @@ test "an archive written with the opposite endianness byte-swaps its fields, and
     defer foreign_sink.deinit();
     {
         const bridge = foreign_sink.stream();
-        const archive_foreign = try zozz.OArchive.init(&bridge, foreign);
+        var archive_foreign = try zozz.OArchive.init(&bridge, foreign);
         try archive_foreign.saveSkeleton(original);
         archive_foreign.deinit();
     }
@@ -528,9 +529,9 @@ test "an archive written with the opposite endianness byte-swaps its fields, and
 
     // ozz's IArchive adapts on read regardless of which platform wrote the
     // file, so both must load back to the exact same skeleton.
-    const from_native = try zozz.Skeleton.initFromMemory(native_sink.list.items);
+    var from_native = try zozz.Skeleton.initFromMemory(native_sink.list.items);
     defer from_native.deinit();
-    const from_foreign = try zozz.Skeleton.initFromMemory(foreign_sink.list.items);
+    var from_foreign = try zozz.Skeleton.initFromMemory(foreign_sink.list.items);
     defer from_foreign.deinit();
 
     try std.testing.expectEqual(from_native.numJoints(), from_foreign.numJoints());
@@ -563,14 +564,14 @@ test "IArchive.endianSwap reports whether the stored byte order differs from thi
     defer foreign_mem.deinit();
     {
         const bridge = foreign_mem.stream();
-        const out = try zozz.OArchive.init(&bridge, foreign);
+        var out = try zozz.OArchive.init(&bridge, foreign);
         try out.saveInt32(42);
         out.deinit();
     }
     foreign_mem.pos = 0;
     {
         const bridge = foreign_mem.stream();
-        const in = try zozz.IArchive.init(&bridge);
+        var in = try zozz.IArchive.init(&bridge);
         defer in.deinit();
         try std.testing.expect(in.endianSwap());
         try std.testing.expectEqual(@as(i32, 42), try in.loadInt32());
@@ -580,14 +581,14 @@ test "IArchive.endianSwap reports whether the stored byte order differs from thi
     defer native_mem.deinit();
     {
         const bridge = native_mem.stream();
-        const out = try zozz.OArchive.init(&bridge, native);
+        var out = try zozz.OArchive.init(&bridge, native);
         try out.saveInt32(42);
         out.deinit();
     }
     native_mem.pos = 0;
     {
         const bridge = native_mem.stream();
-        const in = try zozz.IArchive.init(&bridge);
+        var in = try zozz.IArchive.init(&bridge);
         defer in.deinit();
         try std.testing.expect(!in.endianSwap());
     }

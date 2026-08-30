@@ -59,6 +59,16 @@ POD, laid out exactly as ozz lays them out, so a job takes them with no copy
 and no allocation — see `ffi/zozz_pose.h` and the static_asserts in
 `ffi/zozz_abi.cpp` that hold the layouts.
 
+On the Zig side a handle wrapper holds `handle: ?*c.Thing` and its `deinit`
+takes `*Self`, nulls the handle and is therefore idempotent. Two things follow,
+and the second is a limit rather than a guarantee. A destroyed handle used
+again through the SAME variable trips the null check — a panic naming the line
+in any safety-checked build, and free in ReleaseFast where the optional pointer
+carries no tag. But Zig has no way to delete a copy constructor, so a copy taken
+before `deinit` still holds the old pointer and is a dangling handle exactly as
+a raw pointer would be. ozz deletes the copy constructor; this binding cannot,
+and says so rather than implying a safety it does not have.
+
 `src/zozz.zig` — one re-export line. `build.zig` — the `.h` in the public
 header list, the `.cpp` in the FFI source list, any new ozz `.cc` in
 `ozz_runtime_sources` or `ozz_offline_sources`. Those lists are explicit, never

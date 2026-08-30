@@ -15,7 +15,7 @@ const SoaTransform = math.SoaTransform;
 /// two clips sampled in the same frame is not an error, but it invalidates the
 /// cache on every switch and gives up the optimisation entirely.
 pub const SamplingContext = struct {
-    handle: *c.SamplingContext,
+    handle: ?*c.SamplingContext,
 
     /// Sizes the context for clips of at most `max_tracks` tracks. Size it
     /// from the skeleton, not one clip, if the context will be reused.
@@ -29,8 +29,9 @@ pub const SamplingContext = struct {
         return init(skeleton.numJoints());
     }
 
-    pub fn deinit(self: SamplingContext) void {
-        c.zozzSamplingContextDestroy(self.handle);
+    pub fn deinit(self: *SamplingContext) void {
+        if (self.handle) |handle| c.zozzSamplingContextDestroy(handle);
+        self.handle = null;
     }
 
     /// Resizes the context in place for clips of at most `max_tracks`
@@ -40,11 +41,11 @@ pub const SamplingContext = struct {
     /// recreating it each time. Also invalidates the context, exactly like
     /// `invalidate`.
     pub fn resize(self: SamplingContext, max_tracks: u32) err.Error!void {
-        try err.check(c.zozzSamplingContextResize(self.handle, @intCast(max_tracks)));
+        try err.check(c.zozzSamplingContextResize(self.handle.?, @intCast(max_tracks)));
     }
 
     pub fn maxTracks(self: SamplingContext) u32 {
-        return @intCast(c.zozzSamplingContextMaxTracks(self.handle));
+        return @intCast(c.zozzSamplingContextMaxTracks(self.handle.?));
     }
 
     /// Drops the cached keyframe state.
@@ -54,7 +55,7 @@ pub const SamplingContext = struct {
     /// change by pointer identity, so a new clip at an old address would
     /// otherwise reuse stale cursors.
     pub fn invalidate(self: SamplingContext) void {
-        c.zozzSamplingContextInvalidate(self.handle);
+        c.zozzSamplingContextInvalidate(self.handle.?);
     }
 };
 
@@ -72,8 +73,8 @@ pub const SamplingJob = struct {
     /// Runs the sampling job.
     pub fn run(self: SamplingJob) err.Error!void {
         try err.check(c.zozzSample(
-            self.animation.handle,
-            self.context.handle,
+            self.animation.handle.?,
+            self.context.handle.?,
             self.ratio,
             self.out.ptr,
             self.out.len,
@@ -114,7 +115,7 @@ pub const LocalToModelJob = struct {
     /// Runs the local-to-model job.
     pub fn run(self: LocalToModelJob) err.Error!void {
         try err.check(c.zozzLocalToModel(
-            self.skeleton.handle,
+            self.skeleton.handle.?,
             self.locals.ptr,
             self.locals.len,
             self.root,

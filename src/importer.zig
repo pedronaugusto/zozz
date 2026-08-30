@@ -41,7 +41,7 @@ pub const ImporterInterface = c.ImporterInterface;
 
 /// A skeleton or animation import, glTF-backed or host-backed.
 pub const Importer = struct {
-    handle: *c.Importer,
+    handle: ?*c.Importer,
 
     /// Wraps a host's `ImporterInterface`. Behind `-Doptions`.
     pub fn init(interface: *const ImporterInterface) err.Error!Importer {
@@ -58,21 +58,22 @@ pub const Importer = struct {
         return .{ .handle = handle };
     }
 
-    pub fn deinit(self: Importer) void {
-        c.zozzImporterDestroy(self.handle);
+    pub fn deinit(self: *Importer) void {
+        if (self.handle) |handle| c.zozzImporterDestroy(handle);
+        self.handle = null;
     }
 
     /// Loads (or reloads) source data. Most callers only need this to point
     /// a host-backed importer at its source; `initFromGltf` already loaded.
     pub fn load(self: Importer, filename: [*:0]const u8) err.Error!void {
-        try err.check(c.zozzImporterLoad(self.handle, filename));
+        try err.check(c.zozzImporterLoad(self.handle.?, filename));
     }
 
     /// Imports a skeleton, handed back as the same `RawSkeleton` type
     /// `RawSkeleton.init` + `addJoint` builds by hand.
     pub fn importSkeleton(self: Importer, types: ImportNodeType) err.Error!offline_mod.RawSkeleton {
         var handle: *c.RawSkeleton = undefined;
-        try err.check(c.zozzImporterImportSkeleton(self.handle, types, &handle));
+        try err.check(c.zozzImporterImportSkeleton(self.handle.?, types, &handle));
         return .{ .handle = handle };
     }
 
@@ -93,7 +94,7 @@ pub const Importer = struct {
                 visit(ctx, std.mem.span(name));
             }
         };
-        try err.check(c.zozzImporterIterateAnimationNames(self.handle, &Trampoline.call, @ptrCast(context)));
+        try err.check(c.zozzImporterIterateAnimationNames(self.handle.?, &Trampoline.call, @ptrCast(context)));
     }
 
     /// Imports one named animation against `skeleton`'s joints, handed back
@@ -107,9 +108,9 @@ pub const Importer = struct {
     ) err.Error!offline_mod.RawAnimation {
         var handle: *c.RawAnimation = undefined;
         try err.check(c.zozzImporterImportAnimation(
-            self.handle,
+            self.handle.?,
             animation_name,
-            skeleton.handle,
+            skeleton.handle.?,
             sampling_rate,
             &handle,
         ));
@@ -134,7 +135,7 @@ pub const Importer = struct {
                 visit(ctx, property.*);
             }
         };
-        try err.check(c.zozzImporterIterateNodeProperties(self.handle, node_name, &Trampoline.call, @ptrCast(context)));
+        try err.check(c.zozzImporterIterateNodeProperties(self.handle.?, node_name, &Trampoline.call, @ptrCast(context)));
     }
 
     /// Track imports, one per value width, mirroring `OzzImporter`'s four
@@ -149,7 +150,7 @@ pub const Importer = struct {
     ) err.Error!rawtrack_mod.RawFloatTrack {
         var handle: *c.RawFloatTrack = undefined;
         try err.check(c.zozzImporterImportFloatTrack(
-            self.handle,
+            self.handle.?,
             animation_name,
             node_name,
             track_name,
@@ -170,7 +171,7 @@ pub const Importer = struct {
     ) err.Error!rawtrack_mod.RawFloat2Track {
         var handle: *c.RawFloat2Track = undefined;
         try err.check(c.zozzImporterImportFloat2Track(
-            self.handle,
+            self.handle.?,
             animation_name,
             node_name,
             track_name,
@@ -191,7 +192,7 @@ pub const Importer = struct {
     ) err.Error!rawtrack_mod.RawFloat3Track {
         var handle: *c.RawFloat3Track = undefined;
         try err.check(c.zozzImporterImportFloat3Track(
-            self.handle,
+            self.handle.?,
             animation_name,
             node_name,
             track_name,
@@ -212,7 +213,7 @@ pub const Importer = struct {
     ) err.Error!rawtrack_mod.RawFloat4Track {
         var handle: *c.RawFloat4Track = undefined;
         try err.check(c.zozzImporterImportFloat4Track(
-            self.handle,
+            self.handle.?,
             animation_name,
             node_name,
             track_name,
@@ -227,6 +228,6 @@ pub const Importer = struct {
     /// would, reads a JSON config file and writes .ozz files to disk.
     /// Currently always `error.Unsupported`; see the module comment above.
     pub fn run(self: Importer, argv: []const [*:0]const u8) err.Error!void {
-        try err.check(c.zozzImporterRun(self.handle, @intCast(argv.len), argv.ptr));
+        try err.check(c.zozzImporterRun(self.handle.?, @intCast(argv.len), argv.ptr));
     }
 };

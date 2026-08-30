@@ -23,7 +23,7 @@ fn translated(x: f32, y: f32, z: f32) zozz.Transform {
 /// insertion indices equal built indices (see offline.zig): a-b-c, a-b-d, a-g,
 /// e-f.
 fn buildSkeleton() !zozz.Skeleton {
-    const raw = try zozz.RawSkeleton.init();
+    var raw = try zozz.RawSkeleton.init();
     defer raw.deinit();
 
     const a = try raw.addJoint(null, "a", translated(1, 0, 0));
@@ -44,7 +44,7 @@ test "jointIsLeaf agrees with the parent array on every joint" {
     try zozz.setAllocator(gpa);
     defer zozz.resetAllocator() catch unreachable;
 
-    const skel = try buildSkeleton();
+    var skel = try buildSkeleton();
     defer skel.deinit();
     try std.testing.expectEqual(@as(u32, joint_count), skel.numJoints());
 
@@ -100,7 +100,7 @@ test "the depth-first traversal visits every joint once, parents before children
     try zozz.setAllocator(gpa);
     defer zozz.resetAllocator() catch unreachable;
 
-    const skel = try buildSkeleton();
+    var skel = try buildSkeleton();
     defer skel.deinit();
 
     var forward: Visits = .{};
@@ -156,7 +156,7 @@ test "findJoint round-trips against jointName, and misses are null" {
     try zozz.setAllocator(gpa);
     defer zozz.resetAllocator() catch unreachable;
 
-    const skel = try buildSkeleton();
+    var skel = try buildSkeleton();
     defer skel.deinit();
 
     for (0..joint_count) |i| {
@@ -178,7 +178,7 @@ test "the rest-pose accessors agree with each other, locally and in model space"
     try zozz.setAllocator(gpa);
     defer zozz.resetAllocator() catch unreachable;
 
-    const skel = try buildSkeleton();
+    var skel = try buildSkeleton();
     defer skel.deinit();
 
     // Single-joint local rest == the same joint's slot in the whole-skeleton

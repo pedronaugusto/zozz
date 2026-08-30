@@ -35,21 +35,21 @@ const Chain = struct {
     pose: [1]zozz.SoaTransform,
 
     fn init() !Chain {
-        const raw = try zozz.RawSkeleton.init();
+        var raw = try zozz.RawSkeleton.init();
         defer raw.deinit();
         var parent: ?u32 = null;
         for ([_][*:0]const u8{ "j0", "j1", "j2", "j3" }, 0..) |name, i| {
             const offset: f32 = if (i == 0) 0 else 1;
             parent = try raw.addJoint(parent, name, translated(offset, 0, 0));
         }
-        const skeleton = try raw.build();
+        var skeleton = try raw.build();
         errdefer skeleton.deinit();
         var pose: [1]zozz.SoaTransform = undefined;
         try skeleton.restPoseSoa(&pose);
         return .{ .skeleton = skeleton, .pose = pose };
     }
 
-    fn deinit(self: Chain) void {
+    fn deinit(self: *Chain) void {
         self.skeleton.deinit();
     }
 };
@@ -58,7 +58,7 @@ test "the default range walks the whole hierarchy" {
     try zozz.setAllocator(std.testing.allocator);
     defer zozz.resetAllocator() catch unreachable;
 
-    const chain = try Chain.init();
+    var chain = try Chain.init();
     defer chain.deinit();
 
     var models: [4]zozz.Mat4 = .{poison} ** 4;
@@ -83,7 +83,7 @@ test "a from with a defaulted to still updates through the last joint" {
     try zozz.setAllocator(std.testing.allocator);
     defer zozz.resetAllocator() catch unreachable;
 
-    const chain = try Chain.init();
+    var chain = try Chain.init();
     defer chain.deinit();
 
     // Joints 0 and 1 are ancestors of the range and must already be valid:
@@ -114,7 +114,7 @@ test "to ends the walk, leaving later joints untouched" {
     try zozz.setAllocator(std.testing.allocator);
     defer zozz.resetAllocator() catch unreachable;
 
-    const chain = try Chain.init();
+    var chain = try Chain.init();
     defer chain.deinit();
 
     var models: [4]zozz.Mat4 = .{poison} ** 4;
@@ -135,7 +135,7 @@ test "from_excluded keeps from's matrix and updates its children" {
     try zozz.setAllocator(std.testing.allocator);
     defer zozz.resetAllocator() catch unreachable;
 
-    const chain = try Chain.init();
+    var chain = try Chain.init();
     defer chain.deinit();
 
     var models: [4]zozz.Mat4 = .{poison} ** 4;
@@ -168,7 +168,7 @@ test "an out-of-range from or to is refused rather than writing nothing" {
     try zozz.setAllocator(std.testing.allocator);
     defer zozz.resetAllocator() catch unreachable;
 
-    const chain = try Chain.init();
+    var chain = try Chain.init();
     defer chain.deinit();
 
     var models: [4]zozz.Mat4 = .{poison} ** 4;
@@ -201,7 +201,7 @@ test "a destination smaller than the skeleton is refused whatever the range" {
     try zozz.setAllocator(std.testing.allocator);
     defer zozz.resetAllocator() catch unreachable;
 
-    const chain = try Chain.init();
+    var chain = try Chain.init();
     defer chain.deinit();
 
     // Ancestors outside the range are still READ from `out`, so a short buffer

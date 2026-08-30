@@ -21,7 +21,7 @@ fn translated(x: f32, y: f32, z: f32) zozz.Transform {
 /// parent scale, which is 1 here). That is what lets the tolerance below be
 /// compared against a plain distance.
 fn buildSkeleton() !zozz.Skeleton {
-    const raw = try zozz.RawSkeleton.init();
+    var raw = try zozz.RawSkeleton.init();
     defer raw.deinit();
     const root = try raw.addJoint(null, "root", zozz.transform_identity);
     _ = try raw.addJoint(root, "child", translated(0, 1, 0));
@@ -40,7 +40,7 @@ fn curveAt(time: f32) f32 {
 /// dozen would do. Track 1 is deliberately near-static and keyed only at the
 /// ends, so the key-time union below counts the root's keys and nothing else.
 fn buildDenseAnimation() !zozz.RawAnimation {
-    const raw = try zozz.RawAnimation.init(2, duration, "dense");
+    var raw = try zozz.RawAnimation.init(2, duration, "dense");
     errdefer raw.deinit();
 
     for (0..dense_keys) |i| {
@@ -71,14 +71,14 @@ test "optimising drops redundant keys while staying inside the tolerance asked f
     try zozz.setAllocator(gpa);
     defer zozz.resetAllocator() catch unreachable;
 
-    const skel = try buildSkeleton();
+    var skel = try buildSkeleton();
     defer skel.deinit();
-    const input = try buildDenseAnimation();
+    var input = try buildDenseAnimation();
     defer input.deinit();
     try std.testing.expectEqual(@as(usize, dense_keys), try countKeyTimes(input, gpa));
 
     const tolerance: f32 = 1e-2;
-    const optimizer = try zozz.AnimationOptimizer.init();
+    var optimizer = try zozz.AnimationOptimizer.init();
     defer optimizer.deinit();
     try optimizer.setSetting(.{ .tolerance = tolerance, .distance = 1e-1 });
 
@@ -88,7 +88,7 @@ test "optimising drops redundant keys while staying inside the tolerance asked f
     try std.testing.expectApproxEqAbs(tolerance, read_back.tolerance, 1e-9);
     try std.testing.expectApproxEqAbs(@as(f32, 1e-1), read_back.distance, 1e-9);
 
-    const output = try zozz.RawAnimation.init(2, duration, null);
+    var output = try zozz.RawAnimation.init(2, duration, null);
     defer output.deinit();
     try optimizer.run(input, skel, output);
 
@@ -146,7 +146,7 @@ fn optimizedKeyCount(
     input: zozz.RawAnimation,
     optimizer: zozz.AnimationOptimizer,
 ) !usize {
-    const output = try zozz.RawAnimation.init(2, duration, null);
+    var output = try zozz.RawAnimation.init(2, duration, null);
     defer output.deinit();
     try optimizer.run(input, skel, output);
     return countKeyTimes(output, gpa);
@@ -157,12 +157,12 @@ test "tolerance drives how much is dropped, and a child's override tightens its 
     try zozz.setAllocator(gpa);
     defer zozz.resetAllocator() catch unreachable;
 
-    const skel = try buildSkeleton();
+    var skel = try buildSkeleton();
     defer skel.deinit();
-    const input = try buildDenseAnimation();
+    var input = try buildDenseAnimation();
     defer input.deinit();
 
-    const optimizer = try zozz.AnimationOptimizer.init();
+    var optimizer = try zozz.AnimationOptimizer.init();
     defer optimizer.deinit();
 
     try optimizer.setSetting(.{ .tolerance = 1e-3, .distance = 1e-1 });
@@ -198,7 +198,7 @@ test "fixed-rate sample times are evenly spaced and the last never runs past the
 
     {
         // A whole number of periods: 2.5s at 24Hz is 60 intervals, so 61 keys.
-        const timing = try zozz.FixedRateSamplingTime.init(2.5, 24);
+        var timing = try zozz.FixedRateSamplingTime.init(2.5, 24);
         defer timing.deinit();
         try std.testing.expectEqual(@as(usize, 61), timing.numKeys());
         try std.testing.expectApproxEqAbs(@as(f32, 0), try timing.at(0), 1e-6);
@@ -223,7 +223,7 @@ test "fixed-rate sample times are evenly spaced and the last never runs past the
         // clamp lands the last one on 1.0 — a SHORTER final step than the
         // period. A consumer assuming a uniform delta between consecutive
         // sample times is wrong here, and this is where it shows.
-        const timing = try zozz.FixedRateSamplingTime.init(1.0, 2.5);
+        var timing = try zozz.FixedRateSamplingTime.init(1.0, 2.5);
         defer timing.deinit();
         try std.testing.expectEqual(@as(usize, 4), timing.numKeys());
         try std.testing.expectApproxEqAbs(@as(f32, 0.0), try timing.at(0), 1e-6);
@@ -244,10 +244,10 @@ test "model-space sampling accounts for a parent joint's motion, not just the jo
     try zozz.setAllocator(gpa);
     defer zozz.resetAllocator() catch unreachable;
 
-    const skel = try buildSkeleton(); // root -> child, child at rest (0, 1, 0)
+    var skel = try buildSkeleton(); // root -> child, child at rest (0, 1, 0)
     defer skel.deinit();
 
-    const raw = try zozz.RawAnimation.init(2, duration, "model-space");
+    var raw = try zozz.RawAnimation.init(2, duration, "model-space");
     defer raw.deinit();
     // Root translates 0 -> (4, 0, 0). The child track is left completely
     // empty — no key on any channel — so none of the motion below comes
@@ -284,7 +284,7 @@ test "model-space sampling accounts for a parent joint's motion, not just the jo
         zozz.Error.InvalidArgument,
         raw.sampleTrackModelSpace(skel, 2, gpa),
     );
-    const mismatched = try zozz.RawAnimation.init(1, duration, null);
+    var mismatched = try zozz.RawAnimation.init(1, duration, null);
     defer mismatched.deinit();
     try std.testing.expectError(
         zozz.Error.SkeletonMismatch,
@@ -300,7 +300,7 @@ test "the additive builder turns a clip into deltas from its own first frame" {
     // One track, starting well away from the origin and away from identity,
     // so "delta" and "absolute" cannot be confused for one another.
     const quarter_turn: [4]f32 = .{ 0, @sin(std.math.pi / 4.0), 0, @cos(std.math.pi / 4.0) };
-    const input = try zozz.RawAnimation.init(1, duration, "absolute");
+    var input = try zozz.RawAnimation.init(1, duration, "absolute");
     defer input.deinit();
     try input.pushTranslation(0, 0, .{ 7, 3, -2 });
     try input.pushTranslation(0, duration, .{ 11, 3, -2 });
@@ -309,7 +309,7 @@ test "the additive builder turns a clip into deltas from its own first frame" {
     try input.pushScale(0, 0, .{ 2, 2, 2 });
     try input.pushScale(0, duration, .{ 4, 2, 2 });
 
-    const output = try zozz.RawAnimation.init(1, duration, null);
+    var output = try zozz.RawAnimation.init(1, duration, null);
     defer output.deinit();
     try zozz.AdditiveAnimationBuilder.run(input, output);
 
@@ -336,7 +336,7 @@ test "the additive builder turns a clip into deltas from its own first frame" {
     // instead, so a clip authored around one bind pose can be retargeted to
     // another without re-authoring: reference == the clip's LAST frame makes
     // the last frame the identity and the first frame the inverse delta.
-    const from_last = try zozz.RawAnimation.init(1, duration, null);
+    var from_last = try zozz.RawAnimation.init(1, duration, null);
     defer from_last.deinit();
     try zozz.AdditiveAnimationBuilder.runWithReference(input, &[_]zozz.Transform{.{
         .translation = .{ 11, 3, -2 },
@@ -364,9 +364,9 @@ test "the compressed control streams size and read back for every channel" {
     try zozz.setAllocator(gpa);
     defer zozz.resetAllocator() catch unreachable;
 
-    const raw = try buildDenseAnimation();
+    var raw = try buildDenseAnimation();
     defer raw.deinit();
-    const animation = try raw.build();
+    var animation = try raw.build();
     defer animation.deinit();
 
     for ([_]zozz.Animation.Channel{ .translation, .rotation, .scale }) |channel| {
