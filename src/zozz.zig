@@ -386,11 +386,19 @@ test "the build options and the compiled library agree" {
 }
 
 test "version reporting is wired up" {
-    const v = version();
-    try std.testing.expectEqual(@as(u8, 0), v.major);
-    try std.testing.expectEqual(@as(u8, 4), v.minor);
+    // build.zig already fails to compile if build.zig.zon and
+    // ffi/zozz_core.h disagree. This holds the third home — the number the
+    // LIBRARY reports through zozzVersion() — to the same fact, instead of to
+    // a literal here that a release bump would leave behind.
+    var buf: [32]u8 = undefined;
+    const reported = try std.fmt.bufPrint(&buf, "{f}", .{version()});
+    try std.testing.expectEqualStrings(options.version, reported);
 
+    // The vendored ozz, pinned in UPSTREAM.md. Asserting the minor alone let a
+    // MAJOR bump through, and a major bump is the one that changes everything
+    // this binding is written against.
     const ozz = ozzVersion();
+    try std.testing.expectEqual(@as(u8, 0), ozz.major);
     try std.testing.expectEqual(@as(u8, 17), ozz.minor);
 }
 

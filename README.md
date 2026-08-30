@@ -342,7 +342,7 @@ NaN ratio that is refused.
 | **200** | assertions in the standalone C smoke test |
 | **41** | vendored ozz translation units `build.zig` compiles |
 | **20** | zozz C++ translation units (`ffi/*.cpp`) |
-| **14486** | Zig source lines (`src/`) |
+| **14494** | Zig source lines (`src/`) |
 | **9657** | C++ source lines (`ffi/`) |
 | **18** | deliberate drifts `ci/check-abi-drift.sh` must refuse |
 | **19** | steps `ci/run.sh` runs |

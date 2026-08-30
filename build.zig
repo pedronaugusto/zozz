@@ -236,6 +236,9 @@ pub fn build(b: *std.Build) void {
     // so the wrapper can never disagree with how the C++ was compiled. The
     // single `options` struct above is the one source both sides read from.
     const options_step = b.addOptions();
+    // Not an option: the version, carried along so a test can hold what the
+    // library REPORTS to build.zig.zon rather than to a literal of its own.
+    options_step.addOption([]const u8, "version", @import("build.zig.zon").version);
     inline for (std.meta.fields(@TypeOf(options))) |field| {
         options_step.addOption(field.type, field.name, @field(options, field.name));
     }
