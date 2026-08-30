@@ -144,7 +144,7 @@ const FlakySink = struct {
 test "a skeleton written and read back compares equal to the original" {
     const gpa = std.testing.allocator;
     try zozz.setAllocator(gpa);
-    defer zozz.resetAllocator();
+    defer zozz.resetAllocator() catch unreachable;
 
     const raw = try zozz.RawSkeleton.init();
     defer raw.deinit();
@@ -192,7 +192,7 @@ test "a skeleton written and read back compares equal to the original" {
 test "an animation written and read back compares equal, in metadata and in sampling" {
     const gpa = std.testing.allocator;
     try zozz.setAllocator(gpa);
-    defer zozz.resetAllocator();
+    defer zozz.resetAllocator() catch unreachable;
 
     const raw = try zozz.RawAnimation.init(2, 2.0, "roundtrip");
     defer raw.deinit();
@@ -250,7 +250,7 @@ test "an animation written and read back compares equal, in metadata and in samp
 test "a short write is reported as an error, not a truncated file that loads" {
     const gpa = std.testing.allocator;
     try zozz.setAllocator(gpa);
-    defer zozz.resetAllocator();
+    defer zozz.resetAllocator() catch unreachable;
 
     const raw = try zozz.RawSkeleton.init();
     defer raw.deinit();
@@ -282,7 +282,7 @@ test "a short write is reported as an error, not a truncated file that loads" {
 test "a float track written and read back samples identically to the original" {
     const gpa = std.testing.allocator;
     try zozz.setAllocator(gpa);
-    defer zozz.resetAllocator();
+    defer zozz.resetAllocator() catch unreachable;
 
     const raw = try zozz.RawFloatTrack.init();
     defer raw.deinit();
@@ -313,7 +313,7 @@ test "a float track written and read back samples identically to the original" {
 test "a quaternion track written and read back samples identically to the original" {
     const gpa = std.testing.allocator;
     try zozz.setAllocator(gpa);
-    defer zozz.resetAllocator();
+    defer zozz.resetAllocator() catch unreachable;
 
     const raw = try zozz.RawQuaternionTrack.init();
     defer raw.deinit();
@@ -343,7 +343,7 @@ test "a quaternion track written and read back samples identically to the origin
 test "a skeleton and an animation written into one archive round-trip back through the same host stream" {
     const gpa = std.testing.allocator;
     try zozz.setAllocator(gpa);
-    defer zozz.resetAllocator();
+    defer zozz.resetAllocator() catch unreachable;
 
     const raw_skeleton = try zozz.RawSkeleton.init();
     defer raw_skeleton.deinit();
@@ -399,7 +399,7 @@ test "a skeleton and an animation written into one archive round-trip back throu
 test "TestTag answers without consuming, so the real type can still be loaded after a false test" {
     const gpa = std.testing.allocator;
     try zozz.setAllocator(gpa);
-    defer zozz.resetAllocator();
+    defer zozz.resetAllocator() catch unreachable;
 
     const raw = try zozz.RawSkeleton.init();
     defer raw.deinit();
@@ -436,7 +436,7 @@ test "TestTag answers without consuming, so the real type can still be loaded af
 test "a stream missing a callback its direction needs is rejected, not crashed into" {
     const gpa = std.testing.allocator;
     try zozz.setAllocator(gpa);
-    defer zozz.resetAllocator();
+    defer zozz.resetAllocator() catch unreachable;
 
     var mem: MemoryStream = .{ .gpa = gpa };
     defer mem.deinit();
@@ -474,7 +474,7 @@ test "a stream missing a callback its direction needs is rejected, not crashed i
 test "an archive written with the opposite endianness byte-swaps its fields, and ozz reads both back identically" {
     const gpa = std.testing.allocator;
     try zozz.setAllocator(gpa);
-    defer zozz.resetAllocator();
+    defer zozz.resetAllocator() catch unreachable;
 
     const raw = try zozz.RawSkeleton.init();
     defer raw.deinit();
@@ -552,7 +552,7 @@ test "an archive written with the opposite endianness byte-swaps its fields, and
 test "IArchive.endianSwap reports whether the stored byte order differs from this platform's" {
     const gpa = std.testing.allocator;
     try zozz.setAllocator(gpa);
-    defer zozz.resetAllocator();
+    defer zozz.resetAllocator() catch unreachable;
 
     const native = zozz.nativeEndianness();
     const foreign: zozz.Endianness = if (native == .big) .little else .big;

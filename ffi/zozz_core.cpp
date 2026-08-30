@@ -3,6 +3,7 @@
 // verbosity.
 //===----------------------------------------------------------------------===//
 
+#include <atomic>
 #include <cstring>
 
 #include "ozz/base/log.h"
@@ -23,16 +24,36 @@ class HostAllocator : public ozz::memory::Allocator {
   /// hands back.
   const ZozzAllocator& installed() const { return host_; }
 
+  /// Whether `other` would dispatch to the same place as the installed one.
+  /// The `user` pointer is part of that: two hosts sharing an entry point but
+  /// not their state are two allocators.
+  bool SameAs(const ZozzAllocator& other) const {
+    return host_.allocate == other.allocate &&
+           host_.deallocate == other.deallocate && host_.user == other.user;
+  }
+
+  /// Blocks handed out and not yet freed. Atomic because the seam permits
+  /// concurrent use of distinct handles: a plain counter would make the very
+  /// contract this class documents unsound.
+  size_t live() const { return live_.load(std::memory_order_acquire); }
+
   void* Allocate(size_t size, size_t alignment) override {
-    return host_.allocate(host_.user, size, alignment);
+    void* block = host_.allocate(host_.user, size, alignment);
+    if (block != nullptr) live_.fetch_add(1, std::memory_order_release);
+    return block;
   }
 
   void Deallocate(void* block) override {
+    // A NULL free is well-formed and allocates nothing, so it must not count
+    // down -- ozz frees NULL on paths that never allocated.
+    if (block == nullptr) return;
+    live_.fetch_sub(1, std::memory_order_release);
     host_.deallocate(host_.user, block);
   }
 
  private:
   ZozzAllocator host_ = {};
+  std::atomic<size_t> live_{0};
 };
 
 // Function-local statics: constructed on first use, so there is no static
@@ -88,11 +109,21 @@ const char* zozzResultName(ZozzResult result) {
       return "invalid data";
     case ZOZZ_RESULT_UNSUPPORTED:
       return "unsupported";
+    case ZOZZ_RESULT_ALLOCATOR_IN_USE:
+      return "allocator in use";
   }
   return "unknown result";
 }
 
 ZozzResult zozzSetAllocator(const ZozzAllocator* alloc) {
+  // Every path that changes where a free lands asks the same question first:
+  // is anything outstanding that this allocator would have to free? Only a
+  // reinstall of the identical allocator changes nothing, and it is the one
+  // case allowed to pass with blocks live.
+  const bool host_active = ozz::memory::default_allocator() == &Host();
+  const bool same = alloc != nullptr && host_active && Host().SameAs(*alloc);
+  if (!same && Host().live() != 0) return ZOZZ_RESULT_ALLOCATOR_IN_USE;
+
   if (alloc == nullptr) {
     if (SavedDefault() != nullptr) {
       ozz::memory::SetDefaulAllocator(SavedDefault());
@@ -130,6 +161,8 @@ ZozzResult zozzGetAllocator(ZozzAllocator* out, bool* installed) {
   }
   return ZOZZ_RESULT_OK;
 }
+
+size_t zozzAllocatorLiveBlocks(void) { return Host().live(); }
 
 ZozzResult zozzSetLogLevel(ZozzLogLevel level) {
   // Reads the parameter's bytes, not its value: a C caller can pass any int

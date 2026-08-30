@@ -234,11 +234,13 @@ static_assert(static_cast<int>(ZOZZ_NODE_PROPERTY_TYPE_VECTOR) ==
                   static_cast<int>(NodePropertyType::kVector),
               "ZozzNodePropertyType must match OzzImporter::NodeProperty::Type");
 
-/// One past the last ZozzResult enumerator. Update alongside the enum; the
-/// switch in zozzResultName is compiled with -Wswitch, so adding a result
-/// without handling it is already a warning there.
+/// One past the last ZozzResult enumerator, named rather than counted so it
+/// cannot drift on its own. Two guards meet here: `zozz.zig` compares this
+/// against the Zig enum's field count, and the switch in zozzResultName is
+/// compiled with -Wswitch, so a result added to the header and nowhere else
+/// fails both.
 constexpr uint32_t kResultCount =
-    static_cast<uint32_t>(ZOZZ_RESULT_UNSUPPORTED) + 1u;
+    static_cast<uint32_t>(ZOZZ_RESULT_ALLOCATOR_IN_USE) + 1u;
 
 }  // namespace
 

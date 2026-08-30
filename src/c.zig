@@ -31,6 +31,9 @@ pub const Result = enum(c_int) {
     /// The entry point exists but its build option is off (-Doptions,
     /// -Dgltf): the library was compiled without the code it needs.
     unsupported = 10,
+    /// A different allocator was offered while blocks the installed one
+    /// produced are still live.
+    allocator_in_use = 11,
 };
 
 /// Step vs. linear interpolation for a raw-track keyframe. Mirrors
@@ -252,6 +255,7 @@ pub extern fn zozzOzzVersion() u32;
 pub extern fn zozzResultName(result: Result) [*:0]const u8;
 pub extern fn zozzSetAllocator(alloc: ?*const Allocator) Result;
 pub extern fn zozzGetAllocator(out: *Allocator, installed: *bool) Result;
+pub extern fn zozzAllocatorLiveBlocks() usize;
 pub extern fn zozzAbiLayout(out: *AbiLayout) void;
 
 pub extern fn zozzSetLogLevel(level: LogLevel) Result;

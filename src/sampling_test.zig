@@ -56,7 +56,7 @@ const Chain = struct {
 
 test "the default range walks the whole hierarchy" {
     try zozz.setAllocator(std.testing.allocator);
-    defer zozz.resetAllocator();
+    defer zozz.resetAllocator() catch unreachable;
 
     const chain = try Chain.init();
     defer chain.deinit();
@@ -81,7 +81,7 @@ test "a from with a defaulted to still updates through the last joint" {
     // success. This is the documented path for re-running only the chain an
     // IK correction touched.
     try zozz.setAllocator(std.testing.allocator);
-    defer zozz.resetAllocator();
+    defer zozz.resetAllocator() catch unreachable;
 
     const chain = try Chain.init();
     defer chain.deinit();
@@ -112,7 +112,7 @@ test "a from with a defaulted to still updates through the last joint" {
 
 test "to ends the walk, leaving later joints untouched" {
     try zozz.setAllocator(std.testing.allocator);
-    defer zozz.resetAllocator();
+    defer zozz.resetAllocator() catch unreachable;
 
     const chain = try Chain.init();
     defer chain.deinit();
@@ -133,7 +133,7 @@ test "to ends the walk, leaving later joints untouched" {
 
 test "from_excluded keeps from's matrix and updates its children" {
     try zozz.setAllocator(std.testing.allocator);
-    defer zozz.resetAllocator();
+    defer zozz.resetAllocator() catch unreachable;
 
     const chain = try Chain.init();
     defer chain.deinit();
@@ -166,7 +166,7 @@ test "from_excluded keeps from's matrix and updates its children" {
 
 test "an out-of-range from or to is refused rather than writing nothing" {
     try zozz.setAllocator(std.testing.allocator);
-    defer zozz.resetAllocator();
+    defer zozz.resetAllocator() catch unreachable;
 
     const chain = try Chain.init();
     defer chain.deinit();
@@ -199,7 +199,7 @@ test "an out-of-range from or to is refused rather than writing nothing" {
 
 test "a destination smaller than the skeleton is refused whatever the range" {
     try zozz.setAllocator(std.testing.allocator);
-    defer zozz.resetAllocator();
+    defer zozz.resetAllocator() catch unreachable;
 
     const chain = try Chain.init();
     defer chain.deinit();
@@ -218,7 +218,7 @@ test "a destination smaller than the skeleton is refused whatever the range" {
 
 test "max_joints is ozz's own ceiling, and a pose cannot exceed it" {
     try zozz.setAllocator(std.testing.allocator);
-    defer zozz.resetAllocator();
+    defer zozz.resetAllocator() catch unreachable;
 
     try std.testing.expectEqual(@as(i32, 1024), zozz.max_joints);
     try std.testing.expectError(

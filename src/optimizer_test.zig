@@ -69,7 +69,7 @@ fn countKeyTimes(raw: zozz.RawAnimation, gpa: std.mem.Allocator) !usize {
 test "optimising drops redundant keys while staying inside the tolerance asked for" {
     const gpa = std.testing.allocator;
     try zozz.setAllocator(gpa);
-    defer zozz.resetAllocator();
+    defer zozz.resetAllocator() catch unreachable;
 
     const skel = try buildSkeleton();
     defer skel.deinit();
@@ -155,7 +155,7 @@ fn optimizedKeyCount(
 test "tolerance drives how much is dropped, and a child's override tightens its parents" {
     const gpa = std.testing.allocator;
     try zozz.setAllocator(gpa);
-    defer zozz.resetAllocator();
+    defer zozz.resetAllocator() catch unreachable;
 
     const skel = try buildSkeleton();
     defer skel.deinit();
@@ -194,7 +194,7 @@ test "tolerance drives how much is dropped, and a child's override tightens its 
 test "fixed-rate sample times are evenly spaced and the last never runs past the duration" {
     const gpa = std.testing.allocator;
     try zozz.setAllocator(gpa);
-    defer zozz.resetAllocator();
+    defer zozz.resetAllocator() catch unreachable;
 
     {
         // A whole number of periods: 2.5s at 24Hz is 60 intervals, so 61 keys.
@@ -242,7 +242,7 @@ test "fixed-rate sample times are evenly spaced and the last never runs past the
 test "model-space sampling accounts for a parent joint's motion, not just the joint's own keys" {
     const gpa = std.testing.allocator;
     try zozz.setAllocator(gpa);
-    defer zozz.resetAllocator();
+    defer zozz.resetAllocator() catch unreachable;
 
     const skel = try buildSkeleton(); // root -> child, child at rest (0, 1, 0)
     defer skel.deinit();
@@ -295,7 +295,7 @@ test "model-space sampling accounts for a parent joint's motion, not just the jo
 test "the additive builder turns a clip into deltas from its own first frame" {
     const gpa = std.testing.allocator;
     try zozz.setAllocator(gpa);
-    defer zozz.resetAllocator();
+    defer zozz.resetAllocator() catch unreachable;
 
     // One track, starting well away from the origin and away from identity,
     // so "delta" and "absolute" cannot be confused for one another.
@@ -362,7 +362,7 @@ test "the additive builder turns a clip into deltas from its own first frame" {
 test "the compressed control streams size and read back for every channel" {
     const gpa = std.testing.allocator;
     try zozz.setAllocator(gpa);
-    defer zozz.resetAllocator();
+    defer zozz.resetAllocator() catch unreachable;
 
     const raw = try buildDenseAnimation();
     defer raw.deinit();

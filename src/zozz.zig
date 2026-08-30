@@ -51,6 +51,7 @@ pub const math = math_mod;
 pub const setAllocator = memory_mod.setAllocator;
 pub const resetAllocator = memory_mod.resetAllocator;
 pub const getAllocator = memory_mod.getAllocator;
+pub const allocatorLiveBlocks = memory_mod.liveBlocks;
 
 pub const Skeleton = skeleton_mod.Skeleton;
 pub const no_parent = skeleton_mod.no_parent;
@@ -264,6 +265,7 @@ test {
     _ = @import("encode_test.zig");
     _ = @import("options_test.zig");
     _ = @import("gltf_test.zig");
+    _ = @import("concurrency_test.zig");
 
     // Test-only: this one @cImport-s the C header. Reached from a test block
     // and nowhere else, so a normal build never analyses it and the shipped
@@ -356,7 +358,7 @@ test "result names are never null" {
 test "loaders reject malformed input instead of parsing it" {
     const gpa = std.testing.allocator;
     try setAllocator(gpa);
-    defer resetAllocator();
+    defer resetAllocator() catch unreachable;
 
     // Not an ozz archive: the tag test must catch it.
     const garbage = "this is definitely not an ozz archive" ** 4;
@@ -374,7 +376,7 @@ test "loaders reject malformed input instead of parsing it" {
 test "a pose round-trips through AoS without drifting" {
     const gpa = std.testing.allocator;
     try setAllocator(gpa);
-    defer resetAllocator();
+    defer resetAllocator() catch unreachable;
 
     // 7 joints exercises a partial trailing SoA block (4 + 3).
     const joint_count = 7;
@@ -418,7 +420,7 @@ test "a pose round-trips through AoS without drifting" {
 test "buffer size and joint count mismatches are refused" {
     const gpa = std.testing.allocator;
     try setAllocator(gpa);
-    defer resetAllocator();
+    defer resetAllocator() catch unreachable;
 
     // One block holds four joints; eight transforms do not fit in it.
     var one_block: [1]SoaTransform = undefined;

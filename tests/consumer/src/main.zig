@@ -22,7 +22,9 @@ pub fn main() !void {
     // double-free anywhere below fails the DebugAllocator's deinit above,
     // which is the strongest assertion this consumer can make.
     try zozz.setAllocator(gpa);
-    defer zozz.resetAllocator();
+    // Restoring ozz's own allocator is refused while blocks this one produced
+    // are still live, so this defer runs last and its error is a real one.
+    defer zozz.resetAllocator() catch |e| std.debug.panic("zozz: {s}", .{@errorName(e)});
 
     // Author a two-joint skeleton and a clip that translates its root, using
     // the offline builders — no asset files, so this runs anywhere.

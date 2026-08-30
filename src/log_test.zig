@@ -63,7 +63,7 @@ test "zozzSetLogLevel round-trips through zozzGetLogLevel" {
 test "SILENT suppresses the diagnostic ozz logs for a version-mismatched skeleton archive; STANDARD does not" {
     const gpa = std.testing.allocator;
     try zozz.setAllocator(gpa);
-    defer zozz.resetAllocator();
+    defer zozz.resetAllocator() catch unreachable;
     defer _ = zozz.setLogLevel(.standard) catch {};
 
     // Just enough of an archive to pass Skeleton::Load's tag test, then fail

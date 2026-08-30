@@ -7,10 +7,10 @@
 // error enum. Ownership: *Create/*Load allocate through the installed
 // allocator and yield a caller-owned handle. *Destroy accepts NULL and is
 // idempotent on NULL. Query accessors never allocate; returned pointers
-// borrow from the handle and die with it. Thread safety: handles are not
-// internally synchronised, but distinct handles may be used concurrently. A
-// ZozzSamplingContext is single-threaded state, one per concurrently-sampled
-// animation instance.
+// borrow from the handle and die with it. A ZozzSamplingContext is
+// single-threaded state, one per concurrently-sampled animation instance.
+// Thread safety is stated once, at the allocator seam below, which is what
+// bounds it: every entry point that allocates reaches one allocator.
 //===----------------------------------------------------------------------===//
 
 #ifndef ZOZZ_CORE_H_
@@ -86,6 +86,10 @@ typedef enum ZozzResult {
   /// The entry point exists but its build option is off (-Doptions,
   /// -Dgltf): the library was compiled without the code it needs.
   ZOZZ_RESULT_UNSUPPORTED = 10,
+  /// A different allocator was offered to zozzSetAllocator while blocks the
+  /// installed one produced are still live. Destroy what is outstanding
+  /// first: a block must be freed by the allocator that produced it.
+  ZOZZ_RESULT_ALLOCATOR_IN_USE = 11,
 } ZozzResult;
 
 /// Static, never-NULL description of a result code. Borrowed; do not free.
@@ -94,14 +98,16 @@ ZOZZ_API const char* zozzResultName(ZozzResult result);
 //===----------------------------------------------------------------------===//
 // Allocator seam
 //
-// ozz routes every runtime allocation through a single global allocator. zozz
-// exposes that seam verbatim rather than hiding it, so a host can account for
-// animation memory in its own budget.
+// ozz routes every runtime allocation through one global allocator, and zozz
+// exposes that seam verbatim. Note the asymmetry inherited from ozz:
+// `deallocate` receives only the block pointer — no size, no alignment — so a
+// host needing those (Zig does) records them in a header, as memory.zig does.
 //
-// Note the asymmetry inherited from ozz: `deallocate` receives only the block
-// pointer — no size, no alignment. A host allocator that needs those (Zig's
-// std.mem.Allocator does) must record them in a header of its own. The Zig
-// wrapper in ../src/memory.zig does exactly that.
+// THREAD SAFETY, for the whole ABI. Distinct handles may be used concurrently
+// only when the installed allocator is thread-safe, since every entry point
+// that allocates reaches this one seam; ozz's own default is, a host one need
+// not be. Neither a handle nor the seam is synchronised: install from one
+// thread, before any other thread calls into zozz.
 //===----------------------------------------------------------------------===//
 
 typedef struct ZozzAllocator {
@@ -114,12 +120,12 @@ typedef struct ZozzAllocator {
   void* user;
 } ZozzAllocator;
 
-/// Installs a process-wide allocator for all subsequent ozz allocations. Call
-/// before loading anything; do not swap it while live handles exist — they
-/// free through whichever allocator is installed at destruction. NULL
-/// restores ozz's default (malloc/free) allocator. `alloc` is copied by
-/// value, but `user` must outlive every handle it allocates. Either function
-/// pointer NULL returns ZOZZ_RESULT_INVALID_ARGUMENT, allocator untouched.
+/// Installs a process-wide allocator for all subsequent ozz allocations. NULL
+/// restores ozz's default (malloc/free). `alloc` is copied, but `user` must
+/// outlive every handle it allocates; a NULL function pointer returns
+/// ZOZZ_RESULT_INVALID_ARGUMENT. A swap while zozzAllocatorLiveBlocks() is
+/// non-zero returns ZOZZ_RESULT_ALLOCATOR_IN_USE, allocator untouched --
+/// reinstalling the identical struct is not a swap and always succeeds.
 ZOZZ_API ZozzResult zozzSetAllocator(const ZozzAllocator* alloc);
 
 /// Reads back the allocator zozzSetAllocator most recently installed. If a
@@ -129,6 +135,13 @@ ZOZZ_API ZozzResult zozzSetAllocator(const ZozzAllocator* alloc);
 /// `*installed` alone tells a never-installed state from a zero-valued one.
 /// Returns ZOZZ_RESULT_INVALID_ARGUMENT if `out` or `installed` is NULL.
 ZOZZ_API ZozzResult zozzGetAllocator(ZozzAllocator* out, bool* installed);
+
+/// Blocks the installed host allocator handed out and has not yet been asked
+/// to free. Zero before the first install and zero again once every handle
+/// allocated through one is destroyed, which makes it both a shut-down leak
+/// check and what zozzSetAllocator consults before allowing a swap. ozz's own
+/// default allocator is not routed through this seam and is not counted.
+ZOZZ_API size_t zozzAllocatorLiveBlocks(void);
 
 //===----------------------------------------------------------------------===//
 // Log verbosity

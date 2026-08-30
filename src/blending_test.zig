@@ -42,7 +42,7 @@ test "the comptime block count matches the library's" {
 
 test "two layers blended at 0.5 land between them, per joint" {
     try zozz.setAllocator(std.testing.allocator);
-    defer zozz.resetAllocator();
+    defer zozz.resetAllocator() catch unreachable;
 
     const n = 5; // crosses the 4-wide SoA block boundary.
     var a_t: [n]zozz.Transform = undefined;
@@ -76,7 +76,7 @@ test "two layers blended at 0.5 land between them, per joint" {
 
 test "weight 0 on a layer yields exactly the other layer" {
     try zozz.setAllocator(std.testing.allocator);
-    defer zozz.resetAllocator();
+    defer zozz.resetAllocator() catch unreachable;
 
     const n = 4;
     var a_t: [n]zozz.Transform = undefined;
@@ -128,7 +128,7 @@ test "weight 0 on a layer yields exactly the other layer" {
 
 test "an additive layer at weight 0 changes nothing, and at weight 1 applies fully" {
     try zozz.setAllocator(std.testing.allocator);
-    defer zozz.resetAllocator();
+    defer zozz.resetAllocator() catch unreachable;
 
     const n = 4;
     const base_transform: zozz.Transform = .{
@@ -196,7 +196,7 @@ test "an additive layer at weight 0 changes nothing, and at weight 1 applies ful
 
 test "a partial blend with per-joint weights affects only the weighted joints" {
     try zozz.setAllocator(std.testing.allocator);
-    defer zozz.resetAllocator();
+    defer zozz.resetAllocator() catch unreachable;
 
     const n = 8; // two SoA blocks, with the mask interleaved within each.
     var a_t: [n]zozz.Transform = undefined;
@@ -238,7 +238,7 @@ test "a partial blend with per-joint weights affects only the weighted joints" {
 
 test "packJointWeights fills the lanes past the joint count with 1.0" {
     try zozz.setAllocator(std.testing.allocator);
-    defer zozz.resetAllocator();
+    defer zozz.resetAllocator() catch unreachable;
 
     // 5 joints: the second block holds one real lane and three padding ones,
     // and ozz reads whole blocks, so the padding must mean "fully weighted".

@@ -33,7 +33,9 @@ There is exactly one way to spell everything.
 const zozz = @import("zozz");
 
 try zozz.setAllocator(gpa);
-defer zozz.resetAllocator();
+// Runs last, and can fail: restoring ozz's own allocator is refused while
+// blocks this one produced are still live.
+defer zozz.resetAllocator() catch |e| std.debug.panic("zozz: {s}", .{@errorName(e)});
 
 const skeleton = try zozz.Skeleton.initFromFile("skeleton.ozz");
 defer skeleton.deinit();
@@ -134,6 +136,25 @@ The seam has one wrinkle worth knowing: ozz frees with `deallocate(block)`, no
 size and no alignment, while Zig requires both. `src/memory.zig` bridges that
 with a header stored ahead of each block. The C API keeps ozz's shape, so a
 plain C host can still pass `malloc`/`free` in two lines.
+
+That header also records the allocator the block came from, which is what makes
+swapping one Zig allocator for another safe with blocks outstanding: each frees
+through its own producer rather than through whoever happens to be installed at
+destruction. Below the Zig layer the C seam cannot do that -- it holds one
+`ZozzAllocator` -- so `zozzSetAllocator` refuses a *different* allocator, and
+refuses NULL, while `zozzAllocatorLiveBlocks()` is non-zero, and reports
+`ZOZZ_RESULT_ALLOCATOR_IN_USE`. That counter doubles as a leak check for a host
+whose own allocator has none.
+
+**Thread safety, and what it rests on.** Distinct handles may be used
+concurrently as long as the installed allocator is thread-safe, because every
+entry point that allocates arrives at this one seam; a single handle is not
+internally synchronised, and neither is installing or resetting the allocator
+-- do that from one thread before any other is inside zozz.
+`src/concurrency_test.zig` runs the claim rather than restating it: four
+threads, each with its own sampling context, poses and matrices, sharing one
+skeleton and one clip, creating and destroying handles for two hundred frames
+each against a `DebugAllocator` that accounts for every block.
 
 ### Validation at the boundary
 
@@ -308,18 +329,18 @@ NaN ratio that is refused.
 | | |
 |---:|---|
 | **0.4.0** | version, the same in `build.zig.zon` and `ffi/zozz_core.h` |
-| **271** | C entry points (`ZOZZ_API` in `ffi/*.h`) |
-| **271** | Zig externs (`pub extern fn` in `src/c.zig`) |
+| **272** | C entry points (`ZOZZ_API` in `ffi/*.h`) |
+| **272** | Zig externs (`pub extern fn` in `src/c.zig`) |
 | **21** | installed public headers |
 | **89** | ozz public names with a binding |
 | **418** | ozz public names in the bound areas |
-| **171** | Zig tests `zig build test` executes |
+| **174** | Zig tests `zig build test` executes |
 | **10** | tests it skips, each needing a build option or an on-disk asset |
-| **107** | assertions in the standalone C smoke test |
+| **119** | assertions in the standalone C smoke test |
 | **39** | vendored ozz translation units `build.zig` compiles |
 | **20** | zozz C++ translation units (`ffi/*.cpp`) |
-| **11624** | Zig source lines (`src/`) |
-| **8194** | C++ source lines (`ffi/`) |
+| **11850** | Zig source lines (`src/`) |
+| **8242** | C++ source lines (`ffi/`) |
 | **18** | deliberate drifts `ci/check-abi-drift.sh` must refuse |
 | **17** | steps `ci/run.sh` runs |
 | **7** | further targets `ci/run.sh` cross-compiles |

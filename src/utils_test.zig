@@ -42,7 +42,7 @@ const joint_count = 7;
 test "jointIsLeaf agrees with the parent array on every joint" {
     const gpa = std.testing.allocator;
     try zozz.setAllocator(gpa);
-    defer zozz.resetAllocator();
+    defer zozz.resetAllocator() catch unreachable;
 
     const skel = try buildSkeleton();
     defer skel.deinit();
@@ -98,7 +98,7 @@ const Visits = struct {
 test "the depth-first traversal visits every joint once, parents before children" {
     const gpa = std.testing.allocator;
     try zozz.setAllocator(gpa);
-    defer zozz.resetAllocator();
+    defer zozz.resetAllocator() catch unreachable;
 
     const skel = try buildSkeleton();
     defer skel.deinit();
@@ -154,7 +154,7 @@ test "the depth-first traversal visits every joint once, parents before children
 test "findJoint round-trips against jointName, and misses are null" {
     const gpa = std.testing.allocator;
     try zozz.setAllocator(gpa);
-    defer zozz.resetAllocator();
+    defer zozz.resetAllocator() catch unreachable;
 
     const skel = try buildSkeleton();
     defer skel.deinit();
@@ -176,7 +176,7 @@ test "findJoint round-trips against jointName, and misses are null" {
 test "the rest-pose accessors agree with each other, locally and in model space" {
     const gpa = std.testing.allocator;
     try zozz.setAllocator(gpa);
-    defer zozz.resetAllocator();
+    defer zozz.resetAllocator() catch unreachable;
 
     const skel = try buildSkeleton();
     defer skel.deinit();

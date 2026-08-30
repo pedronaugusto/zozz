@@ -70,7 +70,7 @@ fn normalize(v: [3]f32) [3]f32 {
 test "a single-influence vertex lands exactly where its joint matrix puts it" {
     const gpa = std.testing.allocator;
     try zozz.setAllocator(gpa);
-    defer zozz.resetAllocator();
+    defer zozz.resetAllocator() catch unreachable;
 
     // Two joints doing visibly different things, so a job that silently used
     // joint 0 for everything would be caught.
@@ -114,7 +114,7 @@ test "a single-influence vertex lands exactly where its joint matrix puts it" {
 test "two influences summing to 1 interpolate between the two single-joint results" {
     const gpa = std.testing.allocator;
     try zozz.setAllocator(gpa);
-    defer zozz.resetAllocator();
+    defer zozz.resetAllocator() catch unreachable;
 
     const joints = [_]zozz.Mat4{
         rotateZThenTranslate(std.math.pi / 2.0, .{ 10, 0, 0 }),
@@ -205,7 +205,7 @@ fn skinPadded(
 test "the influence-count variants agree on a vertex that only one joint moves" {
     const gpa = std.testing.allocator;
     try zozz.setAllocator(gpa);
-    defer zozz.resetAllocator();
+    defer zozz.resetAllocator() catch unreachable;
 
     // ozz specialises the skinning loop per influence count (1, 2, 3, 4, and
     // a generic path beyond) — five separate bodies of code that must all
@@ -229,7 +229,7 @@ test "the influence-count variants agree on a vertex that only one joint moves" 
 test "normals are transformed as directions, and the inverse-transpose set is used when given" {
     const gpa = std.testing.allocator;
     try zozz.setAllocator(gpa);
-    defer zozz.resetAllocator();
+    defer zozz.resetAllocator() catch unreachable;
 
     // A joint that both rotates and translates a long way.
     const rotating = [_]zozz.Mat4{rotateZThenTranslate(std.math.pi / 2.0, .{ 100, 200, 300 })};

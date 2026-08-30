@@ -77,7 +77,7 @@ const no_rotation: zozz.MotionSettings = .{
 test "extracting root motion yields the root's translation, and the clip no longer has it" {
     const gpa = std.testing.allocator;
     try zozz.setAllocator(gpa);
-    defer zozz.resetAllocator();
+    defer zozz.resetAllocator() catch unreachable;
 
     const skel = try buildSkeleton();
     defer skel.deinit();
@@ -140,7 +140,7 @@ test "extracting root motion yields the root's translation, and the clip no long
 test "the residual clip and the extracted motion recompose the original" {
     const gpa = std.testing.allocator;
     try zozz.setAllocator(gpa);
-    defer zozz.resetAllocator();
+    defer zozz.resetAllocator() catch unreachable;
 
     const skel = try buildSkeleton();
     defer skel.deinit();
@@ -184,7 +184,7 @@ test "the residual clip and the extracted motion recompose the original" {
 test "the reference setting decides what the extracted motion is measured from" {
     const gpa = std.testing.allocator;
     try zozz.setAllocator(gpa);
-    defer zozz.resetAllocator();
+    defer zozz.resetAllocator() catch unreachable;
 
     const skel = try buildSkeleton();
     defer skel.deinit();
@@ -234,7 +234,7 @@ test "the reference setting decides what the extracted motion is measured from" 
 test "blending root-motion deltas preserves distance travelled, and never scale" {
     const gpa = std.testing.allocator;
     try zozz.setAllocator(gpa);
-    defer zozz.resetAllocator();
+    defer zozz.resetAllocator() catch unreachable;
 
     var out: zozz.Transform = undefined;
 
