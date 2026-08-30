@@ -637,6 +637,14 @@ const Case = struct {
 /// SSE and reference backends do leave different values there.
 const lane_x: []const u8 = &.{1};
 
+/// Lane 0 only, for a second reason: ozz's SSE RcpEstX and RSqrtEstX are a
+/// bare _mm_rcp_ss / _mm_rsqrt_ss, whose upper lanes hold whatever the
+/// compiler left there. Measured, Zig 0.16 clang, x86_64-windows-gnu:
+/// pass-through at -O0/-O2/-O3, zero at -Os. What varies with the optimiser
+/// is not a reference; the port's own upper lanes are pinned instead, in
+/// src/math_test.zig.
+const lane_x_estimate: []const u8 = &.{1};
+
 const sf = math.simd_float4;
 const q = math.quaternion;
 const m4 = math.mat4;
@@ -683,11 +691,11 @@ const cases = [_]Case{
 
     .{ .name = "RCPEST", .impl = adapt(sf.rcpEst), .fill = &nonZero, .tol = est },
     .{ .name = "RCPESTNR", .impl = adapt(sf.rcpEstNR), .fill = &nonZero, .tol = est },
-    .{ .name = "RCPESTX", .impl = adapt(sf.rcpEstX), .fill = &nonZero, .tol = est },
+    .{ .name = "RCPESTX", .impl = adapt(sf.rcpEstX), .fill = &nonZero, .tol = est, .defined = lane_x_estimate },
     .{ .name = "RCPESTXNR", .impl = adapt(sf.rcpEstXNR), .fill = &nonZero, .tol = est, .defined = lane_x },
     .{ .name = "RSQRTEST", .impl = adapt(sf.rSqrtEst), .fill = &positive, .tol = est },
     .{ .name = "RSQRTESTNR", .impl = adapt(sf.rSqrtEstNR), .fill = &positive, .tol = est },
-    .{ .name = "RSQRTESTX", .impl = adapt(sf.rSqrtEstX), .fill = &positive, .tol = est },
+    .{ .name = "RSQRTESTX", .impl = adapt(sf.rSqrtEstX), .fill = &positive, .tol = est, .defined = lane_x_estimate },
     .{ .name = "RSQRTESTXNR", .impl = adapt(sf.rSqrtEstXNR), .fill = &positive, .tol = est, .defined = lane_x },
     .{ .name = "NORMALIZEEST2", .impl = adapt(sf.normalizeEst2), .fill = &nonZero, .tol = est },
     .{ .name = "NORMALIZEEST3", .impl = adapt(sf.normalizeEst3), .fill = &nonZero, .tol = est },
@@ -915,6 +923,30 @@ fn deviation(a: f32, b: f32) f32 {
     return @abs(a - b) / @max(1.0, @abs(b));
 }
 
+/// Where the worst deviation was. A bare magnitude says an operation
+/// disagrees; this says which lane of which output register, on which input,
+/// and what each side produced.
+const Site = struct {
+    iter: usize = 0,
+    reg: usize = 0,
+    lane: usize = 0,
+    got: f32 = 0,
+    want: f32 = 0,
+    in_count: usize = 0,
+    in: [max_regs]Reg = @splat(@splat(0)),
+
+    fn report(self: Site, name: []const u8, worst: f32, tol: f32) void {
+        std.debug.print(
+            "mathref: {s} deviates by {e} (tolerance {e})\n" ++
+                "  iteration {d}, out register {d}, lane {d}: zozz {e} vs ozz {e}\n",
+            .{ name, worst, tol, self.iter, self.reg, self.lane, self.got, self.want },
+        );
+        for (self.in[0..self.in_count], 0..) |r, i| {
+            std.debug.print("  in[{d}] = {{ {e}, {e}, {e}, {e} }}\n", .{ i, r[0], r[1], r[2], r[3] });
+        }
+    }
+};
+
 test "src/math.zig agrees with the ozz it ports, operation by operation" {
     var prng = std.Random.DefaultPrng.init(seed);
     const rnd = prng.random();
@@ -933,6 +965,7 @@ test "src/math.zig agrees with the ozz it ports, operation by operation" {
         if (cs.defined.len != 0) try std.testing.expectEqual(c_out, cs.defined.len);
 
         var worst: f32 = 0;
+        var site: Site = .{};
         for (0..iterations) |iter| {
             @memset(std.mem.sliceAsBytes(in[0..]), 0);
             cs.fill(rnd, in[0..c_in], iter);
@@ -946,12 +979,24 @@ test "src/math.zig agrees with the ozz it ports, operation by operation" {
             for (0..c_out) |r| {
                 const lanes = if (cs.defined.len == 0) 4 else cs.defined[r];
                 for (0..lanes) |lane| {
-                    worst = @max(worst, deviation(got[r][lane], want[r][lane]));
+                    const d = deviation(got[r][lane], want[r][lane]);
+                    if (d > worst) {
+                        worst = d;
+                        site = .{
+                            .iter = iter,
+                            .reg = r,
+                            .lane = lane,
+                            .got = got[r][lane],
+                            .want = want[r][lane],
+                            .in_count = c_in,
+                            .in = in,
+                        };
+                    }
                 }
             }
         }
         if (!(worst <= cs.tol)) {
-            std.debug.print("mathref: {s} deviates by {e} (tolerance {e})\n", .{ cs.name, worst, cs.tol });
+            site.report(cs.name, worst, cs.tol);
             failed += 1;
         }
     }
