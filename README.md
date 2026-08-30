@@ -29,6 +29,9 @@ There is exactly one way to spell everything.
 
 ## Usage
 
+The block below is not written here: it is a region of [`examples/usage.zig`](examples/usage.zig), which `zig build examples` builds and RUNS, extracted by `ci/readme_usage.sh` and compared by CI. A snippet in a README is a claim about how the library is used, and this one is a claim something executes.
+
+<!-- BEGIN GENERATED ci/readme_usage.sh -->
 ```zig
 const zozz = @import("zozz");
 
@@ -48,7 +51,8 @@ defer clip.deinit();
 
 // The caller owns the pose. It can be a stack array, an arena slice, or a
 // sub-range of a batch; `soaBlocks` says how long it has to be.
-const pose = try gpa.alloc(zozz.SoaTransform, try zozz.soaBlocks(skeleton.numJoints()));
+const blocks = try zozz.soaBlocks(skeleton.numJoints());
+const pose = try gpa.alloc(zozz.SoaTransform, blocks);
 defer gpa.free(pose);
 
 var context = try zozz.SamplingContext.initForSkeleton(skeleton);
@@ -59,15 +63,19 @@ try skeleton.restPoseSoa(pose);
 try (zozz.SamplingJob{
     .animation = clip,
     .context = context,
+    // `.loop` wraps in both directions; `.clamp` holds the end poses.
     .ratio = clip.ratioAt(time_seconds, .loop),
     .out = pose,
 }).run();
 
 // Either read local transforms out...
+const locals = try gpa.alloc(zozz.Transform, skeleton.numJoints());
+defer gpa.free(locals);
 try zozz.pose.toLocalTransforms(pose, locals);
 
 // ...or flatten the hierarchy to model space. Note the 16-byte alignment.
 const models = try gpa.alignedAlloc(zozz.Mat4, .@"16", skeleton.numJoints());
+defer gpa.free(models);
 try (zozz.LocalToModelJob{
     .skeleton = skeleton,
     .locals = pose,
@@ -75,16 +83,30 @@ try (zozz.LocalToModelJob{
     .out = models,
 }).run();
 
-// Blending takes the same spans, and allocates nothing per call.
+// Blending takes the same spans and allocates nothing per call. `walk`
+// and `run` here are two more poses, sampled the same way as `pose`.
+const walk = try gpa.alloc(zozz.SoaTransform, blocks);
+defer gpa.free(walk);
+const run = try gpa.alloc(zozz.SoaTransform, blocks);
+defer gpa.free(run);
+const rest = try gpa.alloc(zozz.SoaTransform, blocks);
+defer gpa.free(rest);
+@memcpy(walk, pose);
+@memcpy(run, pose);
+try skeleton.restPoseSoa(rest);
 try (zozz.BlendingJob{
     .layers = &.{ zozz.blending.layer(0.5, walk), zozz.blending.layer(0.5, run) },
     .rest_pose = rest,
     .out = pose,
 }).run();
 
-// A joint's skinning matrix is its model matrix times its inverse bind pose.
-const skinning = zozz.math.mat4.mul(models[joint], inverse_bind[joint]);
+// A joint's skinning matrix is its model matrix times its inverse bind
+// pose — the inverse of where the joint sat when the mesh was authored.
+const joint = 1;
+const inverse_bind = zozz.math.mat4.invert(models[joint], null);
+const skinning = zozz.math.mat4.mul(models[joint], inverse_bind);
 ```
+<!-- END GENERATED -->
 
 Add it as a dependency and link the module:
 
@@ -290,6 +312,12 @@ of a future cook.
 `zig build test-c` runs the C-level smoke test on its own, proving the header
 is a real C contract rather than a private detail of the Zig wrapper, and that
 the allocator seam is genuinely in use (it asserts allocations balance).
+
+`zig build examples` builds and runs everything in `examples/`, and `zig build
+test` includes it. An example that is only compiled proves the names still
+resolve; running it is what proves the sequence still works — and the Usage
+block at the top of this file is extracted from one, so it cannot drift from
+code that executes.
 
 ```sh
 zig build --build-file tests/consumer/build.zig run

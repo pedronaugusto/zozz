@@ -497,4 +497,41 @@ pub fn build(b: *std.Build) void {
     const c_test_step = b.step("test-c", "Run the C-level smoke test");
     c_test_step.dependOn(&b.addRunArtifact(c_smoke).step);
     test_step.dependOn(c_test_step);
+
+    //=====================================================================
+    // Examples
+    //
+    // Built AND run, against the module a consumer gets. An example that is
+    // only compiled proves the names still resolve; running it is what
+    // proves the sequence still works. examples/usage.zig is also where
+    // README.md's Usage block comes from -- see ci/readme_usage.sh -- so a
+    // snippet a reader copies cannot drift from code CI executes.
+    //=====================================================================
+
+    const examples_step = b.step("examples", "Build and run the examples");
+    for (example_sources) |source| {
+        const example = b.addExecutable(.{
+            .name = std.fs.path.stem(source),
+            .root_module = b.createModule(.{
+                .root_source_file = b.path(source),
+                .target = target,
+                .optimize = optimize,
+                .imports = &.{.{ .name = "zozz", .module = module }},
+            }),
+        });
+        const run = b.addRunArtifact(example);
+        // An example that writes files writes them into zig-out, never into
+        // the source tree. The install step is what creates that directory.
+        run.step.dependOn(b.getInstallStep());
+        run.setCwd(b.path("zig-out"));
+        examples_step.dependOn(&run.step);
+    }
+    test_step.dependOn(examples_step);
 }
+
+/// Every example, listed rather than globbed: a build graph that scans a
+/// directory is not reproducible from the manifest alone, and `paths` in
+/// build.zig.zon has to name the directory anyway.
+const example_sources = [_][]const u8{
+    "examples/usage.zig",
+};
