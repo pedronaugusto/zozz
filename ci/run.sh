@@ -148,10 +148,15 @@ if [ $QUICK -eq 0 ]; then
   run 'test-c (C ABI standalone)' $ZIG build test-c
 
   # -Doptions and -Dgltf are off by default, so nothing above compiles either
-  # of them, let alone the six tests that only exist behind them. A build
-  # option no gate ever turns on is an option that rots.
-  run 'test -Doptions -Dgltf (the optional halves)' \
-    $ZIG build test -Doptions=true -Dgltf=true -Dsanitize_c=false
+  # of them, let alone the tests that only exist behind them. Both are
+  # comptime-known, so a branch the current combination does not take is never
+  # analysed: turning both on leaves the one-on-one-off arms as uncompiled as
+  # leaving both off did. All three, then; the fourth is every other run here.
+  for combo in true:false false:true true:true; do
+    opt=${combo%%:*}; gltf=${combo##*:}
+    run "test -Doptions=$opt -Dgltf=$gltf" \
+      $ZIG build test -Doptions="$opt" -Dgltf="$gltf" -Dsanitize_c=false
+  done
 
   # Consuming zozz as a dependency is a different code path from building it —
   # artifact registration and installed-header spelling are invisible to the
