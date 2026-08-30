@@ -70,21 +70,45 @@ expect() {
   cp "$file" "$file.bak"
   backups=("$file")
 
-  if ! python3 - "$file" "$from" "$to" <<'PY'
+  # A stale anchor and a helper that could not run mean opposite things:
+  # the first is a mutation to rewrite, the second says nothing about the
+  # guard at all. Reporting the second as the first sends the reader to
+  # edit a line that was never wrong. newline= on both ends keeps the
+  # mutated file byte-faithful; one file mutated here is a shell script,
+  # which rewritten line endings alone would break.
+  local applied
+  applied=$(python3 - "$file" "$from" "$to" <<'PY'
 import pathlib, sys
 path, before, after = sys.argv[1], sys.argv[2], sys.argv[3]
 p = pathlib.Path(path)
-s = p.read_text()
+# open() rather than Path.read_text/write_text: the newline keyword
+# reached those only in Python 3.13, and hosted runners are older.
+with open(p, newline="") as f:
+    s = f.read()
 if before not in s:
-    sys.exit("anchor no longer present in %s:\n%s" % (path, before))
-p.write_text(s.replace(before, after, 1))
+    print("ANCHOR_MISSING")
+    sys.exit(0)
+with open(p, "w", newline="") as f:
+    f.write(s.replace(before, after, 1))
+print("APPLIED")
 PY
-  then
-    printf '  ANCHOR STALE  %s\n' "$what"
-    fail=$((fail + 1))
-    restore
-    return
-  fi
+  )
+  case "$applied" in
+    APPLIED) ;;
+    ANCHOR_MISSING)
+      printf '  ANCHOR STALE  %s\n' "$what"
+      fail=$((fail + 1))
+      restore
+      return
+      ;;
+    *)
+      printf '  TOOL FAILED   %s\n' "$what"
+      printf '                the mutation never applied; nothing learned\n'
+      fail=$((fail + 1))
+      restore
+      return
+      ;;
+  esac
 
   local out status
   out=$(eval "$BUILD" 2>&1)
