@@ -57,27 +57,30 @@ ZOZZ_API ZozzResult zozzSample(const ZozzAnimation* animation,
 
 //===----------------------------------------------------------------------===//
 // Local-to-model
+//
+// The range parameters are ozz's LocalToModelJob fields, sentinels included,
+// not a private "unrestricted" sentinel a wrapper has to translate: INT_MAX
+// for `to` overflowed ozz's `Min(to + 1, num_joints)`, so the walk ended
+// before it began and the job wrote NOTHING while reporting success.
+//
+// `from` is ZOZZ_NO_PARENT (ozz's default) to start at the roots, else a joint
+// index below zozzSkeletonNumJoints. `to` is a joint index, or ZOZZ_MAX_JOINTS
+// (ozz's default) for the last joint; it may exceed the joint count, which is
+// how ozz spells "to the end". ozz checks neither bound, so zozz does: an
+// out-of-range one is ZOZZ_RESULT_INVALID_ARGUMENT, never a silent no-op.
 //===----------------------------------------------------------------------===//
 
-/// Walks the hierarchy, converting local-space SoA transforms to model-space
-/// AoS matrices. `root` is an optional pre-multiplied root matrix (NULL for
-/// identity). `count` must be at least the skeleton's joint count.
+/// Walks [`from`, `to`] of the hierarchy, `to` included, converting local-space
+/// SoA transforms to model-space AoS matrices. `root` pre-multiplies every
+/// result (NULL for identity). `count` must cover EVERY joint whatever the
+/// range: ancestors outside it are read to place the ones inside it. With
+/// `from_excluded` non-zero, `from` keeps its existing matrix in `out` -- which
+/// must already be valid -- and only its children are updated.
 ZOZZ_API ZozzResult zozzLocalToModel(const ZozzSkeleton* skeleton,
                                      const ZozzSoaPose* locals,
-                                     const ZozzFloat4x4* root,
+                                     const ZozzFloat4x4* root, int from,
+                                     int to, int from_excluded,
                                      ZozzFloat4x4* out, size_t count);
-
-/// Same as zozzLocalToModel, restricted to joint range [from, to] (`to`
-/// included). `input`/`out` must cover every joint: ancestors outside the range
-/// are read, not written. `from` is ZOZZ_NO_PARENT for the root, else a joint
-/// index; `to` may be zozzSkeletonNumJoints or larger, for the last joint. With
-/// `from_excluded` non-zero, `from` is left untouched in `out` and must already
-/// hold a valid matrix (children are relative to it).
-ZOZZ_API ZozzResult zozzLocalToModelRange(const ZozzSkeleton* skeleton,
-                                          const ZozzSoaPose* locals,
-                                          const ZozzFloat4x4* root, int from,
-                                          int to, int from_excluded,
-                                          ZozzFloat4x4* out, size_t count);
 
 #ifdef __cplusplus
 }  // extern "C"

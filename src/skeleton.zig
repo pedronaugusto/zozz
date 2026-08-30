@@ -11,6 +11,11 @@ const math = @import("math.zig");
 /// thing to get wrong.
 pub const no_parent = c.no_parent;
 
+/// ozz's own `Skeleton::kMaxJoints`: the largest joint count a skeleton may
+/// have, and the value `LocalToModelJob.to` takes to mean "the last joint".
+/// Re-exported from `c.zig` for the same reason as `no_parent`.
+pub const max_joints = c.max_joints;
+
 pub const Skeleton = struct {
     handle: *c.Skeleton,
 

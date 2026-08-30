@@ -60,6 +60,19 @@ static_assert(alignof(ozz::math::SoaTransform) == 16,
               "SoaTransform must stay 16-byte aligned");
 
 //===----------------------------------------------------------------------===//
+// Skeleton limits
+//
+// ZOZZ_MAX_JOINTS is the sentinel a caller passes as LocalToModelJob's `to`
+// for "the last joint", so it must be ozz's own kMaxJoints and not a literal
+// that drifts from it.
+//===----------------------------------------------------------------------===//
+
+static_assert(ZOZZ_NO_PARENT == ozz::animation::Skeleton::kNoParent,
+              "ZOZZ_NO_PARENT must match ozz::animation::Skeleton::kNoParent");
+static_assert(ZOZZ_MAX_JOINTS == ozz::animation::Skeleton::kMaxJoints,
+              "ZOZZ_MAX_JOINTS must match ozz::animation::Skeleton::kMaxJoints");
+
+//===----------------------------------------------------------------------===//
 // Allocator seam
 //===----------------------------------------------------------------------===//
 

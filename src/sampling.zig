@@ -76,50 +76,43 @@ pub const SamplingJob = struct {
 };
 
 /// Mirrors `ozz::animation::LocalToModelJob`: walks the joint hierarchy,
-/// turning local-space transforms into model-space matrices. `root`
-/// pre-multiplies the whole hierarchy; pass null for identity. `out` must
-/// hold at least the skeleton's joint count and, being 16-byte-aligned
-/// matrices, must itself start on a 16-byte boundary. `from`/`to`/
-/// `from_excluded` narrow the walk to one chain (default: whole hierarchy).
+/// turning local-space transforms into model-space matrices. The four range
+/// fields are ozz's own, defaults included, so a chain update is spelled the
+/// way it is in C++ ozz. `out` must hold at least the skeleton's joint count
+/// whatever the range, and — being 16-byte-aligned matrices — must itself
+/// start on a 16-byte boundary.
 pub const LocalToModelJob = struct {
     skeleton: Skeleton,
+    /// ozz names this field `input`; `locals` is kept because it says which
+    /// space the transforms are in, which is the thing a caller gets wrong.
     locals: SoaPose,
-    root: ?*const math.Mat4,
-    out: []math.Mat4,
+    /// Pre-multiplied onto every model-space matrix. Null is identity.
+    root: ?*const math.Mat4 = null,
 
-    /// First joint to update, or `null` for the root. `out` must still cover
-    /// every joint either way: ancestors outside the range are read to place
-    /// the ones inside it.
-    from: ?u32 = null,
-    /// Last joint to update, inclusive, or `null` for the last joint.
-    to: ?u32 = null,
+    /// First joint to update, `no_parent` for the roots — ozz's own default.
+    /// Ancestors outside the range are read to place the ones inside it, so
+    /// `out` must still cover every joint.
+    from: i32 = c.no_parent,
+    /// Last joint to update, inclusive; `max_joints` (ozz's own default) runs
+    /// to the last joint. A value out of range, or below a non-negative
+    /// `from`, is `error.InvalidArgument` — never a walk that writes nothing.
+    to: i32 = c.max_joints,
     /// Leave `from` itself untouched and start at its children. It must
     /// already hold a valid model-space matrix in `out`, since its children
     /// are expressed relative to it — this is the combination that finishes a
     /// chain whose first joint the correction already moved.
     from_excluded: bool = false,
 
+    out: []math.Mat4,
+
     /// Runs the local-to-model job.
     pub fn run(self: LocalToModelJob) err.Error!void {
-        // The unrestricted walk keeps its own entry point rather than passing
-        // sentinels to the range one: it is the common case, it is what a C
-        // caller reaches for, and routing both through one of them would mean
-        // only one of the two was ever exercised.
-        if (self.from == null and self.to == null and !self.from_excluded) {
-            return err.check(c.zozzLocalToModel(
-                self.skeleton.handle,
-                self.locals.handle,
-                self.root,
-                self.out.ptr,
-                self.out.len,
-            ));
-        }
-        try err.check(c.zozzLocalToModelRange(
+        try err.check(c.zozzLocalToModel(
             self.skeleton.handle,
             self.locals.handle,
             self.root,
-            if (self.from) |f| @intCast(f) else c.no_parent,
-            if (self.to) |t| @intCast(t) else std.math.maxInt(c_int),
+            self.from,
+            self.to,
             @intFromBool(self.from_excluded),
             self.out.ptr,
             self.out.len,

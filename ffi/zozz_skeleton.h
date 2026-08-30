@@ -45,6 +45,11 @@ ZOZZ_API const char* zozzSkeletonJointName(const ZozzSkeleton* skeleton,
 ZOZZ_API int16_t zozzSkeletonJointParent(const ZozzSkeleton* skeleton,
                                          int joint);
 
+/// Hard joint-count ceiling, ozz's own Skeleton::kMaxJoints. It is also the
+/// value ozz gives LocalToModelJob::to by default, meaning "to the last
+/// joint" -- zozz_abi.cpp static_asserts both against ozz.
+#define ZOZZ_MAX_JOINTS 1024
+
 /// Writes the rest pose as AoS local transforms. `count` must be at least
 /// zozzSkeletonNumJoints, else ZOZZ_RESULT_BUFFER_TOO_SMALL.
 ZOZZ_API ZozzResult zozzSkeletonRestPose(const ZozzSkeleton* skeleton,

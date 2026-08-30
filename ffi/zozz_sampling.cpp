@@ -98,7 +98,8 @@ ZozzResult zozzSample(const ZozzAnimation* animation,
 
 ZozzResult zozzLocalToModel(const ZozzSkeleton* skeleton,
                             const ZozzSoaPose* locals,
-                            const ZozzFloat4x4* root, ZozzFloat4x4* out,
+                            const ZozzFloat4x4* root, int from, int to,
+                            int from_excluded, ZozzFloat4x4* out,
                             size_t count) {
   if (skeleton == nullptr || locals == nullptr || out == nullptr) {
     return ZOZZ_RESULT_INVALID_ARGUMENT;
@@ -110,35 +111,13 @@ ZozzResult zozzLocalToModel(const ZozzSkeleton* skeleton,
   if (locals->num_joints != joints) return ZOZZ_RESULT_SKELETON_MISMATCH;
   if (count < static_cast<size_t>(joints)) return ZOZZ_RESULT_BUFFER_TOO_SMALL;
 
-  // ZozzFloat4x4 is layout- and alignment-compatible with ozz's Float4x4;
-  // zozz_abi.cpp static_asserts both properties.
-  ozz::animation::LocalToModelJob job;
-  job.skeleton = &skeleton->impl;
-  job.root = reinterpret_cast<const ozz::math::Float4x4*>(root);
-  job.input = ozz::span<const ozz::math::SoaTransform>(
-      locals->data, static_cast<size_t>(locals->num_soa_joints));
-  job.output = ozz::span<ozz::math::Float4x4>(
-      reinterpret_cast<ozz::math::Float4x4*>(out), static_cast<size_t>(joints));
-
-  if (!job.Validate()) return ZOZZ_RESULT_JOB_INVALID;
-  if (!job.Run()) return ZOZZ_RESULT_JOB_INVALID;
-  return ZOZZ_RESULT_OK;
-}
-
-ZozzResult zozzLocalToModelRange(const ZozzSkeleton* skeleton,
-                                 const ZozzSoaPose* locals,
-                                 const ZozzFloat4x4* root, int from, int to,
-                                 int from_excluded, ZozzFloat4x4* out,
-                                 size_t count) {
-  if (skeleton == nullptr || locals == nullptr || out == nullptr) {
-    return ZOZZ_RESULT_INVALID_ARGUMENT;
-  }
-  if (!IsAligned16(out)) return ZOZZ_RESULT_INVALID_ARGUMENT;
-  if (root != nullptr && !IsAligned16(root)) return ZOZZ_RESULT_INVALID_ARGUMENT;
-
-  const int joints = skeleton->impl.num_joints();
-  if (locals->num_joints != joints) return ZOZZ_RESULT_SKELETON_MISMATCH;
-  if (count < static_cast<size_t>(joints)) return ZOZZ_RESULT_BUFFER_TOO_SMALL;
+  // ozz checks neither bound: `Run` computes Min(to + 1, num_joints), which
+  // overflows for a `to` near INT_MAX, and any out-of-range pair simply ends
+  // the walk immediately and reports success. Both are refused here so an
+  // empty walk is never mistaken for a completed one.
+  if (from < ZOZZ_NO_PARENT || from >= joints) return ZOZZ_RESULT_INVALID_ARGUMENT;
+  if (to < 0 || to > ZOZZ_MAX_JOINTS) return ZOZZ_RESULT_INVALID_ARGUMENT;
+  if (from >= 0 && to < from) return ZOZZ_RESULT_INVALID_ARGUMENT;
 
   // ZozzFloat4x4 is layout- and alignment-compatible with ozz's Float4x4;
   // zozz_abi.cpp static_asserts both properties.

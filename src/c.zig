@@ -143,6 +143,11 @@ pub const AbiLayout = extern struct {
 /// `zozzSkeletonJointParent` returns.
 pub const no_parent: i16 = -1;
 
+/// ozz's `Skeleton::kMaxJoints`, and the value ozz gives
+/// `LocalToModelJob::to` by default -- "walk to the last joint". Mirrors
+/// `ZOZZ_MAX_JOINTS`; `ffi/zozz_abi.cpp` static_asserts it against ozz.
+pub const max_joints: c_int = 1024;
+
 //=============================================================================
 // Callback types
 //=============================================================================
@@ -401,6 +406,9 @@ pub extern fn zozzLocalToModel(
     skeleton: *const Skeleton,
     locals: *const SoaPose,
     root: ?*const Float4x4,
+    from: c_int,
+    to: c_int,
+    from_excluded: c_int,
     out: [*]Float4x4,
     count: usize,
 ) Result;
@@ -561,16 +569,6 @@ pub extern fn zozzAnimationCountRotationKeys(animation: ?*const Animation, track
 pub extern fn zozzAnimationCountScaleKeys(animation: ?*const Animation, track: c_int, out: *c_int) Result;
 
 pub extern fn zozzMotionBlend(layers: ?[*]const MotionBlendLayer, count: usize, out: *Transform) Result;
-pub extern fn zozzLocalToModelRange(
-    skeleton: *const Skeleton,
-    locals: *const SoaPose,
-    root: ?*const Float4x4,
-    from: c_int,
-    to: c_int,
-    from_excluded: c_int,
-    out: [*]Float4x4,
-    count: usize,
-) Result;
 
 //=============================================================================
 // Inverse kinematics

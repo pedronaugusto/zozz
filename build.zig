@@ -1,5 +1,42 @@
 const std = @import("std");
 
+// `build.zig.zon`'s version and `ffi/zozz_core.h`'s ZOZZ_VERSION_* are two
+// homes for one fact: the first is what a Zig consumer resolves, the second
+// is what `zozzVersion()` reports to a C consumer and what the ABI handshake
+// compares. They are compared here, so a bump that misses one is a build
+// failure rather than two libraries disagreeing about which they are.
+comptime {
+    const zon = @import("build.zig.zon");
+    const header = @embedFile("ffi/zozz_core.h");
+    const expected = std.fmt.comptimePrint("{d}.{d}.{d}", .{
+        headerDefine(header, "ZOZZ_VERSION_MAJOR"),
+        headerDefine(header, "ZOZZ_VERSION_MINOR"),
+        headerDefine(header, "ZOZZ_VERSION_PATCH"),
+    });
+    if (!std.mem.eql(u8, zon.version, expected)) {
+        @compileError("build.zig.zon says version \"" ++ zon.version ++
+            "\" but ffi/zozz_core.h's ZOZZ_VERSION_* say \"" ++ expected ++
+            "\". Bump both: the header is the ABI handshake.");
+    }
+}
+
+/// Value of a `#define NAME <integer>` in `source`. A missing or non-integer
+/// define is a compile error, so a renamed macro cannot make the check above
+/// vacuous.
+fn headerDefine(comptime source: []const u8, comptime name: []const u8) comptime_int {
+    comptime {
+        @setEvalBranchQuota(200_000);
+        const needle = "#define " ++ name ++ " ";
+        const at = std.mem.indexOf(u8, source, needle) orelse
+            @compileError("ffi/zozz_core.h has no `" ++ needle ++ "`");
+        const rest = source[at + needle.len ..];
+        var end: usize = 0;
+        while (end < rest.len and rest[end] >= '0' and rest[end] <= '9') end += 1;
+        return std.fmt.parseInt(u32, rest[0..end], 10) catch
+            @compileError(name ++ " is not a plain integer define");
+    }
+}
+
 /// Sources of the vendored ozz runtime that zozz actually needs.
 ///
 /// This list is explicit rather than a directory glob for two reasons: a glob

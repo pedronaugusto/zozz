@@ -42,7 +42,7 @@ extern "C" {
 //===----------------------------------------------------------------------===//
 
 #define ZOZZ_VERSION_MAJOR 0
-#define ZOZZ_VERSION_MINOR 3
+#define ZOZZ_VERSION_MINOR 4
 #define ZOZZ_VERSION_PATCH 0
 
 /// Version of the zozz binding itself, packed as (major<<16)|(minor<<8)|patch.

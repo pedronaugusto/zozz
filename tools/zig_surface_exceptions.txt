@@ -3,9 +3,9 @@
 # `ci/check-coverage.sh` requires every entry point to be reachable from the
 # Zig API, because one that is not is a capability stranded in C: it ships, it
 # is documented, and the host this library exists to serve cannot get at it.
-# That rule found `zozzLocalToModelRange` — the range-limited model-space walk
-# an IK correction wants — sitting unwrapped while the Zig job offered only the
-# whole-skeleton form.
+# That rule once found a range-limited model-space walk sitting unwrapped
+# while the Zig job offered only the whole-skeleton form; the two entry points
+# are one now, with ozz's own `from`/`to` fields on the Zig job.
 #
 # This is the list of the ones where "not called from the Zig API" is correct,
 # and it is enforced in both directions: a name here that IS called is an error
