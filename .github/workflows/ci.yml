@@ -101,6 +101,8 @@ jobs:
         run: ci/check-comments.sh
       - name: Coverage — every public name has a verdict
         run: ci/check-coverage.sh
+      - name: Every committed script is executable
+        run: ci/check-executable.sh
 
   # Compile-only coverage of the targets the suite cannot execute on. These
   # prove the sources and build graph are portable; the `test` job above is
