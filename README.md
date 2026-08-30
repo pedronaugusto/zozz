@@ -67,6 +67,9 @@ try (zozz.LocalToModelJob{
     .root = null,
     .out = models,
 }).run();
+
+// A joint's skinning matrix is its model matrix times its inverse bind pose.
+const skinning = zozz.math.mat4.mul(models[joint], inverse_bind[joint]);
 ```
 
 Add it as a dependency and link the module:
@@ -287,13 +290,13 @@ NaN ratio that is refused.
 | **275** | Zig externs (`pub extern fn` in `src/c.zig`) |
 | **21** | installed public headers |
 | **89** | ozz public names with a binding |
-| **391** | ozz public names in the bound areas |
-| **157** | Zig tests `zig build test` executes |
+| **404** | ozz public names in the bound areas |
+| **165** | Zig tests `zig build test` executes |
 | **10** | tests it skips, each needing a build option or an on-disk asset |
 | **97** | assertions in the standalone C smoke test |
 | **39** | vendored ozz translation units `build.zig` compiles |
 | **20** | zozz C++ translation units (`ffi/*.cpp`) |
-| **10987** | Zig source lines (`src/`) |
+| **11227** | Zig source lines (`src/`) |
 | **8076** | C++ source lines (`ffi/`) |
 | **17** | deliberate drifts `ci/check-abi-drift.sh` must refuse |
 | **17** | steps `ci/run.sh` runs |
@@ -366,6 +369,9 @@ time:
   blending
 - Two-bone and aim IK, and folding a correction back into a pose
 - Matrix-palette skinning (`SkinningJob`)
+- `ozz::math` as Zig rather than as foreign calls: SimdFloat4 and SimdInt4
+  lane operations, quaternions, `Float4x4` including its `*`, `+` and `-`,
+  `Transform` composition, and `Box`
 - Runtime tracks (`Track`): five value types — float, float2, float3, float4,
   quaternion — plus edge-triggering over a `FloatTrack`
 - Root-motion blending

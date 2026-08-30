@@ -61,13 +61,25 @@ else B=; D=; G=; Y=; O=; fi
 bound=$(grep -ho 'zozz[A-Za-z0-9_]*(' ffi/*.h |
         grep -o 'zozz[A-Za-z0-9_]*' | sort -u)
 
+# The ozz types this package hands a caller: a C struct or handle named
+# Zozz<T>, or a Zig type re-exported from src/math.zig. It decides which C++
+# operators below are reported -- an operator on a type nobody can obtain is
+# not a capability this binding is missing, and the type itself is the
+# question in that case, not its arithmetic.
+exposed=$(
+  { grep -hoE 'Zozz[A-Za-z0-9_]+' ffi/*.h | sed 's/^Zozz//'
+    grep -oE '^pub const [A-Z][A-Za-z0-9_]*' src/math.zig | awk '{ print $3 }'
+  } | sort -u)
+
 # Public names ozz declares in one directory: methods, and — unlike a
 # class-only API — free functions declared straight in a namespace, which is
 # most of what base/maths is. gtest_*.h headers are ozz's own test-assertion
 # helpers, shipped next to the maths headers but never part of the library.
 ozz_methods() {
   dir=$OZZ; [ "$1" != "." ] && dir="$OZZ/$1"
-  find "$dir" -maxdepth "${2:-99}" -name '*.h' -not -name 'gtest_*' 2>/dev/null -print0 | xargs -0 awk '
+  find "$dir" -maxdepth "${2:-99}" -name '*.h' -not -name 'gtest_*' 2>/dev/null -print0 |
+  xargs -0 awk -v exposed="$exposed" '
+    BEGIN { split(exposed, e, "\n"); for (i in e) is_exposed[e[i]] = 1 }
     # A new file starts public: namespace scope has no access specifier, so
     # top-level declarations (most of base/maths) are public by default.
     # Reset per file rather than carrying state across the xargs batch.
@@ -88,11 +100,9 @@ ozz_methods() {
       }
     }
     !pub { next }
-    # Jolt documents its solver derivations in /* */ blocks full of prose like
-    # "Jacobian (transposed) (eq 55):", and a word followed by a paren in one
-    # of those reads exactly like a declaration. But a real declaration can
-    # also carry a comment on its own line — every default listener method
-    # ends `{ /* Do nothing */ }` — so a line cannot simply be skipped for
+    # A /* */ block full of prose can hold a word followed by a paren that
+    # reads exactly like a declaration. But a real declaration can also carry
+    # a comment on its own line, so a line cannot simply be skipped for
     # containing one. Strip the comment spans and keep what is left.
     {
       line = $0
@@ -110,6 +120,36 @@ ozz_methods() {
       $0 = line
     }
     /OZZ_ASSERT|^[[:space:]]*\/\// { next }
+    # Operators, qualified by the type they act on. A C ABI cannot export one,
+    # but the arithmetic they carry is most of base/maths, and skipping them
+    # left this blind to the whole surface: Float4x4 * Float4x4 was missing
+    # for three releases with nothing to say so. Float4x4::operator* and
+    # SimdFloat4::operator* are separate capabilities and get separate lines.
+    # An indented declaration is a member and takes its class; one at column
+    # zero is a free function and takes the type of its first parameter.
+    /operator[^A-Za-z0-9_ ]/ {
+      if (!match($0, /operator(\(\)|\[\]|[^A-Za-z0-9_ ()[]+)[[:space:]]*\(/)) next
+      sym = substr($0, RSTART, RLENGTH)
+      sub(/[[:space:]]*\($/, "", sym)
+      # Assignment is C++ value semantics for a type this ABI hands out by
+      # pointer only. There is nothing for a binding to deliver.
+      if (sym == "operator=") next
+      if ($0 ~ /^[[:space:]]/) type = cls
+      else {
+        rest = substr($0, RSTART + RLENGTH)
+        sub(/^[[:space:]]*/, "", rest)
+        sub(/^(const|volatile)[[:space:]]+/, "", rest)
+        type = ""
+        if (match(rest, /^[A-Za-z_][A-Za-z0-9_:]*/)) {
+          type = substr(rest, RSTART, RLENGTH)
+          sub(/^.*::/, "", type)
+          sub(/^_/, "", type)
+        }
+      }
+      if (type == "" || !(type in is_exposed)) next
+      print type "::" sym
+      next
+    }
     match($0, /[A-Za-z_][A-Za-z0-9_]*[[:space:]]*\(/) {
       # Skip `obj.name(` / `obj->name(` / `ns::name(` — a call on something
       # else, not a declaration belonging to this area.

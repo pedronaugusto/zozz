@@ -30,3 +30,5 @@ animation/offline	Validate	BOUND	ZOZZ_RESULT_JOB_INVALID zozzSample zozzLocalToM
 animation/offline	converter	INTERNAL	declared only by no source directory vendored for animation/offline/fbx, which this build does not compile
 animation/offline	scene	INTERNAL	declared only by no source directory vendored for animation/offline/fbx, which this build does not compile
 animation/offline	tolerance	BOUND	ZozzOptimizerSetting
+animation/offline	AnimationOptimizer::operator()	BOUND	zozzAnimationOptimizerRun
+animation/offline	MotionExtractor::operator()	BOUND	zozzMotionExtractorRun

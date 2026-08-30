@@ -19,3 +19,4 @@ options	RegisterOption	BOUND	zozzOptionsParserRegister
 options	UnregisterOption	BOUND	zozzOptionsParserUnregister
 options	Validate	BOUND	ZOZZ_RESULT_JOB_INVALID zozzSample zozzLocalToModel zozzBlendingRun zozzSkinningJobRun zozzIKTwoBoneJobRun zozzFloatTrackTriggeringJobRun zozzSkeletonBuild zozzAnimationBuild zozzFloatTrackBuild ZOZZ_RESULT_INVALID_DATA zozzIArchiveTestSkeleton
 options	default_value	BOUND	zozzIntOptionDefault zozzFloatOptionDefault zozzBoolOptionDefault zozzStringOptionDefault
+options	Option::operator<	LANGUAGE	std.sort orders a host list of options by name

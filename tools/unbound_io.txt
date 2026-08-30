@@ -21,3 +21,5 @@ base/io	TestTag	BOUND	zozzIArchiveTestSkeleton zozzIArchiveTestAnimation zozzIAr
 base/io	Validate	BOUND	ZOZZ_RESULT_JOB_INVALID zozzSample zozzLocalToModel zozzBlendingRun zozzSkinningJobRun zozzIKTwoBoneJobRun zozzFloatTrackTriggeringJobRun zozzSkeletonBuild zozzAnimationBuild zozzFloatTrackBuild ZOZZ_RESULT_INVALID_DATA zozzIArchiveTestSkeleton
 base/io	Write	EXTENSION	ZozzStream zozzOArchiveCreate
 base/io	opened	EXTENSION	ZozzStream zozzOArchiveCreate
+base/io	IArchive::operator>>	BOUND	zozzIArchiveLoad*
+base/io	OArchive::operator<<	BOUND	zozzOArchiveSave*

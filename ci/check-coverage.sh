@@ -173,11 +173,26 @@ awk -F'\t' '
     next
   }
 
-  # ZIG points at a declaration in src/, checked below.
+  # ZIG points at one or more declarations in src/, checked below. More than
+  # one because an upstream name can be overloaded -- ozz declares three
+  # TransformVector -- and one Zig decl per overload is the honest answer.
+  # `mat4.mul` names the decl inside a container, which is what tells
+  # `quaternion.mul` and `mat4.mul` apart.
   verdict == "ZIG" {
-    if (evidence !~ /^src\/[A-Za-z0-9_]+\.zig:([A-Za-z_][A-Za-z0-9_]*|@"[A-Za-z_][A-Za-z0-9_]*")/)
-      printf "  %s: ZIG evidence is not src/FILE.zig:decl\n", name > "/dev/stderr"
-    else print name "\t" evidence > "/dev/stdout"
+    n = 0
+    split(evidence, refs, /[ \t]+/)
+    for (i in refs) {
+      if (refs[i] == "") continue
+      if (refs[i] !~ /^src\/[A-Za-z0-9_]+\.zig:([A-Za-z_][A-Za-z0-9_]*\.)?([A-Za-z_][A-Za-z0-9_]*|@"[A-Za-z_][A-Za-z0-9_]*")$/) {
+        printf "  %s: %s is not src/FILE.zig:decl or src/FILE.zig:container.decl\n",
+          name, refs[i] > "/dev/stderr"
+        n = -1000
+        continue
+      }
+      n++
+      print name "\t" refs[i] > "/dev/stdout"
+    }
+    if (n == 0) printf "  %s: ZIG names no declaration\n", name > "/dev/stderr"
     next
   }
 
@@ -199,9 +214,25 @@ fi
 while IFS=$'\t' read -r name ref; do
   file=${ref%%:*}; decl=${ref#*:}
   [ -f "$file" ] || { printf '  %s: %s does not exist\n' "$name" "$file" >&2; continue; }
-  grep -qF "pub fn $decl(" "$file" ||
-    grep -qE "^[[:space:]]*pub (fn|const|inline fn) $decl\b" "$file" ||
-    printf '  %s: %s declares no %s\n' "$name" "$file" "$decl" >&2
+  # container.decl: the declaration has to be inside that container, or
+  # `mat4.mul` would be satisfied by `quaternion.mul` -- the ambiguity this
+  # spelling exists to remove.
+  case "$decl" in
+  *.*)
+    awk -v c="${decl%%.*}" -v m="${decl#*.}" '
+      $0 ~ "^pub const " c " = struct \\{" { inside = 1; next }
+      inside && /^\};/ { inside = 0 }
+      inside && $0 ~ "^[[:space:]]+pub (fn|const|inline fn) " m "([(:]| =)" { found = 1 }
+      END { exit !found }' "$file" ||
+      printf '  %s: %s declares no %s inside %s\n' \
+        "$name" "$file" "${decl#*.}" "${decl%%.*}" >&2
+    ;;
+  *)
+    grep -qF "pub fn $decl(" "$file" ||
+      grep -qE "^[[:space:]]*pub (fn|const|inline fn) $decl\b" "$file" ||
+      printf '  %s: %s declares no %s\n' "$name" "$file" "$decl" >&2
+    ;;
+  esac
 done < "$work/zigrefs" 2>&1 >/dev/null | tee "$work/zigmiss" >&2
 [ -s "$work/zigmiss" ] && fail "$(grep -c . "$work/zigmiss") ZIG line(s) pointing at nothing"
 
