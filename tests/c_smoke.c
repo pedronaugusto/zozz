@@ -436,6 +436,29 @@ static void test_archive_round_trip(void) {
             zozzSkeletonNumJoints(skeleton));
       CHECK(strcmp(zozzSkeletonJointName(loaded_skeleton, 1),
                    zozzSkeletonJointName(skeleton, 1)) == 0);
+
+      // The bulk views are ozz's own arrays: same answers as the per-joint
+      // accessors, one crossing instead of one per joint, and borrowed.
+      size_t parent_count = 0;
+      const int16_t* parents =
+          zozzSkeletonJointParents(loaded_skeleton, &parent_count);
+      CHECK(parent_count == (size_t)zozzSkeletonNumJoints(loaded_skeleton));
+      CHECK(parents != NULL && parents[0] == ZOZZ_NO_PARENT);
+      CHECK(parents[1] == zozzSkeletonJointParent(loaded_skeleton, 1));
+
+      size_t name_count = 0;
+      const char* const* names =
+          zozzSkeletonJointNames(loaded_skeleton, &name_count);
+      CHECK(name_count == parent_count);
+      CHECK(names != NULL && strcmp(names[1], "child") == 0);
+
+      size_t block_count = 0;
+      const ZozzSoaTransform* rest =
+          zozzSkeletonJointRestPoses(loaded_skeleton, &block_count);
+      CHECK(block_count ==
+            (size_t)zozzSkeletonNumSoaJoints(loaded_skeleton));
+      CHECK(rest != NULL);
+
       zozzSkeletonDestroy(loaded_skeleton);
     }
 

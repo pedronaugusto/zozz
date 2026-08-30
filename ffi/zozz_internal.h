@@ -88,6 +88,12 @@ inline const ozz::math::SoaTransform* AsOzz(const ZozzSoaTransform* p) {
   return reinterpret_cast<const ozz::math::SoaTransform*>(p);
 }
 
+/// The other direction, for the accessors that hand ozz's own storage back
+/// out as a borrowed view rather than copying it.
+inline const ZozzSoaTransform* AsAbi(const ozz::math::SoaTransform* p) {
+  return reinterpret_cast<const ZozzSoaTransform*>(p);
+}
+
 inline ozz::math::SimdFloat4* AsOzz(ZozzSimdFloat4* p) {
   return reinterpret_cast<ozz::math::SimdFloat4*>(p);
 }

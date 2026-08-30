@@ -84,6 +84,38 @@ int16_t zozzSkeletonJointParent(const ZozzSkeleton* skeleton, int joint) {
   return skeleton->impl.joint_parents()[joint];
 }
 
+const int16_t* zozzSkeletonJointParents(const ZozzSkeleton* skeleton,
+                                        size_t* out_count) {
+  if (out_count == nullptr) return nullptr;
+  *out_count = 0;
+  if (skeleton == nullptr) return nullptr;
+  const ozz::span<const int16_t> parents = skeleton->impl.joint_parents();
+  *out_count = parents.size();
+  return parents.data();
+}
+
+const char* const* zozzSkeletonJointNames(const ZozzSkeleton* skeleton,
+                                          size_t* out_count) {
+  if (out_count == nullptr) return nullptr;
+  *out_count = 0;
+  if (skeleton == nullptr) return nullptr;
+  const ozz::span<const char* const> names = skeleton->impl.joint_names();
+  *out_count = names.size();
+  return names.data();
+}
+
+const ZozzSoaTransform* zozzSkeletonJointRestPoses(
+    const ZozzSkeleton* skeleton,
+    size_t* out_count) {
+  if (out_count == nullptr) return nullptr;
+  *out_count = 0;
+  if (skeleton == nullptr) return nullptr;
+  const ozz::span<const ozz::math::SoaTransform> rest =
+      skeleton->impl.joint_rest_poses();
+  *out_count = rest.size();
+  return zozz::AsAbi(rest.data());
+}
+
 ZozzResult zozzSkeletonRestPose(const ZozzSkeleton* skeleton,
                                 ZozzTransform* out, size_t count) {
   if (skeleton == nullptr || out == nullptr) return ZOZZ_RESULT_INVALID_ARGUMENT;

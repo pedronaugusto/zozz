@@ -318,6 +318,9 @@ pub extern fn zozzSkeletonNumJoints(skeleton: ?*const Skeleton) c_int;
 pub extern fn zozzSkeletonNumSoaJoints(skeleton: ?*const Skeleton) c_int;
 pub extern fn zozzSkeletonJointName(skeleton: ?*const Skeleton, joint: c_int) ?[*:0]const u8;
 pub extern fn zozzSkeletonJointParent(skeleton: ?*const Skeleton, joint: c_int) i16;
+pub extern fn zozzSkeletonJointParents(skeleton: ?*const Skeleton, out_count: *usize) ?[*]const i16;
+pub extern fn zozzSkeletonJointNames(skeleton: ?*const Skeleton, out_count: *usize) ?[*]const [*:0]const u8;
+pub extern fn zozzSkeletonJointRestPoses(skeleton: ?*const Skeleton, out_count: *usize) ?[*]const SoaTransform;
 pub extern fn zozzSkeletonRestPose(skeleton: ?*const Skeleton, out: [*]Transform, count: usize) Result;
 pub extern fn zozzSkeletonRestPoseSoa(skeleton: ?*const Skeleton, out: [*]SoaTransform, blocks: usize) Result;
 
