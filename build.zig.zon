@@ -15,6 +15,7 @@
         "src",
         "tests",
         "BINDING.md",
+        "CHANGELOG.md",
         "LICENSE",
         "README.md",
         "UPSTREAM.md",
