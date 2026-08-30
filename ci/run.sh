@@ -24,6 +24,12 @@
 set -uo pipefail
 cd "$(dirname "$0")/.."
 
+# Overridable so a caller can point at a specific toolchain or a wrapper (a
+# build lock, a timing shim) without editing this file. ci/check-abi-drift.sh
+# reads the same variable. Used unquoted below on purpose: a wrapper is more
+# than one word.
+ZIG="${ZIG:-zig}"
+
 QUICK=0
 [ "${1:-}" = "--quick" ] && QUICK=1
 
@@ -60,7 +66,7 @@ run() {
 
 section() { printf '\n%s%s%s\n' "$BOLD" "$1" "$OFF"; }
 
-printf '%szozz local CI%s  %s%s%s\n' "$BOLD" "$OFF" "$DIM" "$(zig version)" "$OFF"
+printf '%szozz local CI%s  %s%s%s\n' "$BOLD" "$OFF" "$DIM" "$($ZIG version)" "$OFF"
 
 #-----------------------------------------------------------------------------
 section 'Hygiene'
@@ -69,7 +75,7 @@ section 'Hygiene'
 # Only our own Zig sources: libs/ozz is vendored verbatim and must not be
 # reformatted, or the next re-vendor becomes an unreadable diff.
 run 'zig fmt (src, tests, build.zig)' \
-  zig fmt --check src tests/consumer build.zig
+  $ZIG fmt --check src tests/consumer build.zig
 
 # Every header ffi/zozz.h pulls in has to be installed with the library, or a C
 # consumer gets an umbrella header that does not resolve. The consumer test
@@ -125,27 +131,32 @@ fi
 # consumer's link — so zozz's own Debug run asks for it explicitly. This is the
 # run that would catch undefined behaviour in our own code.
 run 'test Debug (UBSan on)' \
-  zig build test -Doptimize=Debug -Dsanitize_c=true ${ASSET_ARGS[@]+"${ASSET_ARGS[@]}"}
+  $ZIG build test -Doptimize=Debug -Dsanitize_c=true ${ASSET_ARGS[@]+"${ASSET_ARGS[@]}"}
 
 # The truncated-archive test only runs with the sanitizer off — see UPSTREAM.md
 # for why (upstream ozz UB on zero-count arrays). This is the run that proves
 # malformed input is rejected.
 run 'test Debug (UBSan off, truncation)' \
-  zig build test -Doptimize=Debug -Dsanitize_c=false ${ASSET_ARGS[@]+"${ASSET_ARGS[@]}"}
+  $ZIG build test -Doptimize=Debug -Dsanitize_c=false ${ASSET_ARGS[@]+"${ASSET_ARGS[@]}"}
 
 if [ $QUICK -eq 0 ]; then
   for mode in ReleaseSafe ReleaseFast ReleaseSmall; do
-    run "test $mode" zig build test -Doptimize="$mode" -Dsanitize_c=false ${ASSET_ARGS[@]+"${ASSET_ARGS[@]}"}
+    run "test $mode" $ZIG build test -Doptimize="$mode" -Dsanitize_c=false ${ASSET_ARGS[@]+"${ASSET_ARGS[@]}"}
   done
 
   # The C boundary on its own, with no Zig in the picture.
-  run 'test-c (C ABI standalone)' zig build test-c
+  run 'test-c (C ABI standalone)' $ZIG build test-c
+
+  # -Doptions and -Dgltf are off by default, so nothing above compiles either
+  # of them, let alone the six tests that only exist behind them. A build
+  # option no gate ever turns on is an option that rots.
+  run 'test -Doptions -Dgltf (the optional halves)' \n    $ZIG build test -Doptions=true -Dgltf=true -Dsanitize_c=false
 
   # Consuming zozz as a dependency is a different code path from building it —
   # artifact registration and installed-header spelling are invisible to the
   # in-repo suite. See tests/consumer/build.zig.
   run 'consumer (module + artifact)' \
-    zig build --build-file tests/consumer/build.zig run
+    $ZIG build --build-file tests/consumer/build.zig run
 
   #---------------------------------------------------------------------------
   section 'ABI'
@@ -174,7 +185,7 @@ for target in \
   x86_64-macos \
   aarch64-macos
 do
-  run "build $target" zig build -Dtarget="$target"
+  run "build $target" $ZIG build -Dtarget="$target"
 done
 
 # x86_64-windows-msvc is absent here because it needs the Microsoft standard
@@ -185,9 +196,9 @@ done
 section 'Build configurations'
 #-----------------------------------------------------------------------------
 
-run 'shared library' zig build -Dshared=true
-run 'asserts off' zig build -Denable_asserts=false
-run 'ReleaseFast + asserts on' zig build -Doptimize=ReleaseFast -Denable_asserts=true
+run 'shared library' $ZIG build -Dshared=true
+run 'asserts off' $ZIG build -Denable_asserts=false
+run 'ReleaseFast + asserts on' $ZIG build -Doptimize=ReleaseFast -Denable_asserts=true
 fi
 
 #-----------------------------------------------------------------------------

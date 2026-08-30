@@ -1,7 +1,7 @@
 //===----------------------------------------------------------------------===//
 // zozz — ozz::animation::offline::OzzImporter, ozz's converter interface, in
 // both directions: a concrete glTF-backed importer (-Dgltf, off by default —
-// tinygltf's JSON parser is weight a runtime-only consumer should not pay for),
+// tinygltf's JSON parser is weight a runtime-only consumer should not carry),
 // and a host-implementable ZozzImporterInterface (-Doptions) for a host with
 // its own source format. Every entry point is declared unconditionally and
 // returns ZOZZ_RESULT_UNSUPPORTED when its option is off. zozzImporterRun (the

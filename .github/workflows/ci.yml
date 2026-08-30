@@ -64,6 +64,13 @@ jobs:
       - name: Test — C ABI standalone
         run: zig build test-c
 
+      # -Doptions and -Dgltf are off by default, so every step above compiles
+      # neither, and the tests that only exist behind them are never built on
+      # any platform. A build option no gate ever turns on is an option that
+      # rots — this is the step that keeps both halves alive.
+      - name: Test — optional halves (-Doptions, -Dgltf)
+        run: zig build test -Doptions=true -Dgltf=true -Dsanitize_c=false
+
       # Zig's default ABI for Windows is gnu, so every step above exercises
       # that one and the MSVC branches in build.zig would never be built at
       # all. On a Windows runner the MSVC ABI is native, so the suite can run
@@ -71,6 +78,11 @@ jobs:
       - name: Test — Windows MSVC ABI
         if: runner.os == 'Windows'
         run: zig build test -Dtarget=x86_64-windows-msvc -Dsanitize_c=false
+
+      - name: Test — Windows MSVC ABI, optional halves
+        if: runner.os == 'Windows'
+        run: |
+          zig build test -Dtarget=x86_64-windows-msvc -Dsanitize_c=false             -Doptions=true -Dgltf=true
 
       # Consuming zozz through `b.dependency` is a different code path from
       # building it: artifacts resolve by scanning the dependency's install

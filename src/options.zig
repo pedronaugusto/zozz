@@ -63,13 +63,16 @@ pub const OptionsParser = struct {
 
     /// Fails on a duplicate name, a duplicate registration of `option`, or a
     /// full parser (see `maxOptions`).
-    pub fn register(self: OptionsParser, option: *c.Option) err.Error!void {
-        try err.check(c.zozzOptionsParserRegister(self.handle.?, option));
+    /// Registers `option` — an `IntOption`, `FloatOption`, `BoolOption` or
+    /// `StringOption`, all four of which wrap one `c.Option`. Taking the
+    /// option rather than its handle keeps `.handle` out of calling code.
+    pub fn register(self: OptionsParser, option: anytype) err.Error!void {
+        try err.check(c.zozzOptionsParserRegister(self.handle.?, option.handle.?));
     }
 
     /// Fails if `option` is not currently registered with `self`.
-    pub fn unregister(self: OptionsParser, option: *c.Option) err.Error!void {
-        try err.check(c.zozzOptionsParserUnregister(self.handle.?, option));
+    pub fn unregister(self: OptionsParser, option: anytype) err.Error!void {
+        try err.check(c.zozzOptionsParserUnregister(self.handle.?, option.handle.?));
     }
 
     pub fn setUsage(self: OptionsParser, usage_string: ?[*:0]const u8) err.Error!void {
