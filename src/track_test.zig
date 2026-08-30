@@ -224,3 +224,46 @@ test "the track optimizer reduces keyframe count within tolerance of the origina
         try std.testing.expectApproxEqAbs(a, b, 1e-2);
     }
 }
+
+test "a raw track reads back what was authored, and validates ratio order" {
+    var raw = try zozz.RawFloat3Track.init();
+    defer raw.deinit();
+
+    try std.testing.expectEqualStrings("", raw.name());
+    try raw.setName("wind");
+    try raw.pushKeyframe(.step, 0.0, .{ 1, 0, 0 });
+    try raw.pushKeyframe(.linear, 0.5, .{ 0, 1, 0 });
+
+    var keys: [4]zozz.Float3Keyframe = undefined;
+    const back = try raw.keyframes(&keys);
+    try std.testing.expectEqual(@as(usize, 2), back.len);
+    try std.testing.expectEqual(zozz.TrackInterpolation.step, back[0].interpolation);
+    try std.testing.expectEqual(@as(f32, 0.0), back[0].ratio);
+    try std.testing.expectEqual([3]f32{ 1, 0, 0 }, back[0].value);
+    try std.testing.expectEqual(zozz.TrackInterpolation.linear, back[1].interpolation);
+    try std.testing.expectEqual(@as(f32, 0.5), back[1].ratio);
+    try std.testing.expectEqual([3]f32{ 0, 1, 0 }, back[1].value);
+
+    // A short buffer is refused before anything is written.
+    var one: [1]zozz.Float3Keyframe = .{.{ .interpolation = .step, .ratio = -1, .value = .{ 9, 9, 9 } }};
+    try std.testing.expectError(error.BufferTooSmall, raw.keyframes(&one));
+    try std.testing.expectEqual(@as(f32, -1), one[0].ratio);
+
+    // ozz's RawTrack::Validate wants strictly ascending ratios; the push
+    // entry point cannot see order, so this is where it surfaces — before
+    // build, which reports the same thing as error.InvalidData.
+    try std.testing.expect(raw.validate());
+    try raw.pushKeyframe(.linear, 0.25, .{ 0, 0, 1 });
+    try std.testing.expect(!raw.validate());
+    try std.testing.expectError(error.InvalidData, raw.build());
+
+    // Clearing keeps the name and lets the track be rewritten.
+    try raw.clear();
+    try std.testing.expectEqual(@as(u32, 0), raw.numKeyframes());
+    try std.testing.expectEqualStrings("wind", raw.name());
+    try raw.pushKeyframe(.linear, 0.0, .{ 2, 2, 2 });
+    try std.testing.expect(raw.validate());
+    var built = try raw.build();
+    defer built.deinit();
+    try std.testing.expectEqualStrings("wind", built.name());
+}

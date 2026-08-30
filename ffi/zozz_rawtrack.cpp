@@ -70,6 +70,76 @@ ZozzResult CheckOptimize(const void* input, const void* output,
   return ZOZZ_RESULT_OK;
 }
 
+/// The float the C keyframe structs store their value in. A single-channel
+/// track's key carries a bare float and the others carry an array, so the
+/// destination is reached through an overload rather than by name — which is
+/// what lets one template below serve all five value types.
+float* ValuePtr(float& value) { return &value; }
+float* ValuePtr(float (&value)[2]) { return value; }
+float* ValuePtr(float (&value)[3]) { return value; }
+float* ValuePtr(float (&value)[4]) { return value; }
+
+void WriteValue(float* out, float value) { out[0] = value; }
+
+void WriteValue(float* out, const ozz::math::Float2& value) {
+  out[0] = value.x;
+  out[1] = value.y;
+}
+
+void WriteValue(float* out, const ozz::math::Float3& value) {
+  out[0] = value.x;
+  out[1] = value.y;
+  out[2] = value.z;
+}
+
+void WriteValue(float* out, const ozz::math::Float4& value) {
+  out[0] = value.x;
+  out[1] = value.y;
+  out[2] = value.z;
+  out[3] = value.w;
+}
+
+void WriteValue(float* out, const ozz::math::Quaternion& value) {
+  out[0] = value.x;
+  out[1] = value.y;
+  out[2] = value.z;
+  out[3] = value.w;
+}
+
+/// Shared keyframe read-back across all five track types. Caller-owned
+/// memory, exact-or-larger capacity, nothing written on a short buffer — the
+/// same contract zozz_track.h's runtime read-back has.
+template <typename Handle, typename Key>
+ZozzResult RawTrackKeyframes(const Handle* raw, Key* out, size_t count) {
+  if (raw == nullptr || out == nullptr) return ZOZZ_RESULT_INVALID_ARGUMENT;
+  const auto& keys = raw->impl.keyframes;
+  if (count < keys.size()) return ZOZZ_RESULT_BUFFER_TOO_SMALL;
+  for (size_t i = 0; i < keys.size(); ++i) {
+    out[i].interpolation =
+        keys[i].interpolation ==
+                ozz::animation::offline::RawTrackInterpolation::kStep
+            ? ZOZZ_TRACK_INTERPOLATION_STEP
+            : ZOZZ_TRACK_INTERPOLATION_LINEAR;
+    out[i].ratio = keys[i].ratio;
+    WriteValue(ValuePtr(out[i].value), keys[i].value);
+  }
+  return ZOZZ_RESULT_OK;
+}
+
+template <typename Handle>
+ZozzResult RawTrackSetName(Handle* raw, const char* name) {
+  if (raw == nullptr) return ZOZZ_RESULT_INVALID_ARGUMENT;
+  raw->impl.name = name == nullptr ? "" : name;
+  return ZOZZ_RESULT_OK;
+}
+
+template <typename Handle>
+ZozzResult RawTrackClear(Handle* raw) {
+  if (raw == nullptr) return ZOZZ_RESULT_INVALID_ARGUMENT;
+  raw->impl.keyframes.clear();
+  return ZOZZ_RESULT_OK;
+}
+
 }  // namespace
 
 //===----------------------------------------------------------------------===//
@@ -140,6 +210,27 @@ ZozzResult zozzRawFloatTrackOptimize(const ZozzRawFloatTrack* input,
   return ok ? ZOZZ_RESULT_OK : ZOZZ_RESULT_INVALID_DATA;
 }
 
+bool zozzRawFloatTrackValidate(const ZozzRawFloatTrack* raw) {
+  return raw != nullptr && raw->impl.Validate();
+}
+
+const char* zozzRawFloatTrackName(const ZozzRawFloatTrack* raw) {
+  return raw == nullptr ? nullptr : raw->impl.name.c_str();
+}
+
+ZozzResult zozzRawFloatTrackSetName(ZozzRawFloatTrack* raw, const char* name) {
+  return RawTrackSetName(raw, name);
+}
+
+ZozzResult zozzRawFloatTrackKeyframes(const ZozzRawFloatTrack* raw,
+                                      ZozzRawFloatKeyframe* out, size_t count) {
+  return RawTrackKeyframes(raw, out, count);
+}
+
+ZozzResult zozzRawFloatTrackClear(ZozzRawFloatTrack* raw) {
+  return RawTrackClear(raw);
+}
+
 //===----------------------------------------------------------------------===//
 // RawFloat2Track
 //===----------------------------------------------------------------------===//
@@ -200,6 +291,29 @@ ZozzResult zozzRawFloat2TrackOptimize(const ZozzRawFloat2Track* input,
   return ok ? ZOZZ_RESULT_OK : ZOZZ_RESULT_INVALID_DATA;
 }
 
+bool zozzRawFloat2TrackValidate(const ZozzRawFloat2Track* raw) {
+  return raw != nullptr && raw->impl.Validate();
+}
+
+const char* zozzRawFloat2TrackName(const ZozzRawFloat2Track* raw) {
+  return raw == nullptr ? nullptr : raw->impl.name.c_str();
+}
+
+ZozzResult zozzRawFloat2TrackSetName(ZozzRawFloat2Track* raw,
+                                     const char* name) {
+  return RawTrackSetName(raw, name);
+}
+
+ZozzResult zozzRawFloat2TrackKeyframes(const ZozzRawFloat2Track* raw,
+                                       ZozzRawFloat2Keyframe* out,
+                                       size_t count) {
+  return RawTrackKeyframes(raw, out, count);
+}
+
+ZozzResult zozzRawFloat2TrackClear(ZozzRawFloat2Track* raw) {
+  return RawTrackClear(raw);
+}
+
 //===----------------------------------------------------------------------===//
 // RawFloat3Track
 //===----------------------------------------------------------------------===//
@@ -258,6 +372,29 @@ ZozzResult zozzRawFloat3TrackOptimize(const ZozzRawFloat3Track* input,
   optimizer.tolerance = tolerance;
   const bool ok = optimizer(input->impl, &output->impl);
   return ok ? ZOZZ_RESULT_OK : ZOZZ_RESULT_INVALID_DATA;
+}
+
+bool zozzRawFloat3TrackValidate(const ZozzRawFloat3Track* raw) {
+  return raw != nullptr && raw->impl.Validate();
+}
+
+const char* zozzRawFloat3TrackName(const ZozzRawFloat3Track* raw) {
+  return raw == nullptr ? nullptr : raw->impl.name.c_str();
+}
+
+ZozzResult zozzRawFloat3TrackSetName(ZozzRawFloat3Track* raw,
+                                     const char* name) {
+  return RawTrackSetName(raw, name);
+}
+
+ZozzResult zozzRawFloat3TrackKeyframes(const ZozzRawFloat3Track* raw,
+                                       ZozzRawFloat3Keyframe* out,
+                                       size_t count) {
+  return RawTrackKeyframes(raw, out, count);
+}
+
+ZozzResult zozzRawFloat3TrackClear(ZozzRawFloat3Track* raw) {
+  return RawTrackClear(raw);
 }
 
 //===----------------------------------------------------------------------===//
@@ -321,6 +458,29 @@ ZozzResult zozzRawFloat4TrackOptimize(const ZozzRawFloat4Track* input,
   return ok ? ZOZZ_RESULT_OK : ZOZZ_RESULT_INVALID_DATA;
 }
 
+bool zozzRawFloat4TrackValidate(const ZozzRawFloat4Track* raw) {
+  return raw != nullptr && raw->impl.Validate();
+}
+
+const char* zozzRawFloat4TrackName(const ZozzRawFloat4Track* raw) {
+  return raw == nullptr ? nullptr : raw->impl.name.c_str();
+}
+
+ZozzResult zozzRawFloat4TrackSetName(ZozzRawFloat4Track* raw,
+                                     const char* name) {
+  return RawTrackSetName(raw, name);
+}
+
+ZozzResult zozzRawFloat4TrackKeyframes(const ZozzRawFloat4Track* raw,
+                                       ZozzRawFloat4Keyframe* out,
+                                       size_t count) {
+  return RawTrackKeyframes(raw, out, count);
+}
+
+ZozzResult zozzRawFloat4TrackClear(ZozzRawFloat4Track* raw) {
+  return RawTrackClear(raw);
+}
+
 //===----------------------------------------------------------------------===//
 // RawQuaternionTrack
 //===----------------------------------------------------------------------===//
@@ -382,6 +542,29 @@ ZozzResult zozzRawQuaternionTrackOptimize(const ZozzRawQuaternionTrack* input,
   optimizer.tolerance = tolerance;
   const bool ok = optimizer(input->impl, &output->impl);
   return ok ? ZOZZ_RESULT_OK : ZOZZ_RESULT_INVALID_DATA;
+}
+
+bool zozzRawQuaternionTrackValidate(const ZozzRawQuaternionTrack* raw) {
+  return raw != nullptr && raw->impl.Validate();
+}
+
+const char* zozzRawQuaternionTrackName(const ZozzRawQuaternionTrack* raw) {
+  return raw == nullptr ? nullptr : raw->impl.name.c_str();
+}
+
+ZozzResult zozzRawQuaternionTrackSetName(ZozzRawQuaternionTrack* raw,
+                                         const char* name) {
+  return RawTrackSetName(raw, name);
+}
+
+ZozzResult zozzRawQuaternionTrackKeyframes(const ZozzRawQuaternionTrack* raw,
+                                           ZozzRawQuaternionKeyframe* out,
+                                           size_t count) {
+  return RawTrackKeyframes(raw, out, count);
+}
+
+ZozzResult zozzRawQuaternionTrackClear(ZozzRawQuaternionTrack* raw) {
+  return RawTrackClear(raw);
 }
 
 }  // extern "C"

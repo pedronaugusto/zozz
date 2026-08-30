@@ -593,3 +593,380 @@ test "IArchive.endianSwap reports whether the stored byte order differs from thi
         try std.testing.expect(!in.endianSwap());
     }
 }
+
+//=============================================================================
+// The offline types
+//
+// A cook stage's output is a RAW skeleton, clip or track, and until it can be
+// written and read back the stage cannot hand it to the next one. These pin
+// the round trip: what comes back is what went in, key for key, and the one
+// thing that does NOT survive — a raw skeleton's authoring order — is pinned
+// as loudly as the things that do.
+//=============================================================================
+
+/// Authors a two-root, uneven-depth raw skeleton whose insertion order is
+/// deliberately NOT depth-first, so a round trip has something to reindex.
+fn authorRawSkeleton() !zozz.RawSkeleton {
+    var raw = try zozz.RawSkeleton.init();
+    errdefer raw.deinit();
+    const root = try raw.addJoint(null, "root", restAt(.{ 0, 0, 0 }));
+    const a = try raw.addJoint(root, "a", restAt(.{ 1, 0, 0 }));
+    _ = try raw.addJoint(root, "b", restAt(.{ 2, 0, 0 }));
+    _ = try raw.addJoint(a, "c", restAt(.{ 3, 0, 0 }));
+    return raw;
+}
+
+test "a raw skeleton round-trips its names, parents and rest transforms" {
+    const gpa = std.testing.allocator;
+    var stream = MemoryStream{ .gpa = gpa };
+    defer stream.deinit();
+
+    var raw = try authorRawSkeleton();
+    defer raw.deinit();
+
+    {
+        const host = stream.stream();
+        var out = try zozz.OArchive.init(&host, zozz.nativeEndianness());
+        defer out.deinit();
+        try out.saveRawSkeleton(raw);
+    }
+
+    stream.pos = 0;
+    const host = stream.stream();
+    var in = try zozz.IArchive.init(&host);
+    defer in.deinit();
+    try std.testing.expect(in.testRawSkeleton());
+    var loaded = try in.loadRawSkeleton();
+    defer loaded.deinit();
+
+    try std.testing.expectEqual(raw.numJoints(), loaded.numJoints());
+
+    // The AUTHORED order was root, a, b, c(child of a). ozz archives the
+    // nested tree, so what comes back is the tree's depth-first order —
+    // root, a, c, b — the same reindexing `build` performs. This is the one
+    // property the round trip does not preserve, and it is documented in
+    // ffi/zozz_archive.h rather than left for a consumer to discover.
+    try std.testing.expectEqualStrings("root", loaded.jointName(0).?);
+    try std.testing.expectEqualStrings("a", loaded.jointName(1).?);
+    try std.testing.expectEqualStrings("c", loaded.jointName(2).?);
+    try std.testing.expectEqualStrings("b", loaded.jointName(3).?);
+
+    try std.testing.expectEqual(@as(?u32, null), loaded.jointParent(0));
+    try std.testing.expectEqual(@as(?u32, 0), loaded.jointParent(1));
+    try std.testing.expectEqual(@as(?u32, 1), loaded.jointParent(2));
+    try std.testing.expectEqual(@as(?u32, 0), loaded.jointParent(3));
+
+    try std.testing.expectEqual(@as(f32, 3), (try loaded.jointRest(2)).translation[0]);
+    try std.testing.expectEqual(@as(f32, 2), (try loaded.jointRest(3)).translation[0]);
+
+    // And the two build into the same runtime skeleton, which is the
+    // property a cook actually depends on.
+    var from_original = try raw.build();
+    defer from_original.deinit();
+    var from_loaded = try loaded.build();
+    defer from_loaded.deinit();
+    try std.testing.expectEqual(from_original.numJoints(), from_loaded.numJoints());
+    for (0..from_original.numJoints()) |joint| {
+        const i: u32 = @intCast(joint);
+        try std.testing.expectEqualStrings(
+            from_original.jointName(i).?,
+            from_loaded.jointName(i).?,
+        );
+        try std.testing.expectEqual(from_original.jointParent(i), from_loaded.jointParent(i));
+    }
+}
+
+test "a raw animation round-trips key for key, name and duration included" {
+    const gpa = std.testing.allocator;
+    var stream = MemoryStream{ .gpa = gpa };
+    defer stream.deinit();
+
+    var raw = try zozz.RawAnimation.init(2, 3.0, "cached");
+    defer raw.deinit();
+    try raw.pushTranslation(0, 0.0, .{ 1, 2, 3 });
+    try raw.pushTranslation(0, 1.5, .{ 4, 5, 6 });
+    try raw.pushRotation(1, 0.25, .{ 0, 0.7071068, 0, 0.7071068 });
+    try raw.pushScale(1, 3.0, .{ 2, 2, 2 });
+
+    {
+        const host = stream.stream();
+        var out = try zozz.OArchive.init(&host, zozz.nativeEndianness());
+        defer out.deinit();
+        try out.saveRawAnimation(raw);
+    }
+
+    stream.pos = 0;
+    const host = stream.stream();
+    var in = try zozz.IArchive.init(&host);
+    defer in.deinit();
+    try std.testing.expect(in.testRawAnimation());
+    var loaded = try in.loadRawAnimation();
+    defer loaded.deinit();
+
+    try std.testing.expectEqual(@as(u32, 2), loaded.numTracks());
+    try std.testing.expectEqual(@as(f32, 3.0), loaded.duration());
+    try std.testing.expectEqualStrings("cached", loaded.name());
+
+    var mine: [8]zozz.TranslationKey = undefined;
+    var theirs: [8]zozz.TranslationKey = undefined;
+    const a = try raw.translations(0, &mine);
+    const b = try loaded.translations(0, &theirs);
+    try std.testing.expectEqualSlices(zozz.TranslationKey, a, b);
+
+    var r_mine: [8]zozz.RotationKey = undefined;
+    var r_theirs: [8]zozz.RotationKey = undefined;
+    try std.testing.expectEqualSlices(
+        zozz.RotationKey,
+        try raw.rotations(1, &r_mine),
+        try loaded.rotations(1, &r_theirs),
+    );
+
+    var s_mine: [8]zozz.ScaleKey = undefined;
+    var s_theirs: [8]zozz.ScaleKey = undefined;
+    try std.testing.expectEqualSlices(
+        zozz.ScaleKey,
+        try raw.scales(1, &s_mine),
+        try loaded.scales(1, &s_theirs),
+    );
+}
+
+test "a raw float track round-trips its keyframes, interpolation modes and name" {
+    const gpa = std.testing.allocator;
+    var stream = MemoryStream{ .gpa = gpa };
+    defer stream.deinit();
+
+    var raw = try zozz.RawFloatTrack.init();
+    defer raw.deinit();
+    try raw.setName("intensity");
+    try raw.pushKeyframe(.step, 0.0, 1.0);
+    try raw.pushKeyframe(.linear, 0.5, 2.0);
+    try raw.pushKeyframe(.step, 1.0, 3.0);
+
+    {
+        const host = stream.stream();
+        var out = try zozz.OArchive.init(&host, zozz.nativeEndianness());
+        defer out.deinit();
+        try out.saveRawFloatTrack(raw);
+    }
+
+    stream.pos = 0;
+    const host = stream.stream();
+    var in = try zozz.IArchive.init(&host);
+    defer in.deinit();
+    try std.testing.expect(in.testRawFloatTrack());
+    var loaded = try in.loadRawFloatTrack();
+    defer loaded.deinit();
+
+    try std.testing.expectEqualStrings("intensity", loaded.name());
+    var mine: [8]zozz.FloatKeyframe = undefined;
+    var theirs: [8]zozz.FloatKeyframe = undefined;
+    try std.testing.expectEqualSlices(
+        zozz.FloatKeyframe,
+        try raw.keyframes(&mine),
+        try loaded.keyframes(&theirs),
+    );
+
+    // Clearing is what an edit starts with, and it keeps the name.
+    try loaded.clear();
+    try std.testing.expectEqual(@as(u32, 0), loaded.numKeyframes());
+    try std.testing.expectEqualStrings("intensity", loaded.name());
+}
+
+test "a raw quaternion track round-trips (x, y, z, w) order" {
+    const gpa = std.testing.allocator;
+    var stream = MemoryStream{ .gpa = gpa };
+    defer stream.deinit();
+
+    var raw = try zozz.RawQuaternionTrack.init();
+    defer raw.deinit();
+    try raw.pushKeyframe(.linear, 0.0, .{ 0, 0, 0, 1 });
+    try raw.pushKeyframe(.linear, 1.0, .{ 0, 0.7071068, 0, 0.7071068 });
+
+    {
+        const host = stream.stream();
+        var out = try zozz.OArchive.init(&host, zozz.nativeEndianness());
+        defer out.deinit();
+        try out.saveRawQuaternionTrack(raw);
+    }
+
+    stream.pos = 0;
+    const host = stream.stream();
+    var in = try zozz.IArchive.init(&host);
+    defer in.deinit();
+    var loaded = try in.loadRawQuaternionTrack();
+    defer loaded.deinit();
+
+    var keys: [4]zozz.QuaternionKeyframe = undefined;
+    const back = try loaded.keyframes(&keys);
+    try std.testing.expectEqual(@as(usize, 2), back.len);
+    try std.testing.expectEqual(@as(f32, 0.7071068), back[1].value[1]);
+    try std.testing.expectEqual(@as(f32, 0.7071068), back[1].value[3]);
+    try std.testing.expectEqual(zozz.TrackInterpolation.linear, back[1].interpolation);
+}
+
+test "a raw archive and a runtime archive are not interchangeable" {
+    const gpa = std.testing.allocator;
+    var stream = MemoryStream{ .gpa = gpa };
+    defer stream.deinit();
+
+    var raw = try authorRawSkeleton();
+    defer raw.deinit();
+    var built = try raw.build();
+    defer built.deinit();
+
+    // A RUNTIME skeleton on the stream.
+    {
+        const host = stream.stream();
+        var out = try zozz.OArchive.init(&host, zozz.nativeEndianness());
+        defer out.deinit();
+        try out.saveSkeleton(built);
+    }
+
+    stream.pos = 0;
+    const host = stream.stream();
+    var in = try zozz.IArchive.init(&host);
+    defer in.deinit();
+
+    // ozz tags the two types differently, so the raw test says no, the
+    // runtime test says yes, and the raw load refuses rather than parsing
+    // the runtime skeleton's bytes as a tree.
+    try std.testing.expect(!in.testRawSkeleton());
+    try std.testing.expect(in.testSkeleton());
+    try std.testing.expectError(error.BadFormat, in.loadRawSkeleton());
+    // The failed test consumed nothing: the right load still works.
+    var loaded = try in.loadSkeleton();
+    defer loaded.deinit();
+    try std.testing.expectEqual(built.numJoints(), loaded.numJoints());
+}
+
+test "an empty raw skeleton has no tree to write and is refused" {
+    const gpa = std.testing.allocator;
+    var sink = MemorySink{ .gpa = gpa };
+    defer sink.deinit();
+
+    var raw = try zozz.RawSkeleton.init();
+    defer raw.deinit();
+
+    const host = sink.stream();
+    var out = try zozz.OArchive.init(&host, zozz.nativeEndianness());
+    defer out.deinit();
+    // The same answer build gives it, rather than an archive that loads back
+    // as a skeleton nothing can build.
+    try std.testing.expectError(error.InvalidData, out.saveRawSkeleton(raw));
+    try std.testing.expectError(error.InvalidData, raw.build());
+}
+
+test "the offline types round-trip through a file, and through its bytes" {
+    const gpa = std.testing.allocator;
+    var tmp = std.testing.tmpDir(.{});
+    defer tmp.cleanup();
+
+    // A path relative to the process cwd, which is what the C side's fopen
+    // resolves against too: std.testing.tmpDir puts its directory under
+    // .zig-cache/tmp of that same cwd, so both halves of the round trip name
+    // one file without either needing an absolute path.
+    const path = try std.fmt.allocPrintSentinel(
+        gpa,
+        ".zig-cache/tmp/{s}/clip.ozz",
+        .{tmp.sub_path},
+        0,
+    );
+    defer gpa.free(path);
+
+    var raw = try zozz.RawAnimation.init(1, 2.0, "on_disk");
+    defer raw.deinit();
+    try raw.pushTranslation(0, 0.0, .{ 7, 8, 9 });
+    try raw.pushTranslation(0, 2.0, .{ 1, 0, 0 });
+    try zozz.saveRawAnimationToFile(raw, path);
+
+    {
+        var loaded = try zozz.RawAnimation.initFromFile(path);
+        defer loaded.deinit();
+        try std.testing.expectEqualStrings("on_disk", loaded.name());
+        try std.testing.expectEqual(@as(f32, 2.0), loaded.duration());
+        var mine: [4]zozz.TranslationKey = undefined;
+        var theirs: [4]zozz.TranslationKey = undefined;
+        try std.testing.expectEqualSlices(
+            zozz.TranslationKey,
+            try raw.translations(0, &mine),
+            try loaded.translations(0, &theirs),
+        );
+    }
+
+    // The memory loader must read the same bytes to the same clip: the file
+    // path and the memory image are two doors onto one parser, and a
+    // consumer that mmaps its assets uses the second.
+    const bytes = try tmp.dir.readFileAlloc(std.testing.io, "clip.ozz", gpa, .limited(1 << 20));
+    defer gpa.free(bytes);
+    var from_memory = try zozz.RawAnimation.initFromMemory(bytes);
+    defer from_memory.deinit();
+    try std.testing.expectEqualStrings("on_disk", from_memory.name());
+    try std.testing.expectEqual(@as(u32, 2), from_memory.numTranslations(0));
+
+    // A file that is not an archive at all, and one that is the wrong type.
+    try tmp.dir.writeFile(std.testing.io, .{ .sub_path = "junk.ozz", .data = "not an ozz archive" });
+    const junk = try std.fmt.allocPrintSentinel(
+        gpa,
+        ".zig-cache/tmp/{s}/junk.ozz",
+        .{tmp.sub_path},
+        0,
+    );
+    defer gpa.free(junk);
+    try std.testing.expectError(error.BadFormat, zozz.RawAnimation.initFromFile(junk));
+    try std.testing.expectError(error.BadFormat, zozz.RawSkeleton.initFromFile(path));
+    try std.testing.expectError(error.FileNotFound, zozz.RawAnimation.initFromFile("no_such_file.ozz"));
+}
+
+test "every remaining raw track type round-trips through an archive" {
+    const gpa = std.testing.allocator;
+
+    // The float and quaternion tracks are covered above, value by value; the
+    // three in between share one C++ template with them, so what is worth
+    // pinning here is that each has its OWN pair of entry points wired to its
+    // OWN type — a copy-paste that saved a float2 through the float3 door
+    // would compile and would be caught here.
+    inline for (.{
+        .{ zozz.RawFloat2Track, zozz.Float2Keyframe, [2]f32{ 1, 2 }, "Float2Track" },
+        .{ zozz.RawFloat3Track, zozz.Float3Keyframe, [3]f32{ 1, 2, 3 }, "Float3Track" },
+        .{ zozz.RawFloat4Track, zozz.Float4Keyframe, [4]f32{ 1, 2, 3, 4 }, "Float4Track" },
+    }) |case| {
+        const Track = case[0];
+        const Keyframe = case[1];
+        const value = case[2];
+        const suffix = case[3];
+
+        var stream = MemoryStream{ .gpa = gpa };
+        defer stream.deinit();
+
+        var raw = try Track.init();
+        defer raw.deinit();
+        try raw.setName("channel");
+        try raw.pushKeyframe(.step, 0.0, value);
+        try raw.pushKeyframe(.linear, 1.0, value);
+
+        {
+            const host = stream.stream();
+            var out = try zozz.OArchive.init(&host, zozz.nativeEndianness());
+            defer out.deinit();
+            try @field(zozz.OArchive, "saveRaw" ++ suffix)(out, raw);
+        }
+
+        stream.pos = 0;
+        const host = stream.stream();
+        var in = try zozz.IArchive.init(&host);
+        defer in.deinit();
+        try std.testing.expect(@field(zozz.IArchive, "testRaw" ++ suffix)(in));
+        var loaded = try @field(zozz.IArchive, "loadRaw" ++ suffix)(in);
+        defer loaded.deinit();
+
+        try std.testing.expectEqualStrings("channel", loaded.name());
+        var mine: [4]Keyframe = undefined;
+        var theirs: [4]Keyframe = undefined;
+        try std.testing.expectEqualSlices(
+            Keyframe,
+            try raw.keyframes(&mine),
+            try loaded.keyframes(&theirs),
+        );
+        try std.testing.expect(loaded.validate());
+    }
+}

@@ -107,6 +107,35 @@ pub const RawSkeleton = struct {
         ));
     }
 
+    /// Loads a raw skeleton from a `.ozz` archive written by
+    /// `archive.saveRawSkeletonToFile` or `OArchive.saveRawSkeleton`.
+    ///
+    /// Joints come back in DEPTH-FIRST order, not the order they were
+    /// authored in — the same reindexing `build` performs. Names, parents
+    /// and rest transforms all survive. Pinned by test.
+    pub fn initFromFile(path: [*:0]const u8) err.Error!RawSkeleton {
+        var handle: *c.RawSkeleton = undefined;
+        try err.check(c.zozzRawSkeletonLoadFile(path, &handle));
+        return .{ .handle = handle };
+    }
+
+    /// The same, from a memory image. The bytes are read during the call only
+    /// and need not outlive it.
+    pub fn initFromMemory(bytes: []const u8) err.Error!RawSkeleton {
+        var handle: *c.RawSkeleton = undefined;
+        try err.check(c.zozzRawSkeletonLoadMemory(bytes.ptr, bytes.len, &handle));
+        return .{ .handle = handle };
+    }
+
+    /// ozz's `RawSkeleton::Validate()`: the joint count is within
+    /// `max_joints`. `addJoint` already refuses the joint that would exceed
+    /// it, so a skeleton authored through this API always validates — one
+    /// filled by an importer or read back from an archive did not go through
+    /// that door.
+    pub fn validate(self: RawSkeleton) bool {
+        return c.zozzRawSkeletonValidate(self.handle.?);
+    }
+
     /// Validates and builds a runtime skeleton. The raw skeleton is not
     /// consumed; it may be built again or extended further.
     pub fn build(self: RawSkeleton) err.Error!skeleton_mod.Skeleton {
@@ -120,11 +149,13 @@ pub const RawSkeleton = struct {
 pub const RawAnimation = struct {
     handle: ?*c.RawAnimation,
 
-    /// `num_tracks` is fixed for the clip's lifetime; `duration` is seconds,
-    /// finite and positive. `name` may be null for an unnamed clip.
-    pub fn init(num_tracks: u32, duration_seconds: f32, name: ?[*:0]const u8) err.Error!RawAnimation {
+    /// `num_tracks` is fixed for the clip's lifetime; `duration_seconds` is
+    /// finite and positive. `clip_name` may be null for an unnamed clip, and
+    /// is read back by `name` below; a parameter of that name would shadow
+    /// the accessor.
+    pub fn init(num_tracks: u32, duration_seconds: f32, clip_name: ?[*:0]const u8) err.Error!RawAnimation {
         var handle: *c.RawAnimation = undefined;
-        try err.check(c.zozzRawAnimationCreate(@intCast(num_tracks), duration_seconds, name, &handle));
+        try err.check(c.zozzRawAnimationCreate(@intCast(num_tracks), duration_seconds, clip_name, &handle));
         return .{ .handle = handle };
     }
 
@@ -156,6 +187,122 @@ pub const RawAnimation = struct {
     /// Appends one scale key.
     pub fn pushScale(self: RawAnimation, track: u32, time: f32, value: [3]f32) err.Error!void {
         try err.check(c.zozzRawAnimationPushScale(self.handle.?, @intCast(track), time, &value));
+    }
+
+    /// Loads a raw animation from a `.ozz` archive written by
+    /// `archive.saveRawAnimationToFile` or `OArchive.saveRawAnimation`.
+    pub fn initFromFile(path: [*:0]const u8) err.Error!RawAnimation {
+        var handle: *c.RawAnimation = undefined;
+        try err.check(c.zozzRawAnimationLoadFile(path, &handle));
+        return .{ .handle = handle };
+    }
+
+    /// The same, from a memory image. The bytes are read during the call only
+    /// and need not outlive it.
+    pub fn initFromMemory(bytes: []const u8) err.Error!RawAnimation {
+        var handle: *c.RawAnimation = undefined;
+        try err.check(c.zozzRawAnimationLoadMemory(bytes.ptr, bytes.len, &handle));
+        return .{ .handle = handle };
+    }
+
+    /// ozz's `RawAnimation::Validate()`: duration positive, key times within
+    /// `[0, duration]` and strictly ascending per channel. The same answer
+    /// `build` reports as `error.InvalidData`, available before the build.
+    pub fn validate(self: RawAnimation) bool {
+        return c.zozzRawAnimationValidate(self.handle.?);
+    }
+
+    /// ozz's `RawAnimation::size()`: the authored data's footprint in bytes.
+    /// The OFFLINE size — `Animation.size` is the built clip's.
+    pub fn size(self: RawAnimation) usize {
+        return c.zozzRawAnimationSize(self.handle.?);
+    }
+
+    /// Borrowed clip name, `""` when unnamed. Valid until the clip is
+    /// destroyed or renamed.
+    pub fn name(self: RawAnimation) [:0]const u8 {
+        return std.mem.span(c.zozzRawAnimationName(self.handle.?).?);
+    }
+
+    /// Renames the clip; `new_name` may be null, which clears it to `""`. The
+    /// string is copied.
+    pub fn setName(self: RawAnimation, new_name: ?[*:0]const u8) err.Error!void {
+        try err.check(c.zozzRawAnimationSetName(self.handle.?, new_name));
+    }
+
+    /// Retimes the clip. Shortening it does NOT move or drop the keys past
+    /// the new end — ozz keeps duration as a plain field and so does this;
+    /// they are left out of range, which `validate` reports and `build`
+    /// refuses. Clear the channel and push retimed keys to do it properly.
+    pub fn setDuration(self: RawAnimation, seconds: f32) err.Error!void {
+        try err.check(c.zozzRawAnimationSetDuration(self.handle.?, seconds));
+    }
+
+    /// Number of keys on `track`'s translation channel; 0 for a track index
+    /// this clip does not have.
+    pub fn numTranslations(self: RawAnimation, track: u32) u32 {
+        return @intCast(c.zozzRawAnimationNumTranslations(self.handle.?, @intCast(track)));
+    }
+
+    pub fn numRotations(self: RawAnimation, track: u32) u32 {
+        return @intCast(c.zozzRawAnimationNumRotations(self.handle.?, @intCast(track)));
+    }
+
+    pub fn numScales(self: RawAnimation, track: u32) u32 {
+        return @intCast(c.zozzRawAnimationNumScales(self.handle.?, @intCast(track)));
+    }
+
+    /// Copies `track`'s translation keys into `out` and returns the prefix
+    /// that was written. `out` must hold at least `numTranslations`, else
+    /// `error.BufferTooSmall` and nothing is written. Caller-owned memory:
+    /// this never allocates, so a cook loop can read every track through one
+    /// buffer it sized once.
+    pub fn translations(
+        self: RawAnimation,
+        track: u32,
+        out: []TranslationKey,
+    ) err.Error![]TranslationKey {
+        const count = self.numTranslations(track);
+        try err.check(c.zozzRawAnimationTranslations(self.handle.?, @intCast(track), out.ptr, out.len));
+        return out[0..count];
+    }
+
+    /// See `translations`. Rotations are (x, y, z, w) — w last.
+    pub fn rotations(
+        self: RawAnimation,
+        track: u32,
+        out: []RotationKey,
+    ) err.Error![]RotationKey {
+        const count = self.numRotations(track);
+        try err.check(c.zozzRawAnimationRotations(self.handle.?, @intCast(track), out.ptr, out.len));
+        return out[0..count];
+    }
+
+    /// See `translations`.
+    pub fn scales(self: RawAnimation, track: u32, out: []ScaleKey) err.Error![]ScaleKey {
+        const count = self.numScales(track);
+        try err.check(c.zozzRawAnimationScales(self.handle.?, @intCast(track), out.ptr, out.len));
+        return out[0..count];
+    }
+
+    /// Drops every key on `track`'s translation channel, leaving the other
+    /// two alone. The track itself stays — a clip's track count is fixed at
+    /// creation, and an empty channel bakes an identity key at `build`.
+    pub fn clearTranslations(self: RawAnimation, track: u32) err.Error!void {
+        try err.check(c.zozzRawAnimationClearTranslations(self.handle.?, @intCast(track)));
+    }
+
+    pub fn clearRotations(self: RawAnimation, track: u32) err.Error!void {
+        try err.check(c.zozzRawAnimationClearRotations(self.handle.?, @intCast(track)));
+    }
+
+    pub fn clearScales(self: RawAnimation, track: u32) err.Error!void {
+        try err.check(c.zozzRawAnimationClearScales(self.handle.?, @intCast(track)));
+    }
+
+    /// All three channels of `track` at once.
+    pub fn clearTrack(self: RawAnimation, track: u32) err.Error!void {
+        try err.check(c.zozzRawAnimationClearTrack(self.handle.?, @intCast(track)));
     }
 
     /// Validates and builds a compressed runtime animation. The raw animation
@@ -230,6 +377,14 @@ pub const RawAnimation = struct {
         return out;
     }
 };
+
+/// One authored key of a raw animation channel, as ozz stores it: a time in
+/// the clip's own seconds and the value at it. Re-exported from `c.zig`
+/// rather than redefined, the way `math.Transform` is — a second definition
+/// is a second layout to keep in step with the header.
+pub const TranslationKey = c.RawTranslationKey;
+pub const RotationKey = c.RawRotationKey;
+pub const ScaleKey = c.RawScaleKey;
 
 /// One keyframe of `RawAnimation.sampleTrackModelSpace`: `time` in the
 /// animation's own seconds, `transform` the sampled joint's model-space
@@ -482,4 +637,157 @@ test "builder: validation failures are errors, not asserts" {
     try raw_anim.pushTranslation(0, 0.75, .{ 0, 0, 0 });
     try raw_anim.pushTranslation(0, 0.25, .{ 1, 0, 0 });
     try std.testing.expectError(error.InvalidData, raw_anim.build());
+}
+
+test "raw animation: keys read back exactly as authored" {
+    var raw = try RawAnimation.init(2, 4.0, "walk");
+    defer raw.deinit();
+
+    try raw.pushTranslation(0, 0.0, .{ 1, 2, 3 });
+    try raw.pushTranslation(0, 2.5, .{ 4, 5, 6 });
+    try raw.pushRotation(0, 1.0, .{ 0, 0.7071068, 0, 0.7071068 });
+    try raw.pushScale(1, 3.0, .{ 2, 2, 2 });
+
+    try std.testing.expectEqual(@as(u32, 2), raw.numTranslations(0));
+    try std.testing.expectEqual(@as(u32, 1), raw.numRotations(0));
+    try std.testing.expectEqual(@as(u32, 0), raw.numScales(0));
+    try std.testing.expectEqual(@as(u32, 0), raw.numTranslations(1));
+    try std.testing.expectEqual(@as(u32, 1), raw.numScales(1));
+
+    // The read-back is EXACT: nothing here is compressed, quantized or
+    // interpolated on the way out — that only happens at build.
+    var translations: [4]TranslationKey = undefined;
+    const t = try raw.translations(0, &translations);
+    try std.testing.expectEqual(@as(usize, 2), t.len);
+    try std.testing.expectEqual(@as(f32, 0.0), t[0].time);
+    try std.testing.expectEqual([3]f32{ 1, 2, 3 }, t[0].value);
+    try std.testing.expectEqual(@as(f32, 2.5), t[1].time);
+    try std.testing.expectEqual([3]f32{ 4, 5, 6 }, t[1].value);
+
+    var rotations: [4]RotationKey = undefined;
+    const r = try raw.rotations(0, &rotations);
+    try std.testing.expectEqual(@as(usize, 1), r.len);
+    try std.testing.expectEqual(@as(f32, 1.0), r[0].time);
+    // (x, y, z, w) — w last, as everywhere in this package.
+    try std.testing.expectEqual(@as(f32, 0.7071068), r[0].value[1]);
+    try std.testing.expectEqual(@as(f32, 0.7071068), r[0].value[3]);
+
+    var scales: [4]ScaleKey = undefined;
+    const sc = try raw.scales(1, &scales);
+    try std.testing.expectEqual(@as(usize, 1), sc.len);
+    try std.testing.expectEqual([3]f32{ 2, 2, 2 }, sc[0].value);
+
+    // A track with no keys on that channel writes nothing and returns empty.
+    try std.testing.expectEqual(@as(usize, 0), (try raw.scales(0, &scales)).len);
+}
+
+test "raw animation: a buffer too small writes nothing, and a bad track is an error" {
+    var raw = try RawAnimation.init(1, 1.0, null);
+    defer raw.deinit();
+    try raw.pushTranslation(0, 0.0, .{ 1, 1, 1 });
+    try raw.pushTranslation(0, 1.0, .{ 2, 2, 2 });
+
+    var one: [1]TranslationKey = .{.{ .time = -1, .value = .{ 9, 9, 9 } }};
+    try std.testing.expectError(error.BufferTooSmall, raw.translations(0, &one));
+    // Untouched: a short buffer is refused before anything is written, so a
+    // caller that ignores the error cannot mistake a partial fill for a read.
+    try std.testing.expectEqual(@as(f32, -1), one[0].time);
+
+    var four: [4]TranslationKey = undefined;
+    try std.testing.expectError(error.InvalidArgument, raw.translations(7, &four));
+    try std.testing.expectEqual(@as(u32, 0), raw.numTranslations(7));
+    try std.testing.expectError(error.InvalidArgument, raw.clearTranslations(7));
+}
+
+test "raw animation: clearing one channel leaves the other two alone" {
+    var raw = try RawAnimation.init(1, 1.0, null);
+    defer raw.deinit();
+    try raw.pushTranslation(0, 0.0, .{ 1, 0, 0 });
+    try raw.pushRotation(0, 0.0, .{ 0, 0, 0, 1 });
+    try raw.pushScale(0, 0.0, .{ 1, 1, 1 });
+
+    try raw.clearRotations(0);
+    try std.testing.expectEqual(@as(u32, 1), raw.numTranslations(0));
+    try std.testing.expectEqual(@as(u32, 0), raw.numRotations(0));
+    try std.testing.expectEqual(@as(u32, 1), raw.numScales(0));
+
+    try raw.clearTrack(0);
+    try std.testing.expectEqual(@as(u32, 0), raw.numTranslations(0));
+    try std.testing.expectEqual(@as(u32, 0), raw.numScales(0));
+    // The TRACK survives a clear — only its keys go. A clip's track count is
+    // fixed at creation, so this still builds, with identity keys baked in.
+    try std.testing.expectEqual(@as(u32, 1), raw.numTracks());
+    var clip = try raw.build();
+    defer clip.deinit();
+    try std.testing.expectEqual(@as(u32, 1), clip.numTracks());
+}
+
+test "raw animation: rewriting a channel is clear-then-push" {
+    var raw = try RawAnimation.init(1, 2.0, null);
+    defer raw.deinit();
+    try raw.pushTranslation(0, 0.0, .{ 0, 0, 0 });
+    try raw.pushTranslation(0, 1.0, .{ 1, 0, 0 });
+
+    // Halve the sample rate: read what is there, clear, push the survivors.
+    var keys: [8]TranslationKey = undefined;
+    const authored = try raw.translations(0, &keys);
+    try std.testing.expectEqual(@as(usize, 2), authored.len);
+    try raw.clearTranslations(0);
+    try raw.pushTranslation(0, authored[1].time, authored[1].value);
+
+    const rewritten = try raw.translations(0, &keys);
+    try std.testing.expectEqual(@as(usize, 1), rewritten.len);
+    try std.testing.expectEqual(@as(f32, 1.0), rewritten[0].time);
+    try std.testing.expect(raw.validate());
+}
+
+test "raw animation: validate, size, name and retiming" {
+    var raw = try RawAnimation.init(2, 1.0, "clip");
+    defer raw.deinit();
+
+    try std.testing.expectEqualStrings("clip", raw.name());
+    try std.testing.expect(raw.validate());
+    // ozz's own accounting, so the only claim made here is that it grows with
+    // the data rather than that it equals any particular number.
+    const empty_size = raw.size();
+    try raw.pushTranslation(0, 0.0, .{ 0, 0, 0 });
+    try raw.pushTranslation(0, 1.0, .{ 1, 0, 0 });
+    try std.testing.expect(raw.size() > empty_size);
+
+    try raw.setName("renamed");
+    try std.testing.expectEqualStrings("renamed", raw.name());
+    try raw.setName(null);
+    try std.testing.expectEqualStrings("", raw.name());
+
+    // Keys out of ascending order fail validate before build refuses them.
+    try raw.pushTranslation(0, 0.5, .{ 2, 0, 0 });
+    try std.testing.expect(!raw.validate());
+    try std.testing.expectError(error.InvalidData, raw.build());
+
+    // Retiming does not move keys: shortening leaves the last one past the
+    // end, which is exactly what validate is for.
+    var fresh = try RawAnimation.init(1, 2.0, null);
+    defer fresh.deinit();
+    try fresh.pushTranslation(0, 1.5, .{ 0, 0, 0 });
+    try std.testing.expect(fresh.validate());
+    try fresh.setDuration(1.0);
+    try std.testing.expectEqual(@as(f32, 1.0), fresh.duration());
+    try std.testing.expect(!fresh.validate());
+    try fresh.setDuration(2.0);
+    try std.testing.expect(fresh.validate());
+
+    try std.testing.expectError(error.InvalidArgument, fresh.setDuration(0));
+    try std.testing.expectError(error.InvalidArgument, fresh.setDuration(std.math.nan(f32)));
+}
+
+test "raw skeleton: validate holds for anything this API can author" {
+    var raw = try RawSkeleton.init();
+    defer raw.deinit();
+    // Empty is valid to ozz -- RawSkeleton::Validate is a joint-count bound
+    // and nothing else -- even though build refuses it for having no roots.
+    try std.testing.expect(raw.validate());
+    try std.testing.expectError(error.InvalidData, raw.build());
+
+    _ = try raw.addJoint(null, "root", math.transform_identity);
+    try std.testing.expect(raw.validate());
 }

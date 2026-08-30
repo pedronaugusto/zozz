@@ -244,6 +244,27 @@ ZozzResult LoadFromMemory(const void* data, size_t size, T* out) {
   return LoadTagged(&stream, out);
 }
 
+/// Allocates a handle and loads one tagged ozz object into its `impl`,
+/// unwinding the handle on any failure — the shape every *LoadMemory entry
+/// point in this library has. Lives here rather than in one .cpp because the
+/// runtime tracks (zozz_track.cpp) and the offline types (zozz_archive.cpp)
+/// both need it, and a second copy is a second place for the unwind to be
+/// wrong.
+template <typename Handle>
+ZozzResult LoadHandleFromMemory(const void* data, size_t size, Handle** out) {
+  if (out == nullptr) return ZOZZ_RESULT_INVALID_ARGUMENT;
+  *out = nullptr;
+  Handle* handle = New<Handle>();
+  if (handle == nullptr) return ZOZZ_RESULT_OUT_OF_MEMORY;
+  const ZozzResult result = LoadFromMemory(data, size, &handle->impl);
+  if (result != ZOZZ_RESULT_OK) {
+    Delete(handle);
+    return result;
+  }
+  *out = handle;
+  return ZOZZ_RESULT_OK;
+}
+
 /// Loads one tagged ozz object from a file path: the file is read whole
 /// into memory and parsed through ConstMemoryStream, not ozz's own File
 /// stream, since File returns short reads at end-of-file — precisely what
@@ -301,6 +322,22 @@ void AosToSoa(const ZozzTransform* aos, ozz::math::SoaTransform* soa,
 // parsed without complaint but describes something ozz's own jobs would
 // refuse — the shape a truncated or version-mismatched archive produces.
 //===----------------------------------------------------------------------===//
+
+/// The file twin of LoadHandleFromMemory, over LoadFromFile.
+template <typename Handle>
+ZozzResult LoadHandleFromFile(const char* path, Handle** out) {
+  if (out == nullptr) return ZOZZ_RESULT_INVALID_ARGUMENT;
+  *out = nullptr;
+  Handle* handle = New<Handle>();
+  if (handle == nullptr) return ZOZZ_RESULT_OUT_OF_MEMORY;
+  const ZozzResult result = LoadFromFile(path, &handle->impl);
+  if (result != ZOZZ_RESULT_OK) {
+    Delete(handle);
+    return result;
+  }
+  *out = handle;
+  return ZOZZ_RESULT_OK;
+}
 
 ZozzResult ValidateSkeleton(const ozz::animation::Skeleton& skeleton);
 ZozzResult ValidateAnimation(const ozz::animation::Animation& animation);
@@ -380,5 +417,38 @@ struct ZozzRawQuaternionTrack {
 struct ZozzImporter {
   ozz::animation::offline::OzzImporter* impl;
 };
+
+namespace zozz {
+
+//===----------------------------------------------------------------------===//
+// Raw-animation track lookup
+//
+// Every per-track entry point — push, read back, clear — needs the same two
+// checks before it can touch a channel: a non-NULL handle and a track index
+// within the fixed count. Written once, here, because the push path and the
+// read-back path live in one translation unit and the bounds rule must not
+// be able to disagree with itself between them. Declared after the handle
+// types above, which is what makes `impl` reachable.
+//===----------------------------------------------------------------------===//
+
+/// The JointTrack at `track`, or NULL when `raw` is NULL or `track` is not a
+/// track of it.
+inline const ozz::animation::offline::RawAnimation::JointTrack* JointTrackAt(
+    const ZozzRawAnimation* raw, int track) {
+  if (raw == nullptr) return nullptr;
+  if (track < 0 || track >= static_cast<int>(raw->impl.tracks.size())) {
+    return nullptr;
+  }
+  return &raw->impl.tracks[static_cast<size_t>(track)];
+}
+
+/// The writable twin, for the push and clear entry points.
+inline ozz::animation::offline::RawAnimation::JointTrack* MutableJointTrackAt(
+    ZozzRawAnimation* raw, int track) {
+  return const_cast<ozz::animation::offline::RawAnimation::JointTrack*>(
+      JointTrackAt(raw, track));
+}
+
+}  // namespace zozz
 
 #endif  // ZOZZ_INTERNAL_H_

@@ -3,6 +3,8 @@
 // entry points.
 //===----------------------------------------------------------------------===//
 
+#include <cmath>
+
 #include "zozz_internal.h"
 #include "zozz_track_types.h"
 
@@ -217,10 +219,11 @@ ZozzResult LoadTaggedObject(ZozzIArchive* archive, T* object) {
   return archive->stream.failed() ? ZOZZ_RESULT_IO : ZOZZ_RESULT_OK;
 }
 
-/// Shared shape of the five track loaders: allocate the handle, load into its
-/// impl, unwind on any failure. Skeleton and animation each need an extra
-/// post-parse sanity check (see zozzIArchiveLoadSkeleton/LoadAnimation below)
-/// so they are not routed through this helper.
+/// Shared shape of the loaders with no post-parse check: allocate the handle,
+/// load into its impl, unwind on any failure. The five runtime tracks and the
+/// five raw tracks go through this; the skeleton, the animation, the raw
+/// skeleton and the raw animation each need a sanity check afterwards (see
+/// zozzIArchiveLoadSkeleton and the offline section below) and do not.
 template <typename Handle>
 ZozzResult LoadTrack(ZozzIArchive* archive, Handle** out) {
   if (out == nullptr) return ZOZZ_RESULT_INVALID_ARGUMENT;
@@ -243,6 +246,76 @@ template <typename T>
 bool PeekTag(ZozzIArchive* archive) {
   if (archive == nullptr || archive->stream.failed()) return false;
   return archive->archive.TestTag<T>();
+}
+
+//===----------------------------------------------------------------------===//
+// The offline types
+//
+// A raw skeleton is the one that needs work in both directions: ozz stores a
+// nested tree and this ABI hands out a flat list (zozz_offline.cpp explains
+// why), so saving materialises the tree and loading flattens it again. The
+// conversion pair is zozz::FlattenToNestedSkeleton / zozz::BuildFlatSkeleton,
+// already shared with the glTF importer — this is a third caller of it, not a
+// second implementation. Everything else archives its `impl` directly.
+//===----------------------------------------------------------------------===//
+
+/// Post-parse sanity for a raw skeleton read off a stream, the offline twin
+/// of zozz::ValidateSkeleton: an archive claiming more joints than ozz's own
+/// limit is rejected as ZOZZ_RESULT_BAD_FORMAT rather than handed back as a
+/// handle nothing can build. This is ozz's RawSkeleton::Validate condition,
+/// answered as a result code.
+ZozzResult ValidateRawSkeleton(
+    const ozz::animation::offline::RawSkeleton& raw) {
+  return raw.num_joints() > zozz::kMaxJoints ? ZOZZ_RESULT_BAD_FORMAT
+                                             : ZOZZ_RESULT_OK;
+}
+
+/// Post-parse sanity for a raw animation. Deliberately NOT
+/// RawAnimation::Validate: unsorted or out-of-range keys are a repairable
+/// authoring mistake a cook tool is entitled to load and fix, and
+/// zozzRawAnimationValidate is where it asks. What is checked here is what
+/// makes the handle usable at all — a track count within ozz's own limit, and
+/// a duration every push entry point compares against.
+ZozzResult ValidateRawAnimation(
+    const ozz::animation::offline::RawAnimation& raw) {
+  if (raw.num_tracks() > zozz::kMaxJoints) return ZOZZ_RESULT_BAD_FORMAT;
+  if (!std::isfinite(raw.duration) || raw.duration <= 0.f) {
+    return ZOZZ_RESULT_BAD_FORMAT;
+  }
+  return ZOZZ_RESULT_OK;
+}
+
+/// Save half of the raw-skeleton special case: materialise, then write.
+ZozzResult SaveRawSkeletonTree(
+    const ZozzRawSkeleton* raw,
+    ozz::animation::offline::RawSkeleton* nested) {
+  if (raw == nullptr) return ZOZZ_RESULT_INVALID_ARGUMENT;
+  return zozz::FlattenToNestedSkeleton(raw, nested);
+}
+
+/// Load half: sanity-check the parsed tree, then flatten it into a handle.
+ZozzResult FinishRawSkeleton(const ozz::animation::offline::RawSkeleton& nested,
+                             ZozzRawSkeleton** out) {
+  const ZozzResult valid = ValidateRawSkeleton(nested);
+  if (valid != ZOZZ_RESULT_OK) return valid;
+  return zozz::BuildFlatSkeleton(nested, out);
+}
+
+/// Shared shape of the raw-animation loaders: allocate, load, sanity-check,
+/// unwind on any failure. The track loaders reach LoadTrack above instead,
+/// which has no post-parse check of its own.
+template <typename Handle, typename Impl>
+ZozzResult LoadCheckedHandle(Handle** out, ZozzResult load_result,
+                             Handle* handle,
+                             ZozzResult (*validate)(const Impl&)) {
+  ZozzResult result = load_result;
+  if (result == ZOZZ_RESULT_OK) result = validate(handle->impl);
+  if (result != ZOZZ_RESULT_OK) {
+    zozz::Delete(handle);
+    return result;
+  }
+  *out = handle;
+  return ZOZZ_RESULT_OK;
 }
 
 }  // namespace
@@ -500,6 +573,260 @@ ZozzResult zozzQuaternionTrackSaveFile(const ZozzQuaternionTrack* track,
                                        const char* path) {
   if (track == nullptr) return ZOZZ_RESULT_INVALID_ARGUMENT;
   return SaveToFile(path, track->impl);
+}
+
+//===----------------------------------------------------------------------===//
+// The offline types: save, load, tag test, and the file convenience pair
+//===----------------------------------------------------------------------===//
+
+ZozzResult zozzOArchiveSaveRawSkeleton(ZozzOArchive* archive,
+                                       const ZozzRawSkeleton* raw) {
+  ozz::animation::offline::RawSkeleton nested;
+  const ZozzResult built = SaveRawSkeletonTree(raw, &nested);
+  if (built != ZOZZ_RESULT_OK) return built;
+  return SaveObject(archive, nested);
+}
+
+ZozzResult zozzOArchiveSaveRawAnimation(ZozzOArchive* archive,
+                                        const ZozzRawAnimation* raw) {
+  if (raw == nullptr) return ZOZZ_RESULT_INVALID_ARGUMENT;
+  return SaveObject(archive, raw->impl);
+}
+
+ZozzResult zozzOArchiveSaveRawFloatTrack(ZozzOArchive* archive,
+                                         const ZozzRawFloatTrack* raw) {
+  if (raw == nullptr) return ZOZZ_RESULT_INVALID_ARGUMENT;
+  return SaveObject(archive, raw->impl);
+}
+
+ZozzResult zozzOArchiveSaveRawFloat2Track(ZozzOArchive* archive,
+                                          const ZozzRawFloat2Track* raw) {
+  if (raw == nullptr) return ZOZZ_RESULT_INVALID_ARGUMENT;
+  return SaveObject(archive, raw->impl);
+}
+
+ZozzResult zozzOArchiveSaveRawFloat3Track(ZozzOArchive* archive,
+                                          const ZozzRawFloat3Track* raw) {
+  if (raw == nullptr) return ZOZZ_RESULT_INVALID_ARGUMENT;
+  return SaveObject(archive, raw->impl);
+}
+
+ZozzResult zozzOArchiveSaveRawFloat4Track(ZozzOArchive* archive,
+                                          const ZozzRawFloat4Track* raw) {
+  if (raw == nullptr) return ZOZZ_RESULT_INVALID_ARGUMENT;
+  return SaveObject(archive, raw->impl);
+}
+
+ZozzResult zozzOArchiveSaveRawQuaternionTrack(
+    ZozzOArchive* archive,
+    const ZozzRawQuaternionTrack* raw) {
+  if (raw == nullptr) return ZOZZ_RESULT_INVALID_ARGUMENT;
+  return SaveObject(archive, raw->impl);
+}
+
+ZozzResult zozzIArchiveLoadRawSkeleton(ZozzIArchive* archive,
+                                       ZozzRawSkeleton** out) {
+  if (out == nullptr) return ZOZZ_RESULT_INVALID_ARGUMENT;
+  *out = nullptr;
+  ozz::animation::offline::RawSkeleton nested;
+  const ZozzResult result = LoadTaggedObject(archive, &nested);
+  if (result != ZOZZ_RESULT_OK) return result;
+  return FinishRawSkeleton(nested, out);
+}
+
+ZozzResult zozzIArchiveLoadRawAnimation(ZozzIArchive* archive,
+                                        ZozzRawAnimation** out) {
+  if (out == nullptr) return ZOZZ_RESULT_INVALID_ARGUMENT;
+  *out = nullptr;
+  ZozzRawAnimation* handle = zozz::New<ZozzRawAnimation>();
+  if (handle == nullptr) return ZOZZ_RESULT_OUT_OF_MEMORY;
+  return LoadCheckedHandle(out, LoadTaggedObject(archive, &handle->impl),
+                           handle, &ValidateRawAnimation);
+}
+
+ZozzResult zozzIArchiveLoadRawFloatTrack(ZozzIArchive* archive,
+                                         ZozzRawFloatTrack** out) {
+  return LoadTrack(archive, out);
+}
+
+ZozzResult zozzIArchiveLoadRawFloat2Track(ZozzIArchive* archive,
+                                          ZozzRawFloat2Track** out) {
+  return LoadTrack(archive, out);
+}
+
+ZozzResult zozzIArchiveLoadRawFloat3Track(ZozzIArchive* archive,
+                                          ZozzRawFloat3Track** out) {
+  return LoadTrack(archive, out);
+}
+
+ZozzResult zozzIArchiveLoadRawFloat4Track(ZozzIArchive* archive,
+                                          ZozzRawFloat4Track** out) {
+  return LoadTrack(archive, out);
+}
+
+ZozzResult zozzIArchiveLoadRawQuaternionTrack(ZozzIArchive* archive,
+                                              ZozzRawQuaternionTrack** out) {
+  return LoadTrack(archive, out);
+}
+
+bool zozzIArchiveTestRawSkeleton(ZozzIArchive* archive) {
+  return PeekTag<ozz::animation::offline::RawSkeleton>(archive);
+}
+
+bool zozzIArchiveTestRawAnimation(ZozzIArchive* archive) {
+  return PeekTag<ozz::animation::offline::RawAnimation>(archive);
+}
+
+bool zozzIArchiveTestRawFloatTrack(ZozzIArchive* archive) {
+  return PeekTag<ozz::animation::offline::RawFloatTrack>(archive);
+}
+
+bool zozzIArchiveTestRawFloat2Track(ZozzIArchive* archive) {
+  return PeekTag<ozz::animation::offline::RawFloat2Track>(archive);
+}
+
+bool zozzIArchiveTestRawFloat3Track(ZozzIArchive* archive) {
+  return PeekTag<ozz::animation::offline::RawFloat3Track>(archive);
+}
+
+bool zozzIArchiveTestRawFloat4Track(ZozzIArchive* archive) {
+  return PeekTag<ozz::animation::offline::RawFloat4Track>(archive);
+}
+
+bool zozzIArchiveTestRawQuaternionTrack(ZozzIArchive* archive) {
+  return PeekTag<ozz::animation::offline::RawQuaternionTrack>(archive);
+}
+
+ZozzResult zozzRawSkeletonSaveFile(const ZozzRawSkeleton* raw,
+                                   const char* path) {
+  ozz::animation::offline::RawSkeleton nested;
+  const ZozzResult built = SaveRawSkeletonTree(raw, &nested);
+  if (built != ZOZZ_RESULT_OK) return built;
+  return SaveToFile(path, nested);
+}
+
+ZozzResult zozzRawAnimationSaveFile(const ZozzRawAnimation* raw,
+                                    const char* path) {
+  if (raw == nullptr) return ZOZZ_RESULT_INVALID_ARGUMENT;
+  return SaveToFile(path, raw->impl);
+}
+
+ZozzResult zozzRawFloatTrackSaveFile(const ZozzRawFloatTrack* raw,
+                                     const char* path) {
+  if (raw == nullptr) return ZOZZ_RESULT_INVALID_ARGUMENT;
+  return SaveToFile(path, raw->impl);
+}
+
+ZozzResult zozzRawFloat2TrackSaveFile(const ZozzRawFloat2Track* raw,
+                                      const char* path) {
+  if (raw == nullptr) return ZOZZ_RESULT_INVALID_ARGUMENT;
+  return SaveToFile(path, raw->impl);
+}
+
+ZozzResult zozzRawFloat3TrackSaveFile(const ZozzRawFloat3Track* raw,
+                                      const char* path) {
+  if (raw == nullptr) return ZOZZ_RESULT_INVALID_ARGUMENT;
+  return SaveToFile(path, raw->impl);
+}
+
+ZozzResult zozzRawFloat4TrackSaveFile(const ZozzRawFloat4Track* raw,
+                                      const char* path) {
+  if (raw == nullptr) return ZOZZ_RESULT_INVALID_ARGUMENT;
+  return SaveToFile(path, raw->impl);
+}
+
+ZozzResult zozzRawQuaternionTrackSaveFile(const ZozzRawQuaternionTrack* raw,
+                                          const char* path) {
+  if (raw == nullptr) return ZOZZ_RESULT_INVALID_ARGUMENT;
+  return SaveToFile(path, raw->impl);
+}
+
+ZozzResult zozzRawSkeletonLoadFile(const char* path, ZozzRawSkeleton** out) {
+  if (out == nullptr) return ZOZZ_RESULT_INVALID_ARGUMENT;
+  *out = nullptr;
+  ozz::animation::offline::RawSkeleton nested;
+  const ZozzResult result = zozz::LoadFromFile(path, &nested);
+  if (result != ZOZZ_RESULT_OK) return result;
+  return FinishRawSkeleton(nested, out);
+}
+
+ZozzResult zozzRawSkeletonLoadMemory(const void* data, size_t size,
+                                     ZozzRawSkeleton** out) {
+  if (out == nullptr) return ZOZZ_RESULT_INVALID_ARGUMENT;
+  *out = nullptr;
+  ozz::animation::offline::RawSkeleton nested;
+  const ZozzResult result = zozz::LoadFromMemory(data, size, &nested);
+  if (result != ZOZZ_RESULT_OK) return result;
+  return FinishRawSkeleton(nested, out);
+}
+
+ZozzResult zozzRawAnimationLoadFile(const char* path, ZozzRawAnimation** out) {
+  if (out == nullptr) return ZOZZ_RESULT_INVALID_ARGUMENT;
+  *out = nullptr;
+  ZozzRawAnimation* handle = zozz::New<ZozzRawAnimation>();
+  if (handle == nullptr) return ZOZZ_RESULT_OUT_OF_MEMORY;
+  return LoadCheckedHandle(out, zozz::LoadFromFile(path, &handle->impl),
+                           handle, &ValidateRawAnimation);
+}
+
+ZozzResult zozzRawAnimationLoadMemory(const void* data, size_t size,
+                                      ZozzRawAnimation** out) {
+  if (out == nullptr) return ZOZZ_RESULT_INVALID_ARGUMENT;
+  *out = nullptr;
+  ZozzRawAnimation* handle = zozz::New<ZozzRawAnimation>();
+  if (handle == nullptr) return ZOZZ_RESULT_OUT_OF_MEMORY;
+  return LoadCheckedHandle(out, zozz::LoadFromMemory(data, size, &handle->impl),
+                           handle, &ValidateRawAnimation);
+}
+
+ZozzResult zozzRawFloatTrackLoadFile(const char* path,
+                                     ZozzRawFloatTrack** out) {
+  return zozz::LoadHandleFromFile(path, out);
+}
+
+ZozzResult zozzRawFloatTrackLoadMemory(const void* data, size_t size,
+                                       ZozzRawFloatTrack** out) {
+  return zozz::LoadHandleFromMemory(data, size, out);
+}
+
+ZozzResult zozzRawFloat2TrackLoadFile(const char* path,
+                                      ZozzRawFloat2Track** out) {
+  return zozz::LoadHandleFromFile(path, out);
+}
+
+ZozzResult zozzRawFloat2TrackLoadMemory(const void* data, size_t size,
+                                        ZozzRawFloat2Track** out) {
+  return zozz::LoadHandleFromMemory(data, size, out);
+}
+
+ZozzResult zozzRawFloat3TrackLoadFile(const char* path,
+                                      ZozzRawFloat3Track** out) {
+  return zozz::LoadHandleFromFile(path, out);
+}
+
+ZozzResult zozzRawFloat3TrackLoadMemory(const void* data, size_t size,
+                                        ZozzRawFloat3Track** out) {
+  return zozz::LoadHandleFromMemory(data, size, out);
+}
+
+ZozzResult zozzRawFloat4TrackLoadFile(const char* path,
+                                      ZozzRawFloat4Track** out) {
+  return zozz::LoadHandleFromFile(path, out);
+}
+
+ZozzResult zozzRawFloat4TrackLoadMemory(const void* data, size_t size,
+                                        ZozzRawFloat4Track** out) {
+  return zozz::LoadHandleFromMemory(data, size, out);
+}
+
+ZozzResult zozzRawQuaternionTrackLoadFile(const char* path,
+                                          ZozzRawQuaternionTrack** out) {
+  return zozz::LoadHandleFromFile(path, out);
+}
+
+ZozzResult zozzRawQuaternionTrackLoadMemory(const void* data, size_t size,
+                                            ZozzRawQuaternionTrack** out) {
+  return zozz::LoadHandleFromMemory(data, size, out);
 }
 
 }  // extern "C"

@@ -72,6 +72,9 @@ pub const LocalToModelJob = sampling_mod.LocalToModelJob;
 pub const RawSkeleton = offline_mod.RawSkeleton;
 pub const RawAnimation = offline_mod.RawAnimation;
 pub const ModelSpaceSample = offline_mod.ModelSpaceSample;
+pub const TranslationKey = offline_mod.TranslationKey;
+pub const RotationKey = offline_mod.RotationKey;
+pub const ScaleKey = offline_mod.ScaleKey;
 
 pub const FloatTrack = track_mod.FloatTrack;
 pub const Float2Track = track_mod.Float2Track;
@@ -113,6 +116,13 @@ pub const saveFloat2TrackToFile = archive_mod.saveFloat2TrackToFile;
 pub const saveFloat3TrackToFile = archive_mod.saveFloat3TrackToFile;
 pub const saveFloat4TrackToFile = archive_mod.saveFloat4TrackToFile;
 pub const saveQuaternionTrackToFile = archive_mod.saveQuaternionTrackToFile;
+pub const saveRawSkeletonToFile = archive_mod.saveRawSkeletonToFile;
+pub const saveRawAnimationToFile = archive_mod.saveRawAnimationToFile;
+pub const saveRawFloatTrackToFile = archive_mod.saveRawFloatTrackToFile;
+pub const saveRawFloat2TrackToFile = archive_mod.saveRawFloat2TrackToFile;
+pub const saveRawFloat3TrackToFile = archive_mod.saveRawFloat3TrackToFile;
+pub const saveRawFloat4TrackToFile = archive_mod.saveRawFloat4TrackToFile;
+pub const saveRawQuaternionTrackToFile = archive_mod.saveRawQuaternionTrackToFile;
 pub const ik = ik_mod;
 pub const skinning = skinning_mod;
 
@@ -133,6 +143,11 @@ pub const RawFloat2Track = rawtrack_mod.RawFloat2Track;
 pub const RawFloat3Track = rawtrack_mod.RawFloat3Track;
 pub const RawFloat4Track = rawtrack_mod.RawFloat4Track;
 pub const RawQuaternionTrack = rawtrack_mod.RawQuaternionTrack;
+pub const FloatKeyframe = rawtrack_mod.FloatKeyframe;
+pub const Float2Keyframe = rawtrack_mod.Float2Keyframe;
+pub const Float3Keyframe = rawtrack_mod.Float3Keyframe;
+pub const Float4Keyframe = rawtrack_mod.Float4Keyframe;
+pub const QuaternionKeyframe = rawtrack_mod.QuaternionKeyframe;
 // The runtime track types are re-exported from track.zig above; rawtrack.zig
 // names them too, for the builders that produce them.
 

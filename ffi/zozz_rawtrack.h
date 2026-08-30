@@ -41,6 +41,53 @@ typedef enum ZozzTrackInterpolation {
   ZOZZ_TRACK_INTERPOLATION_LINEAR = 1,
 } ZozzTrackInterpolation;
 
+
+//===----------------------------------------------------------------------===//
+// Keyframes
+//
+// One struct per value type, laid out as ozz lays its own out: a raw track
+// stores a vector of whole RawTrackKeyframes (raw_track.h), so the read-back
+// below is an array of structs — where a RUNTIME track stores parallel spans
+// and zozz_track.h's read-back hands back parallel arrays. The shape follows
+// ozz's storage on both sides rather than picking one and converting.
+//===----------------------------------------------------------------------===//
+
+typedef struct ZozzRawFloatKeyframe {
+  ZozzTrackInterpolation interpolation;
+  /// Track-local position, within [0, 1].
+  float ratio;
+  float value;
+} ZozzRawFloatKeyframe;
+
+typedef struct ZozzRawFloat2Keyframe {
+  ZozzTrackInterpolation interpolation;
+  /// Track-local position, within [0, 1].
+  float ratio;
+  float value[2];
+} ZozzRawFloat2Keyframe;
+
+typedef struct ZozzRawFloat3Keyframe {
+  ZozzTrackInterpolation interpolation;
+  /// Track-local position, within [0, 1].
+  float ratio;
+  float value[3];
+} ZozzRawFloat3Keyframe;
+
+typedef struct ZozzRawFloat4Keyframe {
+  ZozzTrackInterpolation interpolation;
+  /// Track-local position, within [0, 1].
+  float ratio;
+  float value[4];
+} ZozzRawFloat4Keyframe;
+
+typedef struct ZozzRawQuaternionKeyframe {
+  ZozzTrackInterpolation interpolation;
+  /// Track-local position, within [0, 1].
+  float ratio;
+  /// A quaternion in (x, y, z, w) order — w LAST.
+  float value[4];
+} ZozzRawQuaternionKeyframe;
+
 //===----------------------------------------------------------------------===//
 // Runtime track handles
 //
@@ -57,12 +104,14 @@ typedef enum ZozzTrackInterpolation {
 //===----------------------------------------------------------------------===//
 // RawFloatTrack
 //
-// Every Raw*Track below repeats this same five-entry-point shape, one per
-// value type. `ratio` is a track-local position in [0, 1] (checked at push,
-// since unlike a raw animation's duration this range is fixed rather than
-// caller-chosen); ordering across keys is a data-shape property and is
-// checked at Build/Optimize instead, exactly like a raw animation's key
-// times.
+// Every Raw*Track below repeats the same shape, one per value type: create,
+// destroy, push, build and optimize, then the read-back and editing half —
+// validate, name, rename, keyframes, clear.
+//
+// `ratio` is a track-local position in [0, 1] (checked at push, since unlike
+// a raw animation's duration this range is fixed rather than caller-chosen);
+// ordering across keys is a data-shape property and is checked at
+// Build/Optimize instead, exactly like a raw animation's key times.
 //===----------------------------------------------------------------------===//
 
 ZOZZ_API ZozzResult zozzRawFloatTrackCreate(ZozzRawFloatTrack** out);
@@ -89,6 +138,37 @@ ZOZZ_API ZozzResult zozzRawFloatTrackOptimize(const ZozzRawFloatTrack* input,
                                               float tolerance,
                                               ZozzRawFloatTrack* output);
 
+/// ozz::animation::offline::RawTrack::Validate(): keyframe ratios strictly
+/// ascending and all within [0, 1]. False for a NULL handle. The same answer
+/// Build and Optimize report as ZOZZ_RESULT_INVALID_DATA, available before
+/// either, so a cook tool can name the malformed track rather than the failed
+/// build.
+ZOZZ_API bool zozzRawFloatTrackValidate(const ZozzRawFloatTrack* raw);
+
+/// Borrowed, NUL-terminated track name — "" for an unnamed track, NULL only
+/// for a NULL handle. Valid until the handle is destroyed or renamed.
+/// TrackBuilder copies this into the runtime track it produces, which is what
+/// makes it worth setting.
+ZOZZ_API const char* zozzRawFloatTrackName(const ZozzRawFloatTrack* raw);
+
+/// Renames the track. `name` may be NULL, which clears it to "". The string
+/// is copied.
+ZOZZ_API ZozzResult zozzRawFloatTrackSetName(ZozzRawFloatTrack* raw,
+                                             const char* name);
+
+/// Copies every keyframe into `out`, in authored order. `count` is the
+/// capacity of `out` in keyframes and must be at least
+/// zozzRawFloatTrackNumKeyframes, else ZOZZ_RESULT_BUFFER_TOO_SMALL and
+/// nothing is written. Caller-owned memory; this never allocates.
+ZOZZ_API ZozzResult zozzRawFloatTrackKeyframes(const ZozzRawFloatTrack* raw,
+                                               ZozzRawFloatKeyframe* out,
+                                               size_t count);
+
+/// Drops every keyframe, keeping the name. Editing a track means clearing it
+/// and pushing its replacement keys; ozz has no key removal by index either —
+/// its vector is the storage.
+ZOZZ_API ZozzResult zozzRawFloatTrackClear(ZozzRawFloatTrack* raw);
+
 //===----------------------------------------------------------------------===//
 // RawFloat2Track
 //===----------------------------------------------------------------------===//
@@ -104,6 +184,24 @@ ZOZZ_API ZozzResult zozzFloat2TrackBuild(const ZozzRawFloat2Track* raw,
 ZOZZ_API ZozzResult zozzRawFloat2TrackOptimize(const ZozzRawFloat2Track* input,
                                                float tolerance,
                                                ZozzRawFloat2Track* output);
+
+/// See zozzRawFloatTrackValidate.
+ZOZZ_API bool zozzRawFloat2TrackValidate(const ZozzRawFloat2Track* raw);
+
+/// See zozzRawFloatTrackName.
+ZOZZ_API const char* zozzRawFloat2TrackName(const ZozzRawFloat2Track* raw);
+
+/// See zozzRawFloatTrackSetName.
+ZOZZ_API ZozzResult zozzRawFloat2TrackSetName(ZozzRawFloat2Track* raw,
+                                              const char* name);
+
+/// See zozzRawFloatTrackKeyframes.
+ZOZZ_API ZozzResult zozzRawFloat2TrackKeyframes(const ZozzRawFloat2Track* raw,
+                                                ZozzRawFloat2Keyframe* out,
+                                                size_t count);
+
+/// See zozzRawFloatTrackClear.
+ZOZZ_API ZozzResult zozzRawFloat2TrackClear(ZozzRawFloat2Track* raw);
 
 //===----------------------------------------------------------------------===//
 // RawFloat3Track
@@ -121,6 +219,24 @@ ZOZZ_API ZozzResult zozzRawFloat3TrackOptimize(const ZozzRawFloat3Track* input,
                                                float tolerance,
                                                ZozzRawFloat3Track* output);
 
+/// See zozzRawFloatTrackValidate.
+ZOZZ_API bool zozzRawFloat3TrackValidate(const ZozzRawFloat3Track* raw);
+
+/// See zozzRawFloatTrackName.
+ZOZZ_API const char* zozzRawFloat3TrackName(const ZozzRawFloat3Track* raw);
+
+/// See zozzRawFloatTrackSetName.
+ZOZZ_API ZozzResult zozzRawFloat3TrackSetName(ZozzRawFloat3Track* raw,
+                                              const char* name);
+
+/// See zozzRawFloatTrackKeyframes.
+ZOZZ_API ZozzResult zozzRawFloat3TrackKeyframes(const ZozzRawFloat3Track* raw,
+                                                ZozzRawFloat3Keyframe* out,
+                                                size_t count);
+
+/// See zozzRawFloatTrackClear.
+ZOZZ_API ZozzResult zozzRawFloat3TrackClear(ZozzRawFloat3Track* raw);
+
 //===----------------------------------------------------------------------===//
 // RawFloat4Track
 //===----------------------------------------------------------------------===//
@@ -136,6 +252,24 @@ ZOZZ_API ZozzResult zozzFloat4TrackBuild(const ZozzRawFloat4Track* raw,
 ZOZZ_API ZozzResult zozzRawFloat4TrackOptimize(const ZozzRawFloat4Track* input,
                                                float tolerance,
                                                ZozzRawFloat4Track* output);
+
+/// See zozzRawFloatTrackValidate.
+ZOZZ_API bool zozzRawFloat4TrackValidate(const ZozzRawFloat4Track* raw);
+
+/// See zozzRawFloatTrackName.
+ZOZZ_API const char* zozzRawFloat4TrackName(const ZozzRawFloat4Track* raw);
+
+/// See zozzRawFloatTrackSetName.
+ZOZZ_API ZozzResult zozzRawFloat4TrackSetName(ZozzRawFloat4Track* raw,
+                                              const char* name);
+
+/// See zozzRawFloatTrackKeyframes.
+ZOZZ_API ZozzResult zozzRawFloat4TrackKeyframes(const ZozzRawFloat4Track* raw,
+                                                ZozzRawFloat4Keyframe* out,
+                                                size_t count);
+
+/// See zozzRawFloatTrackClear.
+ZOZZ_API ZozzResult zozzRawFloat4TrackClear(ZozzRawFloat4Track* raw);
 
 //===----------------------------------------------------------------------===//
 // RawQuaternionTrack
@@ -156,6 +290,26 @@ ZOZZ_API ZozzResult zozzQuaternionTrackBuild(const ZozzRawQuaternionTrack* raw,
 ZOZZ_API ZozzResult zozzRawQuaternionTrackOptimize(
     const ZozzRawQuaternionTrack* input, float tolerance,
     ZozzRawQuaternionTrack* output);
+
+/// See zozzRawFloatTrackValidate.
+ZOZZ_API bool zozzRawQuaternionTrackValidate(const ZozzRawQuaternionTrack* raw);
+
+/// See zozzRawFloatTrackName.
+ZOZZ_API const char* zozzRawQuaternionTrackName(
+    const ZozzRawQuaternionTrack* raw);
+
+/// See zozzRawFloatTrackSetName.
+ZOZZ_API ZozzResult zozzRawQuaternionTrackSetName(ZozzRawQuaternionTrack* raw,
+                                                  const char* name);
+
+/// See zozzRawFloatTrackKeyframes.
+ZOZZ_API ZozzResult zozzRawQuaternionTrackKeyframes(
+    const ZozzRawQuaternionTrack* raw,
+    ZozzRawQuaternionKeyframe* out,
+    size_t count);
+
+/// See zozzRawFloatTrackClear.
+ZOZZ_API ZozzResult zozzRawQuaternionTrackClear(ZozzRawQuaternionTrack* raw);
 
 #ifdef __cplusplus
 }  // extern "C"

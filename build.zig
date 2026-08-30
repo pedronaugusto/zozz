@@ -82,13 +82,20 @@ const ozz_runtime_sources = [_][]const u8{
     "libs/ozz/src/geometry/runtime/skinning_job.cc",
 };
 
-/// ozz's offline builders, needed only by the test fixture. They turn raw
-/// keyframe data into runtime objects — the same path a future glTF cook would
-/// take, which is a second reason to keep them compiling.
+/// ozz's offline pipeline: the builders that turn raw keyframe data into
+/// runtime objects, the processors that reshape it on the way, and the
+/// archive traits that let a cook stage hand its raw output to the next one.
 const ozz_offline_sources = [_][]const u8{
     "libs/ozz/src/animation/offline/raw_skeleton.cc",
     "libs/ozz/src/animation/offline/raw_animation.cc",
     "libs/ozz/src/animation/offline/raw_animation_utils.cc",
+    // The offline types' archive traits. Separate translation units in ozz,
+    // and separate here for the same reason they are there: without them a
+    // raw skeleton or clip has no Save/Load at all, which is what left the
+    // offline half of the pipeline unable to persist anything between cook
+    // stages.
+    "libs/ozz/src/animation/offline/raw_skeleton_archive.cc",
+    "libs/ozz/src/animation/offline/raw_animation_archive.cc",
     "libs/ozz/src/animation/offline/skeleton_builder.cc",
     "libs/ozz/src/animation/offline/animation_builder.cc",
     // animation processing: key-frame reduction, additive deltas, root-motion

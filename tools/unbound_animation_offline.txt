@@ -26,7 +26,6 @@ animation/offline	LerpRotation	ZIG	src/math.zig:lerpRotation
 animation/offline	LerpScale	ZIG	src/math.zig:lerpScale
 animation/offline	LerpTranslation	ZIG	src/math.zig:lerpTranslation
 animation/offline	SampleAnimation	BOUND	zozzRawAnimationSample
-animation/offline	Validate	BOUND	ZOZZ_RESULT_JOB_INVALID zozzSample zozzLocalToModel zozzBlendingRun zozzSkinningJobRun zozzIKTwoBoneJobRun zozzFloatTrackTriggeringJobRun zozzSkeletonBuild zozzAnimationBuild zozzFloatTrackBuild ZOZZ_RESULT_INVALID_DATA zozzIArchiveTestSkeleton
 animation/offline	converter	INTERNAL	declared only by no source directory vendored for animation/offline/fbx, which this build does not compile
 animation/offline	scene	INTERNAL	declared only by no source directory vendored for animation/offline/fbx, which this build does not compile
 animation/offline	tolerance	BOUND	ZozzOptimizerSetting
