@@ -41,14 +41,16 @@ defer skeleton.deinit();
 const clip = try zozz.Animation.initFromFile("walk.ozz");
 defer clip.deinit();
 
-const pose = try zozz.SoaPose.initForSkeleton(skeleton);
-defer pose.deinit();
+// The caller owns the pose. It can be a stack array, an arena slice, or a
+// sub-range of a batch; `soaBlocks` says how long it has to be.
+const pose = try gpa.alloc(zozz.SoaTransform, try zozz.soaBlocks(skeleton.numJoints()));
+defer gpa.free(pose);
 
 const context = try zozz.SamplingContext.initForSkeleton(skeleton);
 defer context.deinit();
 
 // Per frame:
-try pose.setRestPose(skeleton);
+try skeleton.restPoseSoa(pose);
 try (zozz.SamplingJob{
     .animation = clip,
     .context = context,
@@ -57,7 +59,7 @@ try (zozz.SamplingJob{
 }).run();
 
 // Either read local transforms out...
-try pose.toLocalTransforms(locals);
+try zozz.pose.toLocalTransforms(pose, locals);
 
 // ...or flatten the hierarchy to model space. Note the 16-byte alignment.
 const models = try gpa.alignedAlloc(zozz.Mat4, .@"16", skeleton.numJoints());
@@ -66,6 +68,13 @@ try (zozz.LocalToModelJob{
     .locals = pose,
     .root = null,
     .out = models,
+}).run();
+
+// Blending takes the same spans, and allocates nothing per call.
+try (zozz.BlendingJob{
+    .layers = &.{ zozz.blending.layer(0.5, walk), zozz.blending.layer(0.5, run) },
+    .rest_pose = rest,
+    .out = pose,
 }).run();
 
 // A joint's skinning matrix is its model matrix times its inverse bind pose.
@@ -92,14 +101,27 @@ library inside a release executable is still not what you meant.
 
 ## Design
 
-### The SoA pose is opaque, and stays that way
+### The caller owns the SoA pose
 
 ozz's job pipeline speaks structure-of-arrays: sampling writes it, blending
-consumes and produces it, local-to-model reads it. `SoaPose` wraps that buffer
-without exposing the SIMD layout, so jobs chain with no conversion between them
-and no consumer ends up depending on how ozz packs four joints into a register.
-Conversion to `Transform` (array-of-structs) happens only at the edges, where
-you actually want it.
+consumes and produces it, local-to-model reads it. A pose is a
+`[]SoaTransform` — one element per four joints, `soaBlocks(n)` of them — and
+every entry point takes that slice, which is exactly the `ozz::span` the C++
+jobs take. Conversion to `Transform` (array-of-structs) happens only at the
+edges, where you actually want it.
+
+The layout is public and the memory is yours: a pose can live on the stack, in
+an arena, inside a larger struct, or as a sub-range of a batch, and two poses
+can be sub-ranges of one allocation. Blending is the same story — a
+`BlendingLayer` is `ozz::animation::BlendingJob::Layer` field for field, so
+`BlendingJob.run` hands your array straight to ozz with no copy and no
+allocation. `ffi/zozz_abi.cpp` static_asserts every size, alignment and offset
+of both against ozz's own types, so the reinterpretation cannot drift.
+
+A C caller owns that memory too, and can therefore hand over a pointer ozz
+would read with an aligned SIMD load. Every entry point taking SoA memory
+checks the 16-byte boundary and returns `ZOZZ_RESULT_INVALID_ARGUMENT` rather
+than faulting inside ozz.
 
 ### Allocator injection, honestly scoped
 
@@ -286,19 +308,19 @@ NaN ratio that is refused.
 | | |
 |---:|---|
 | **0.4.0** | version, the same in `build.zig.zon` and `ffi/zozz_core.h` |
-| **275** | C entry points (`ZOZZ_API` in `ffi/*.h`) |
-| **275** | Zig externs (`pub extern fn` in `src/c.zig`) |
+| **271** | C entry points (`ZOZZ_API` in `ffi/*.h`) |
+| **271** | Zig externs (`pub extern fn` in `src/c.zig`) |
 | **21** | installed public headers |
 | **89** | ozz public names with a binding |
-| **404** | ozz public names in the bound areas |
-| **165** | Zig tests `zig build test` executes |
+| **418** | ozz public names in the bound areas |
+| **171** | Zig tests `zig build test` executes |
 | **10** | tests it skips, each needing a build option or an on-disk asset |
-| **97** | assertions in the standalone C smoke test |
+| **107** | assertions in the standalone C smoke test |
 | **39** | vendored ozz translation units `build.zig` compiles |
 | **20** | zozz C++ translation units (`ffi/*.cpp`) |
-| **11227** | Zig source lines (`src/`) |
-| **8076** | C++ source lines (`ffi/`) |
-| **17** | deliberate drifts `ci/check-abi-drift.sh` must refuse |
+| **11624** | Zig source lines (`src/`) |
+| **8194** | C++ source lines (`ffi/`) |
+| **18** | deliberate drifts `ci/check-abi-drift.sh` must refuse |
 | **17** | steps `ci/run.sh` runs |
 | **7** | further targets `ci/run.sh` cross-compiles |
 <!-- END GENERATED -->

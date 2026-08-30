@@ -83,6 +83,38 @@ pub const Float4x4 = extern struct {
     m: [16]f32 align(16),
 };
 
+/// One SIMD register of four floats, `ZozzSimdFloat4`. Distinct from
+/// `math.SimdFloat4`, which is the `@Vector(4, f32)` every math function
+/// takes: this is the struct the header declares, and `pose.zig` asserts the
+/// two agree in size and alignment before casting between them.
+pub const SimdFloat4 = extern struct {
+    f: [4]f32 align(16),
+};
+
+/// Four joints' worth of one 3-component value. `x[i]` is joint i's x.
+pub const SoaFloat3 = extern struct {
+    x: [4]f32 align(16),
+    y: [4]f32,
+    z: [4]f32,
+};
+
+/// Four joints' worth of a quaternion, (x, y, z, w) like `Transform`'s.
+pub const SoaQuaternion = extern struct {
+    x: [4]f32 align(16),
+    y: [4]f32,
+    z: [4]f32,
+    w: [4]f32,
+};
+
+/// Four joints' local-space transforms: `ozz::math::SoaTransform`, and the
+/// currency of the job pipeline. A pose is an array of these, one per four
+/// joints, owned by the caller.
+pub const SoaTransform = extern struct {
+    translation: SoaFloat3,
+    rotation: SoaQuaternion,
+    scale: SoaFloat3,
+};
+
 pub const Allocator = extern struct {
     allocate: ?*const fn (user: ?*anyopaque, size: usize, alignment: usize) callconv(.c) ?*anyopaque,
     deallocate: ?*const fn (user: ?*anyopaque, block: ?*anyopaque) callconv(.c) void,
@@ -121,6 +153,23 @@ pub const AbiLayout = extern struct {
 
     float4x4_size: u32,
     float4x4_align: u32,
+
+    simd_float4_size: u32,
+    simd_float4_align: u32,
+
+    soa_transform_size: u32,
+    soa_transform_align: u32,
+    soa_transform_offset_translation: u32,
+    soa_transform_offset_rotation: u32,
+    soa_transform_offset_scale: u32,
+
+    blending_layer_size: u32,
+    blending_layer_align: u32,
+    blending_layer_offset_weight: u32,
+    blending_layer_offset_transform: u32,
+    blending_layer_offset_num_transform: u32,
+    blending_layer_offset_joint_weights: u32,
+    blending_layer_offset_num_joint_weights: u32,
 
     allocator_size: u32,
     allocator_align: u32,
@@ -166,7 +215,6 @@ pub const JointVisitor = *const fn (
 pub const Skeleton = opaque {};
 pub const Animation = opaque {};
 pub const SamplingContext = opaque {};
-pub const SoaPose = opaque {};
 pub const RawSkeleton = opaque {};
 pub const RawAnimation = opaque {};
 pub const FloatTrack = opaque {};
@@ -217,6 +265,7 @@ pub extern fn zozzSkeletonNumSoaJoints(skeleton: ?*const Skeleton) c_int;
 pub extern fn zozzSkeletonJointName(skeleton: ?*const Skeleton, joint: c_int) ?[*:0]const u8;
 pub extern fn zozzSkeletonJointParent(skeleton: ?*const Skeleton, joint: c_int) i16;
 pub extern fn zozzSkeletonRestPose(skeleton: ?*const Skeleton, out: [*]Transform, count: usize) Result;
+pub extern fn zozzSkeletonRestPoseSoa(skeleton: ?*const Skeleton, out: [*]SoaTransform, blocks: usize) Result;
 
 pub extern fn zozzAnimationLoadFile(path: [*:0]const u8, out: **Animation) Result;
 pub extern fn zozzAnimationLoadMemory(data: [*]const u8, size: usize, out: **Animation) Result;
@@ -247,13 +296,11 @@ pub extern fn zozzAnimationKeyframePreviouses(animation: ?*const Animation, chan
 pub extern fn zozzAnimationKeyframeIframeEntries(animation: ?*const Animation, channel: KeyframeChannel, out: [*]u8, count: usize) Result;
 pub extern fn zozzAnimationKeyframeIframeDesc(animation: ?*const Animation, channel: KeyframeChannel, out: [*]u32, count: usize) Result;
 
-pub extern fn zozzSoaPoseCreate(num_joints: c_int, out: **SoaPose) Result;
-pub extern fn zozzSoaPoseDestroy(pose: ?*SoaPose) void;
-pub extern fn zozzSoaPoseNumJoints(pose: ?*const SoaPose) c_int;
-pub extern fn zozzSoaPoseSetIdentity(pose: *SoaPose) Result;
-pub extern fn zozzSoaPoseSetRestPose(pose: *SoaPose, skeleton: *const Skeleton) Result;
-pub extern fn zozzSoaPoseToLocalTransforms(pose: *const SoaPose, out: [*]Transform, count: usize) Result;
-pub extern fn zozzSoaPoseFromLocalTransforms(pose: *SoaPose, in: [*]const Transform, count: usize) Result;
+pub extern fn zozzSoaBlocks(num_joints: c_int) usize;
+pub extern fn zozzSoaPoseSetIdentity(pose: [*]SoaTransform, blocks: usize) Result;
+pub extern fn zozzSoaPoseToLocalTransforms(pose: [*]const SoaTransform, blocks: usize, out: [*]Transform, num_joints: usize) Result;
+pub extern fn zozzSoaPoseFromLocalTransforms(in: [*]const Transform, num_joints: usize, pose: [*]SoaTransform, blocks: usize) Result;
+pub extern fn zozzSoaWeightsPack(in: [*]const f32, num_joints: usize, out: [*]SimdFloat4, blocks: usize) Result;
 
 pub extern fn zozzRawSkeletonCreate(out: **RawSkeleton) Result;
 pub extern fn zozzRawSkeletonDestroy(raw: ?*RawSkeleton) void;
@@ -400,11 +447,12 @@ pub extern fn zozzSamplingContextDestroy(context: ?*SamplingContext) void;
 pub extern fn zozzSamplingContextResize(context: ?*SamplingContext, max_tracks: c_int) Result;
 pub extern fn zozzSamplingContextInvalidate(context: ?*SamplingContext) void;
 pub extern fn zozzSamplingContextMaxTracks(context: ?*const SamplingContext) c_int;
-pub extern fn zozzSample(animation: *const Animation, context: *SamplingContext, ratio: f32, out: *SoaPose) Result;
+pub extern fn zozzSample(animation: *const Animation, context: *SamplingContext, ratio: f32, out: [*]SoaTransform, blocks: usize) Result;
 
 pub extern fn zozzLocalToModel(
     skeleton: *const Skeleton,
-    locals: *const SoaPose,
+    locals: [*]const SoaTransform,
+    blocks: usize,
     root: ?*const Float4x4,
     from: c_int,
     to: c_int,
@@ -479,25 +527,26 @@ pub extern fn zozzTrackTriggeringIteratorGet(iterator: *const TrackTriggeringIte
 // Blending
 //=============================================================================
 
-pub const SoaWeights = opaque {};
-
+/// `ozz::animation::BlendingJob::Layer` field for field: a float, then two
+/// {pointer, count} pairs where ozz has two `ozz::span`. `zozz_abi.cpp`
+/// asserts every offset against ozz's own type.
 pub const BlendingLayer = extern struct {
     weight: f32,
-    transform: ?*const SoaPose,
-    joint_weights: ?*const SoaWeights,
+    transform: ?[*]const SoaTransform,
+    num_transform: usize,
+    joint_weights: ?[*]const SimdFloat4,
+    num_joint_weights: usize,
 };
 
-pub extern fn zozzSoaWeightsCreate(num_joints: c_int, out: **SoaWeights) Result;
-pub extern fn zozzSoaWeightsDestroy(weights: ?*SoaWeights) void;
-pub extern fn zozzSoaWeightsFromArray(weights: *SoaWeights, in: [*]const f32, count: usize) Result;
 pub extern fn zozzBlendingRun(
     layers: ?[*]const BlendingLayer,
     num_layers: usize,
     additive_layers: ?[*]const BlendingLayer,
     num_additive_layers: usize,
-    rest_pose: *const SoaPose,
+    rest_pose: [*]const SoaTransform,
     threshold: f32,
-    out: *SoaPose,
+    out: [*]SoaTransform,
+    blocks: usize,
 ) Result;
 
 //=============================================================================
@@ -609,7 +658,8 @@ pub extern fn zozzIKAimJobDefaults(out: *IKAimJob) void;
 pub extern fn zozzIKAimJobRun(job: *const IKAimJob) Result;
 
 pub extern fn zozzSoaPoseApplyLocalCorrection(
-    pose: *SoaPose,
+    pose: [*]SoaTransform,
+    blocks: usize,
     joint: c_int,
     correction: *const [4]f32,
 ) Result;

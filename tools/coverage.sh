@@ -127,6 +127,13 @@ ozz_methods() {
     # SimdFloat4::operator* are separate capabilities and get separate lines.
     # An indented declaration is a member and takes its class; one at column
     # zero is a free function and takes the type of its first parameter.
+    pending_sym != "" {
+      type = first_param_type($0)
+      sym = pending_sym
+      pending_sym = ""
+      if (type != "" && (type in is_exposed)) print type "::" sym
+      # No `next`: the line is still a candidate for every rule below.
+    }
     /operator[^A-Za-z0-9_ ]/ {
       if (!match($0, /operator(\(\)|\[\]|[^A-Za-z0-9_ ()[]+)[[:space:]]*\(/)) next
       sym = substr($0, RSTART, RLENGTH)
@@ -136,15 +143,11 @@ ozz_methods() {
       if (sym == "operator=") next
       if ($0 ~ /^[[:space:]]/) type = cls
       else {
-        rest = substr($0, RSTART + RLENGTH)
-        sub(/^[[:space:]]*/, "", rest)
-        sub(/^(const|volatile)[[:space:]]+/, "", rest)
-        type = ""
-        if (match(rest, /^[A-Za-z_][A-Za-z0-9_:]*/)) {
-          type = substr(rest, RSTART, RLENGTH)
-          sub(/^.*::/, "", type)
-          sub(/^_/, "", type)
-        }
+        type = first_param_type(substr($0, RSTART + RLENGTH))
+        # ozz wraps a long free operator so its first parameter lands on the
+        # NEXT line. Resolving it there is what keeps the SoaQuaternion
+        # arithmetic in this report; reading one line only dropped it.
+        if (type == "") { pending_sym = sym; next }
       }
       if (type == "" || !(type in is_exposed)) next
       print type "::" sym
@@ -174,6 +177,17 @@ ozz_methods() {
       # tuned for a PascalCase API, would silently drop it.
       if (length(name) < 3) next
       print name
+    }
+    function first_param_type(rest,   type) {
+      sub(/^[[:space:]]*/, "", rest)
+      sub(/^(const|volatile)[[:space:]]+/, "", rest)
+      type = ""
+      if (match(rest, /^[A-Za-z_][A-Za-z0-9_:]*/)) {
+        type = substr(rest, RSTART, RLENGTH)
+        sub(/^.*::/, "", type)
+        sub(/^_/, "", type)
+      }
+      return type
     }
   ' 2>/dev/null | sort -u
 }

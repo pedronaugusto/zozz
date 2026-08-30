@@ -96,8 +96,8 @@ fn expectPipelineWorks(
     try std.testing.expectEqual(@as(f32, 0), clip.ratioAt(0));
     try std.testing.expectEqual(@as(f32, 1), clip.ratioAt(clip.duration() * 2));
 
-    const pose = try zozz.SoaPose.initForSkeleton(skeleton);
-    defer pose.deinit();
+    const pose = try gpa.alloc(zozz.SoaTransform, try zozz.soaBlocks(joints));
+    defer gpa.free(pose);
     const context = try zozz.SamplingContext.initForSkeleton(skeleton);
     defer context.deinit();
     try std.testing.expect(context.maxTracks() >= joints);
@@ -113,9 +113,9 @@ fn expectPipelineWorks(
 
     var moved = false;
     for ([_]f32{ 0.0, 0.25, 0.5, 0.75, 1.0 }, 0..) |ratio, step| {
-        try pose.setRestPose(skeleton);
+        try skeleton.restPoseSoa(pose);
         try (zozz.SamplingJob{ .animation = clip, .context = context, .ratio = ratio, .out = pose }).run();
-        try pose.toLocalTransforms(locals);
+        try zozz.pose.toLocalTransforms(pose, locals);
         for (locals) |t| try expectSaneTransform(t);
 
         if (step == 0) {
@@ -202,8 +202,7 @@ test "a sampling context can be reused across clips after invalidation" {
 
     const context = try zozz.SamplingContext.initForSkeleton(skeleton);
     defer context.deinit();
-    const pose = try zozz.SoaPose.initForSkeleton(skeleton);
-    defer pose.deinit();
+    var pose: [1]zozz.SoaTransform = undefined;
 
     // Two clips loaded and freed in turn can land on the same address; ozz
     // detects a clip change by pointer identity, so this is exactly the case
@@ -213,11 +212,11 @@ test "a sampling context can be reused across clips after invalidation" {
         defer clip.deinit();
 
         context.invalidate();
-        try pose.setRestPose(skeleton);
-        try (zozz.SamplingJob{ .animation = clip, .context = context, .ratio = 0.5, .out = pose }).run();
+        try skeleton.restPoseSoa(&pose);
+        try (zozz.SamplingJob{ .animation = clip, .context = context, .ratio = 0.5, .out = &pose }).run();
 
         var locals: [fixture_joints]zozz.Transform = undefined;
-        try pose.toLocalTransforms(&locals);
+        try zozz.pose.toLocalTransforms(&pose, &locals);
         for (locals) |t| try expectSaneTransform(t);
     }
 }
@@ -249,13 +248,12 @@ test "a sampling context can be resized in place and go on sampling correctly" {
     try context.resize(fixture_joints);
     try std.testing.expectEqual(@as(u32, fixture_joints), context.maxTracks());
 
-    const pose = try zozz.SoaPose.initForSkeleton(skeleton);
-    defer pose.deinit();
-    try pose.setRestPose(skeleton);
-    try (zozz.SamplingJob{ .animation = clip, .context = context, .ratio = 0.5, .out = pose }).run();
+    var pose: [1]zozz.SoaTransform = undefined;
+    try skeleton.restPoseSoa(&pose);
+    try (zozz.SamplingJob{ .animation = clip, .context = context, .ratio = 0.5, .out = &pose }).run();
 
     var locals: [fixture_joints]zozz.Transform = undefined;
-    try pose.toLocalTransforms(&locals);
+    try zozz.pose.toLocalTransforms(&pose, &locals);
     for (locals) |t| try expectSaneTransform(t);
 
     // Resizing to zero or negative tracks is rejected outright, not silently
@@ -281,16 +279,18 @@ test "a pose smaller than the animation is refused" {
     const context = try zozz.SamplingContext.initForSkeleton(skeleton);
     defer context.deinit();
 
-    const too_small = try zozz.SoaPose.init(fixture_joints - 1);
-    defer too_small.deinit();
+    // Zero blocks: the fixture's four joints need one. A span too short is
+    // refused by the job and by the skeleton's own rest-pose copy, rather
+    // than sampled into whatever the caller happened to hand over.
+    var too_small: [0]zozz.SoaTransform = undefined;
 
     try std.testing.expectError(
         zozz.Error.BufferTooSmall,
-        (zozz.SamplingJob{ .animation = clip, .context = context, .ratio = 0.5, .out = too_small }).run(),
+        (zozz.SamplingJob{ .animation = clip, .context = context, .ratio = 0.5, .out = &too_small }).run(),
     );
     try std.testing.expectError(
-        zozz.Error.SkeletonMismatch,
-        too_small.setRestPose(skeleton),
+        zozz.Error.BufferTooSmall,
+        skeleton.restPoseSoa(&too_small),
     );
 }
 
@@ -435,19 +435,17 @@ test "an animation written through the archive and read back compares equal to t
     defer context_a.deinit();
     const context_b = try zozz.SamplingContext.init(roundtripped.numTracks());
     defer context_b.deinit();
-    const pose_a = try zozz.SoaPose.init(original.numTracks());
-    defer pose_a.deinit();
-    const pose_b = try zozz.SoaPose.init(roundtripped.numTracks());
-    defer pose_b.deinit();
+    var pose_a: [1]zozz.SoaTransform = undefined;
+    var pose_b: [1]zozz.SoaTransform = undefined;
 
     var locals_a: [fixture_joints]zozz.Transform = undefined;
     var locals_b: [fixture_joints]zozz.Transform = undefined;
     for ([_]f32{ 0.0, 0.3, 0.5, 0.75, 1.0 }) |ratio| {
-        try (zozz.SamplingJob{ .animation = original, .context = context_a, .ratio = ratio, .out = pose_a }).run();
-        try pose_a.toLocalTransforms(&locals_a);
+        try (zozz.SamplingJob{ .animation = original, .context = context_a, .ratio = ratio, .out = &pose_a }).run();
+        try zozz.pose.toLocalTransforms(&pose_a, &locals_a);
 
-        try (zozz.SamplingJob{ .animation = roundtripped, .context = context_b, .ratio = ratio, .out = pose_b }).run();
-        try pose_b.toLocalTransforms(&locals_b);
+        try (zozz.SamplingJob{ .animation = roundtripped, .context = context_b, .ratio = ratio, .out = &pose_b }).run();
+        try zozz.pose.toLocalTransforms(&pose_b, &locals_b);
 
         for (locals_a, locals_b) |a, b| {
             try std.testing.expectEqual(a.translation, b.translation);

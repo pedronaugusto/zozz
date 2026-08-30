@@ -6,7 +6,7 @@ const err = @import("error.zig");
 const math = @import("math.zig");
 const Animation = @import("animation.zig").Animation;
 const Skeleton = @import("skeleton.zig").Skeleton;
-const SoaPose = @import("pose.zig").SoaPose;
+const SoaTransform = math.SoaTransform;
 
 /// Per-instance scratch that lets forward playback reuse the keyframes it
 /// decompressed last frame.
@@ -67,11 +67,17 @@ pub const SamplingJob = struct {
     animation: Animation,
     context: SamplingContext,
     ratio: f32,
-    out: SoaPose,
+    out: []SoaTransform,
 
     /// Runs the sampling job.
     pub fn run(self: SamplingJob) err.Error!void {
-        try err.check(c.zozzSample(self.animation.handle, self.context.handle, self.ratio, self.out.handle));
+        try err.check(c.zozzSample(
+            self.animation.handle,
+            self.context.handle,
+            self.ratio,
+            self.out.ptr,
+            self.out.len,
+        ));
     }
 };
 
@@ -85,7 +91,7 @@ pub const LocalToModelJob = struct {
     skeleton: Skeleton,
     /// ozz names this field `input`; `locals` is kept because it says which
     /// space the transforms are in, which is the thing a caller gets wrong.
-    locals: SoaPose,
+    locals: []const SoaTransform,
     /// Pre-multiplied onto every model-space matrix. Null is identity.
     root: ?*const math.Mat4 = null,
 
@@ -109,7 +115,8 @@ pub const LocalToModelJob = struct {
     pub fn run(self: LocalToModelJob) err.Error!void {
         try err.check(c.zozzLocalToModel(
             self.skeleton.handle,
-            self.locals.handle,
+            self.locals.ptr,
+            self.locals.len,
             self.root,
             self.from,
             self.to,

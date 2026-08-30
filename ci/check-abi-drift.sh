@@ -139,13 +139,24 @@ try "same-sized fields swapped" src/c.zig \
     translation: [3]f32,
 };'
 
+# A pointer and the count that follows it, exchanged. Both are eight bytes, so
+# the offset SEQUENCE is unchanged again -- and ZozzBlendingLayer is handed to
+# ozz as its own BlendingJob::Layer with no copy, so ozz would read a count
+# where a pointer belongs. This is the mutation that guards the whole
+# reinterpret-instead-of-convert design.
+try "a pointer and its count exchanged in a layer" src/c.zig \
+'    transform: ?[*]const SoaTransform,
+    num_transform: usize,' \
+'    num_transform: usize,
+    transform: ?[*]const SoaTransform,'
+
 try "a parameter dropped from a function" src/c.zig \
 'pub extern fn zozzSkeletonRestPose(skeleton: ?*const Skeleton, out: [*]Transform, count: usize) Result;' \
 'pub extern fn zozzSkeletonRestPose(skeleton: ?*const Skeleton, out: [*]Transform) Result;'
 
 try "a parameter widened (f32 -> f64)" src/c.zig \
-'pub extern fn zozzSample(animation: *const Animation, context: *SamplingContext, ratio: f32, out: *SoaPose) Result;' \
-'pub extern fn zozzSample(animation: *const Animation, context: *SamplingContext, ratio: f64, out: *SoaPose) Result;'
+'pub extern fn zozzSample(animation: *const Animation, context: *SamplingContext, ratio: f32, out: [*]SoaTransform, blocks: usize) Result;' \
+'pub extern fn zozzSample(animation: *const Animation, context: *SamplingContext, ratio: f64, out: [*]SoaTransform, blocks: usize) Result;'
 
 try "an enumerator renumbered" src/c.zig \
 '    bad_format = 3,' \

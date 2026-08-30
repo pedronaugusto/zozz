@@ -4,86 +4,70 @@
 const std = @import("std");
 const c = @import("c.zig");
 const err = @import("error.zig");
-const SoaPose = @import("pose.zig").SoaPose;
+const math = @import("math.zig");
 
-/// A per-joint SoA weight buffer, for partial blending.
-///
-/// See `zozz_blending.h`'s ZozzSoaWeights for why this is a handle rather
-/// than a raw float slice: it holds the same SIMD-packed layout a blend job
-/// actually reads, built once with `fromArray` and reused across every
-/// `run` call that wants the same mask.
-pub const SoaWeights = struct {
-    handle: *c.SoaWeights,
-
-    /// Allocates storage for `num_joints`, rounded up to a whole SoA block,
-    /// every joint initialised to a weight of 1.0.
-    pub fn init(num_joints: u32) err.Error!SoaWeights {
-        var handle: *c.SoaWeights = undefined;
-        try err.check(c.zozzSoaWeightsCreate(@intCast(num_joints), &handle));
-        return .{ .handle = handle };
-    }
-
-    pub fn deinit(self: SoaWeights) void {
-        c.zozzSoaWeightsDestroy(self.handle);
-    }
-
-    /// Packs `in` (at least as many entries as the buffer has joints) into
-    /// SoA blocks. Values are not clamped: ozz treats a negative weight as
-    /// 0. Every value must be finite.
-    pub fn fromArray(self: SoaWeights, in: []const f32) err.Error!void {
-        try err.check(c.zozzSoaWeightsFromArray(self.handle, in.ptr, in.len));
-    }
-};
+const SoaTransform = math.SoaTransform;
 
 /// One blend input: a pose, its weight, and an optional partial-blend mask.
-/// `transform` and `joint_weights` are borrowed for the `run` call only.
-pub const Layer = struct {
-    weight: f32,
-    transform: SoaPose,
-    joint_weights: ?SoaWeights = null,
+/// `ozz::animation::BlendingJob::Layer` field for field, so `run` hands the
+/// caller's array straight to the job. Build one with `layer` or
+/// `maskedLayer`; every buffer is borrowed for the `run` call only.
+pub const Layer = c.BlendingLayer;
 
-    fn toC(self: Layer) c.BlendingLayer {
-        return .{
-            .weight = self.weight,
-            .transform = self.transform.handle,
-            .joint_weights = if (self.joint_weights) |w| w.handle else null,
-        };
-    }
-};
+/// ozz's own `BlendingJob::threshold` default.
+pub const default_threshold: f32 = 0.1;
+
+/// A layer weighing every joint the same.
+pub fn layer(weight: f32, transform: []const SoaTransform) Layer {
+    return .{
+        .weight = weight,
+        .transform = transform.ptr,
+        .num_transform = transform.len,
+        .joint_weights = null,
+        .num_joint_weights = 0,
+    };
+}
+
+/// A layer with a per-joint mask, as `pose.packJointWeights` writes it: one
+/// register per four joints, multiplied onto `weight` joint by joint.
+pub fn maskedLayer(
+    weight: f32,
+    transform: []const SoaTransform,
+    joint_weights: []const math.SimdFloat4,
+) Layer {
+    return .{
+        .weight = weight,
+        .transform = transform.ptr,
+        .num_transform = transform.len,
+        .joint_weights = @ptrCast(joint_weights.ptr),
+        .num_joint_weights = joint_weights.len,
+    };
+}
 
 /// Mirrors `ozz::animation::BlendingJob`. Blends `layers` and adds
 /// `additive_layers` on top, into `out` — ozz's own two-pass split, not a
 /// second pass this wrapper adds. A joint whose accumulated `layers` weight
-/// falls below `threshold` (finite, > 0) is taken from `rest_pose` instead, so
-/// `rest_pose` also sets the joint count every buffer here is measured against.
+/// falls below `threshold` (finite, > 0) is taken from `rest_pose` instead.
+/// `out.len` sets the SoA block count every other buffer is measured against.
 pub const BlendingJob = struct {
     layers: []const Layer,
-    additive_layers: []const Layer,
-    rest_pose: SoaPose,
-    threshold: f32,
-    out: SoaPose,
+    additive_layers: []const Layer = &.{},
+    rest_pose: []const SoaTransform,
+    threshold: f32 = default_threshold,
+    out: []SoaTransform,
 
-    /// Runs the blending job.
-    ///
-    /// `gpa` backs a scratch conversion from `layers`/`additive_layers` into
-    /// the flat C form the job actually takes; freed before this returns.
-    pub fn run(self: BlendingJob, gpa: std.mem.Allocator) (std.mem.Allocator.Error || err.Error)!void {
-        const c_layers = try gpa.alloc(c.BlendingLayer, self.layers.len);
-        defer gpa.free(c_layers);
-        for (self.layers, c_layers) |layer, *dst| dst.* = layer.toC();
-
-        const c_additive = try gpa.alloc(c.BlendingLayer, self.additive_layers.len);
-        defer gpa.free(c_additive);
-        for (self.additive_layers, c_additive) |layer, *dst| dst.* = layer.toC();
-
+    /// Runs the blending job. Nothing is allocated: the layer arrays are
+    /// already in the layout ozz reads.
+    pub fn run(self: BlendingJob) err.Error!void {
         try err.check(c.zozzBlendingRun(
-            c_layers.ptr,
-            c_layers.len,
-            c_additive.ptr,
-            c_additive.len,
-            self.rest_pose.handle,
+            self.layers.ptr,
+            self.layers.len,
+            self.additive_layers.ptr,
+            self.additive_layers.len,
+            self.rest_pose.ptr,
             self.threshold,
-            self.out.handle,
+            self.out.ptr,
+            self.out.len,
         ));
     }
 };

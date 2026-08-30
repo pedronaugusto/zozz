@@ -397,8 +397,8 @@ test "builder: a built animation samples what was authored" {
     try std.testing.expectEqual(@as(f32, 2.0), clip.duration());
     try std.testing.expectEqual(@as(u32, 2), clip.numTracks());
 
-    const pose = try pose_mod.SoaPose.initForSkeleton(skel);
-    defer pose.deinit();
+    // Two joints fit in one SoA block, on the stack.
+    var pose: [1]math.SoaTransform = undefined;
     const context = try sampling_mod.SamplingContext.initForSkeleton(skel);
     defer context.deinit();
 
@@ -406,12 +406,12 @@ test "builder: a built animation samples what was authored" {
     // keys with quantized timepoints and half-float components (measured here:
     // the midpoint sample of a 0 -> 4 lerp lands at 1.9995117).
     var locals: [2]math.Transform = undefined;
-    try (sampling_mod.SamplingJob{ .animation = clip, .context = context, .ratio = 0.5, .out = pose }).run();
-    try pose.toLocalTransforms(&locals);
+    try (sampling_mod.SamplingJob{ .animation = clip, .context = context, .ratio = 0.5, .out = &pose }).run();
+    try pose_mod.toLocalTransforms(&pose, &locals);
     try std.testing.expectApproxEqAbs(@as(f32, 2), locals[0].translation[0], 1e-2);
 
-    try (sampling_mod.SamplingJob{ .animation = clip, .context = context, .ratio = 1.0, .out = pose }).run();
-    try pose.toLocalTransforms(&locals);
+    try (sampling_mod.SamplingJob{ .animation = clip, .context = context, .ratio = 1.0, .out = &pose }).run();
+    try pose_mod.toLocalTransforms(&pose, &locals);
     try std.testing.expectApproxEqAbs(@as(f32, 4), locals[0].translation[0], 1e-2);
 }
 
@@ -434,17 +434,16 @@ test "builder: an empty track bakes identity, not the rest pose" {
     const clip = try raw_anim.build();
     defer clip.deinit();
 
-    const pose = try pose_mod.SoaPose.initForSkeleton(skel);
-    defer pose.deinit();
+    var pose: [1]math.SoaTransform = undefined;
     const context = try sampling_mod.SamplingContext.initForSkeleton(skel);
     defer context.deinit();
 
     // Seed the pose with the rest pose, then sample: the empty track has
     // baked keys, so sampling OVERWRITES the seeded rest pose with identity.
-    try pose.setRestPose(skel);
-    try (sampling_mod.SamplingJob{ .animation = clip, .context = context, .ratio = 0.0, .out = pose }).run();
+    try skel.restPoseSoa(&pose);
+    try (sampling_mod.SamplingJob{ .animation = clip, .context = context, .ratio = 0.0, .out = &pose }).run();
     var locals: [2]math.Transform = undefined;
-    try pose.toLocalTransforms(&locals);
+    try pose_mod.toLocalTransforms(&pose, &locals);
     try std.testing.expectEqual(@as(f32, 0), locals[1].translation[0]);
     try std.testing.expectEqual(@as(f32, 0), locals[1].translation[1]);
 }

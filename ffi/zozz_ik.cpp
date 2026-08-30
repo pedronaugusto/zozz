@@ -141,18 +141,20 @@ ZozzResult zozzIKAimJobRun(const ZozzIKAimJob* job) {
   return ZOZZ_RESULT_OK;
 }
 
-ZozzResult zozzSoaPoseApplyLocalCorrection(ZozzSoaPose* pose, int joint,
+ZozzResult zozzSoaPoseApplyLocalCorrection(ZozzSoaTransform* pose,
+                                           size_t blocks, int joint,
                                            const float correction[4]) {
   if (pose == nullptr || correction == nullptr) {
     return ZOZZ_RESULT_INVALID_ARGUMENT;
   }
-  if (joint < 0 || joint >= pose->num_joints) {
+  if (!zozz::IsAligned16(pose)) return ZOZZ_RESULT_INVALID_ARGUMENT;
+  if (joint < 0 || static_cast<size_t>(joint) / 4 >= blocks) {
     return ZOZZ_RESULT_INVALID_ARGUMENT;
   }
 
   const int block = joint / 4;
   const int lane = joint & 3;
-  m::SoaTransform& soa = pose->data[block];
+  m::SoaTransform& soa = zozz::AsOzz(pose)[block];
 
   // Transpose the block's rotation to one full quaternion per joint, replace
   // this joint's lane, and transpose back. Transpose4x4 is a real 4x4

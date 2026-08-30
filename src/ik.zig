@@ -16,7 +16,7 @@ const std = @import("std");
 const c = @import("c.zig");
 const err = @import("error.zig");
 const math = @import("math.zig");
-const SoaPose = @import("pose.zig").SoaPose;
+const SoaTransform = @import("math.zig").SoaTransform;
 
 /// Solves a three-joint chain (two bones) so its end reaches `target`.
 ///
@@ -121,6 +121,11 @@ pub const AimResult = struct {
 /// local-space rotation in `pose`, in place. This is how a `TwoBoneResult`'s
 /// or `AimResult`'s correction gets folded back before the pose is next
 /// converted to model-space.
-pub fn applyCorrection(pose: SoaPose, joint: u32, correction: [4]f32) err.Error!void {
-    try err.check(c.zozzSoaPoseApplyLocalCorrection(pose.handle, @intCast(joint), &correction));
+pub fn applyCorrection(pose: []SoaTransform, joint: u32, correction: [4]f32) err.Error!void {
+    try err.check(c.zozzSoaPoseApplyLocalCorrection(
+        pose.ptr,
+        pose.len,
+        @intCast(joint),
+        &correction,
+    ));
 }

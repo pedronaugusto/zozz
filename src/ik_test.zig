@@ -65,12 +65,12 @@ test "two-bone IK moves the end effector toward the target, and reaches an in-ra
     const skel = try raw.build();
     defer skel.deinit();
 
-    const pose = try zozz.SoaPose.initForSkeleton(skel);
-    defer pose.deinit();
-    try pose.setRestPose(skel);
+    // Three joints fit in one SoA block.
+    var pose: [1]zozz.SoaTransform = undefined;
+    try skel.restPoseSoa(&pose);
 
     var models: [3]zozz.Mat4 = undefined;
-    try (zozz.LocalToModelJob{ .skeleton = skel, .locals = pose, .root = null, .out = &models }).run();
+    try (zozz.LocalToModelJob{ .skeleton = skel, .locals = &pose, .root = null, .out = &models }).run();
 
     // Case 1: a target beyond the chain's reach, off the chain's own axis so
     // reaching it actually requires bending. The end effector cannot reach
@@ -88,17 +88,17 @@ test "two-bone IK moves the end effector toward the target, and reaches an in-ra
         }).run();
         try std.testing.expect(!result.reached);
 
-        try zozz.ik.applyCorrection(pose, start, result.start_joint_correction);
-        try zozz.ik.applyCorrection(pose, mid, result.mid_joint_correction);
-        try (zozz.LocalToModelJob{ .skeleton = skel, .locals = pose, .root = null, .out = &models }).run();
+        try zozz.ik.applyCorrection(&pose, start, result.start_joint_correction);
+        try zozz.ik.applyCorrection(&pose, mid, result.mid_joint_correction);
+        try (zozz.LocalToModelJob{ .skeleton = skel, .locals = &pose, .root = null, .out = &models }).run();
         const after = distance(position(models[2]), target);
 
         try std.testing.expect(after < before);
     }
 
     // Reset to the rest pose for a clean second case.
-    try pose.setRestPose(skel);
-    try (zozz.LocalToModelJob{ .skeleton = skel, .locals = pose, .root = null, .out = &models }).run();
+    try skel.restPoseSoa(&pose);
+    try (zozz.LocalToModelJob{ .skeleton = skel, .locals = &pose, .root = null, .out = &models }).run();
 
     // Case 2: a target inside the chain's reach must actually be reached.
     {
@@ -111,9 +111,9 @@ test "two-bone IK moves the end effector toward the target, and reaches an in-ra
         }).run();
         try std.testing.expect(result.reached);
 
-        try zozz.ik.applyCorrection(pose, start, result.start_joint_correction);
-        try zozz.ik.applyCorrection(pose, mid, result.mid_joint_correction);
-        try (zozz.LocalToModelJob{ .skeleton = skel, .locals = pose, .root = null, .out = &models }).run();
+        try zozz.ik.applyCorrection(&pose, start, result.start_joint_correction);
+        try zozz.ik.applyCorrection(&pose, mid, result.mid_joint_correction);
+        try (zozz.LocalToModelJob{ .skeleton = skel, .locals = &pose, .root = null, .out = &models }).run();
         const reached_pos = position(models[2]);
 
         try std.testing.expectApproxEqAbs(target[0], reached_pos[0], 5e-3);
@@ -127,8 +127,8 @@ test "aim IK points the forward axis at the target" {
     try zozz.setAllocator(gpa);
     defer zozz.resetAllocator();
 
-    const pose = try zozz.SoaPose.init(1);
-    defer pose.deinit();
+    var pose: [1]zozz.SoaTransform = undefined;
+    try zozz.pose.setIdentity(&pose);
     // The joint sits at the origin with identity rotation, so its local
     // space equals its model space: the correction can be applied to the
     // pose and the aimed direction read back directly.
@@ -139,9 +139,9 @@ test "aim IK points the forward axis at the target" {
         .joint = &joint_matrix,
     }).run();
 
-    try zozz.ik.applyCorrection(pose, 0, result.joint_correction);
+    try zozz.ik.applyCorrection(&pose, 0, result.joint_correction);
     var locals: [1]zozz.Transform = undefined;
-    try pose.toLocalTransforms(&locals);
+    try zozz.pose.toLocalTransforms(&pose, &locals);
 
     const aimed = normalize(rotate(locals[0].rotation, .{ 1, 0, 0 }));
     const target_dir = normalize([3]f32{ 0, 0, 5 });
@@ -162,11 +162,11 @@ test "weight = 0 is identity: exactly for TwoBoneJob, to ozz's Est tolerance for
     _ = try raw.addJoint(mid, "end", translated(1, 0, 0));
     const skel = try raw.build();
     defer skel.deinit();
-    const pose = try zozz.SoaPose.initForSkeleton(skel);
-    defer pose.deinit();
-    try pose.setRestPose(skel);
+    // Three joints fit in one SoA block.
+    var pose: [1]zozz.SoaTransform = undefined;
+    try skel.restPoseSoa(&pose);
     var models: [3]zozz.Mat4 = undefined;
-    try (zozz.LocalToModelJob{ .skeleton = skel, .locals = pose, .root = null, .out = &models }).run();
+    try (zozz.LocalToModelJob{ .skeleton = skel, .locals = &pose, .root = null, .out = &models }).run();
 
     const two_bone = try (zozz.ik.TwoBoneJob{
         .target = .{ 5, 5, 5 }, // wildly off-axis; would normally bend hard.

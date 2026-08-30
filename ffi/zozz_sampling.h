@@ -48,12 +48,13 @@ ZOZZ_API int zozzSamplingContextMaxTracks(const ZozzSamplingContext* context);
 
 /// Samples `animation` at `ratio` (unit interval, clamped) into `out`.
 ///
-/// `out` must hold at least as many joints as the animation has tracks.
-/// Joints beyond the animation's track count are left untouched — seed them
-/// with zozzSoaPoseSetRestPose if the animation is partial.
+/// `blocks` is the SoA length of `out` and must cover the animation's track
+/// count. Joints beyond that count are left untouched -- seed them from the
+/// skeleton's rest pose if the animation is partial. `out` must be 16-byte
+/// aligned; ozz writes it with aligned SIMD stores.
 ZOZZ_API ZozzResult zozzSample(const ZozzAnimation* animation,
                                ZozzSamplingContext* context, float ratio,
-                               ZozzSoaPose* out);
+                               ZozzSoaTransform* out, size_t blocks);
 
 //===----------------------------------------------------------------------===//
 // Local-to-model
@@ -77,9 +78,9 @@ ZOZZ_API ZozzResult zozzSample(const ZozzAnimation* animation,
 /// `from_excluded` non-zero, `from` keeps its existing matrix in `out` -- which
 /// must already be valid -- and only its children are updated.
 ZOZZ_API ZozzResult zozzLocalToModel(const ZozzSkeleton* skeleton,
-                                     const ZozzSoaPose* locals,
-                                     const ZozzFloat4x4* root, int from,
-                                     int to, int from_excluded,
+                                     const ZozzSoaTransform* locals,
+                                     size_t blocks, const ZozzFloat4x4* root,
+                                     int from, int to, int from_excluded,
                                      ZozzFloat4x4* out, size_t count);
 
 #ifdef __cplusplus

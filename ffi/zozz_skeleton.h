@@ -55,6 +55,15 @@ ZOZZ_API int16_t zozzSkeletonJointParent(const ZozzSkeleton* skeleton,
 ZOZZ_API ZozzResult zozzSkeletonRestPose(const ZozzSkeleton* skeleton,
                                          ZozzTransform* out, size_t count);
 
+/// Copies ozz's own joint_rest_poses into `out`, no transpose. This is how a
+/// pose is seeded before sampling an animation that drives only some of the
+/// skeleton's joints: the joints the animation misses keep the rest pose.
+/// `blocks` must be at least zozzSkeletonNumSoaJoints and `out` 16-byte
+/// aligned, else ZOZZ_RESULT_BUFFER_TOO_SMALL / ZOZZ_RESULT_INVALID_ARGUMENT.
+ZOZZ_API ZozzResult zozzSkeletonRestPoseSoa(const ZozzSkeleton* skeleton,
+                                            ZozzSoaTransform* out,
+                                            size_t blocks);
+
 #ifdef __cplusplus
 }  // extern "C"
 #endif

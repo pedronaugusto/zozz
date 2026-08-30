@@ -217,4 +217,18 @@ base/maths	SimdFloat4::operator*	LANGUAGE	@Vector(4, f32) multiplies per lane
 base/maths	SimdFloat4::operator+	LANGUAGE	@Vector(4, f32) adds per lane
 base/maths	SimdFloat4::operator-	LANGUAGE	@Vector(4, f32) subtracts per lane
 base/maths	SimdFloat4::operator/	LANGUAGE	@Vector(4, f32) divides per lane
+base/maths	SoaFloat3::operator!=	ZIG	src/math.zig:soa_float3.ne
+base/maths	SoaFloat3::operator*	ZIG	src/math.zig:soa_float3.mul src/math.zig:soa_float3.mulScalar
+base/maths	SoaFloat3::operator+	ZIG	src/math.zig:soa_float3.add
+base/maths	SoaFloat3::operator-	ZIG	src/math.zig:soa_float3.sub src/math.zig:soa_float3.neg
+base/maths	SoaFloat3::operator/	ZIG	src/math.zig:soa_float3.div src/math.zig:soa_float3.divScalar
+base/maths	SoaFloat3::operator<	ZIG	src/math.zig:soa_float3.lt
+base/maths	SoaFloat3::operator<=	ZIG	src/math.zig:soa_float3.le
+base/maths	SoaFloat3::operator==	ZIG	src/math.zig:soa_float3.eq
+base/maths	SoaFloat3::operator>	ZIG	src/math.zig:soa_float3.gt
+base/maths	SoaFloat3::operator>=	ZIG	src/math.zig:soa_float3.ge
+base/maths	SoaQuaternion::operator*	ZIG	src/math.zig:soa_quaternion.mul src/math.zig:soa_quaternion.mulScalar
+base/maths	SoaQuaternion::operator+	ZIG	src/math.zig:soa_quaternion.add
+base/maths	SoaQuaternion::operator-	ZIG	src/math.zig:soa_quaternion.neg
+base/maths	SoaQuaternion::operator==	ZIG	src/math.zig:soa_quaternion.eq
 base/maths	Transform::operator*	ZIG	src/math.zig:transform.mul

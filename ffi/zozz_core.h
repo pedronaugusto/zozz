@@ -214,6 +214,53 @@ typedef struct ZOZZ_ALIGN16 ZozzFloat4x4 {
   float m[16];
 } ZozzFloat4x4;
 
+/// One SIMD register of four floats, ozz's SimdFloat4. It crosses as a type
+/// rather than as `float[4]` because that is what a per-joint weight buffer
+/// is an array of: one register per four joints, not one float per joint.
+typedef struct ZOZZ_ALIGN16 ZozzSimdFloat4 {
+  float f[4];
+} ZozzSimdFloat4;
+
+//===----------------------------------------------------------------------===//
+// Structure of arrays
+//
+// ozz's job pipeline speaks SoA: four joints share one register per component,
+// so a pose is an array of ZozzSoaTransform, one per four joints, and the
+// count is ceil(num_joints / 4) -- zozzSoaBlocks. The three types below are
+// ozz::math::SoaFloat3, SoaQuaternion and SoaTransform member for member, and
+// zozz_abi.cpp asserts every size, alignment and offset against them.
+//
+// They are public, and that is the point: the caller owns pose memory. A pose
+// can live in an arena, on the stack, or as a sub-range of a batch. An opaque
+// handle made every one of those impossible and cost an allocation per pose.
+//===----------------------------------------------------------------------===//
+
+/// Four joints' worth of one 3-component value: x[i] is joint i's x.
+typedef struct ZOZZ_ALIGN16 ZozzSoaFloat3 {
+  float x[4];
+  float y[4];
+  float z[4];
+} ZozzSoaFloat3;
+
+/// Four joints' worth of a quaternion, in (x, y, z, w) order like
+/// ZozzTransform's.
+typedef struct ZOZZ_ALIGN16 ZozzSoaQuaternion {
+  float x[4];
+  float y[4];
+  float z[4];
+  float w[4];
+} ZozzSoaQuaternion;
+
+/// Four joints' local-space transforms, ozz::math::SoaTransform. This is the
+/// currency of the job pipeline: sampling writes it, blending reads and
+/// writes it, local-to-model reads it. Convert to ZozzTransform only at the
+/// edges, with zozzSoaPoseToLocalTransforms.
+typedef struct ZOZZ_ALIGN16 ZozzSoaTransform {
+  ZozzSoaFloat3 translation;
+  ZozzSoaQuaternion rotation;
+  ZozzSoaFloat3 scale;
+} ZozzSoaTransform;
+
 //===----------------------------------------------------------------------===//
 // ABI layout guard
 //
@@ -242,6 +289,23 @@ typedef struct ZozzAbiLayout {
 
   uint32_t float4x4_size;
   uint32_t float4x4_align;
+
+  uint32_t simd_float4_size;
+  uint32_t simd_float4_align;
+
+  uint32_t soa_transform_size;
+  uint32_t soa_transform_align;
+  uint32_t soa_transform_offset_translation;
+  uint32_t soa_transform_offset_rotation;
+  uint32_t soa_transform_offset_scale;
+
+  uint32_t blending_layer_size;
+  uint32_t blending_layer_align;
+  uint32_t blending_layer_offset_weight;
+  uint32_t blending_layer_offset_transform;
+  uint32_t blending_layer_offset_num_transform;
+  uint32_t blending_layer_offset_joint_weights;
+  uint32_t blending_layer_offset_num_joint_weights;
 
   uint32_t allocator_size;
   uint32_t allocator_align;

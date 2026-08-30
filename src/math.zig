@@ -25,6 +25,17 @@ pub const Transform = c.Transform;
 /// 16-byte boundary — `localToModel` rejects a misaligned destination.
 pub const Mat4 = c.Float4x4;
 
+/// Four joints' worth of one 3-component value: `x[i]` is joint i's x.
+pub const SoaFloat3 = c.SoaFloat3;
+
+/// Four joints' worth of a quaternion, (x, y, z, w) like `Transform`'s.
+pub const SoaQuaternion = c.SoaQuaternion;
+
+/// Four joints' local-space transforms, `ozz::math::SoaTransform`. A pose is
+/// an array of these, one per four joints; `pose.zig` operates on them and
+/// `soaBlocks` sizes the array.
+pub const SoaTransform = c.SoaTransform;
+
 pub const transform_identity: Transform = .{
     .translation = .{ 0, 0, 0 },
     .rotation = .{ 0, 0, 0, 1 },
@@ -1396,6 +1407,164 @@ pub const transform = struct {
 
 // Box. ozz::math::Box member for member, with its three constructors spelled
 // as `invalid`, an initialiser and `fromPoints`.
+
+//===----------------------------------------------------------------------===//
+// SoA arithmetic
+//
+// `SoaFloat3` and `SoaQuaternion` store their components as `[4]f32` because
+// that is what the C header declares; every operation below reads them as
+// `SimdFloat4`, which Zig coerces to and from an array of the same length and
+// element type. Comparisons return a `SimdInt4` mask combined across the
+// components, exactly as ozz combines them: all components for equality and
+// ordering, any component for inequality.
+//===----------------------------------------------------------------------===//
+
+/// Mirrors ozz's free operators over `ozz::math::SoaFloat3`.
+pub const soa_float3 = struct {
+    pub fn add(a: SoaFloat3, b: SoaFloat3) SoaFloat3 {
+        return pack(x(a) + x(b), y(a) + y(b), z(a) + z(b));
+    }
+
+    pub fn sub(a: SoaFloat3, b: SoaFloat3) SoaFloat3 {
+        return pack(x(a) - x(b), y(a) - y(b), z(a) - z(b));
+    }
+
+    pub fn neg(v: SoaFloat3) SoaFloat3 {
+        return pack(-x(v), -y(v), -z(v));
+    }
+
+    pub fn mul(a: SoaFloat3, b: SoaFloat3) SoaFloat3 {
+        return pack(x(a) * x(b), y(a) * y(b), z(a) * z(b));
+    }
+
+    /// ozz's `operator*(SoaFloat3, SimdFloat4)`: one factor per lane, applied
+    /// to all three components.
+    pub fn mulScalar(v: SoaFloat3, f: SimdFloat4) SoaFloat3 {
+        return pack(x(v) * f, y(v) * f, z(v) * f);
+    }
+
+    pub fn div(a: SoaFloat3, b: SoaFloat3) SoaFloat3 {
+        return pack(x(a) / x(b), y(a) / y(b), z(a) / z(b));
+    }
+
+    /// ozz's `operator/(SoaFloat3, SimdFloat4)`.
+    pub fn divScalar(v: SoaFloat3, f: SimdFloat4) SoaFloat3 {
+        return pack(x(v) / f, y(v) / f, z(v) / f);
+    }
+
+    pub fn lt(a: SoaFloat3, b: SoaFloat3) SimdInt4 {
+        return all(simd_int4.cmpLt, a, b);
+    }
+
+    pub fn le(a: SoaFloat3, b: SoaFloat3) SimdInt4 {
+        return all(simd_int4.cmpLe, a, b);
+    }
+
+    pub fn gt(a: SoaFloat3, b: SoaFloat3) SimdInt4 {
+        return all(simd_int4.cmpGt, a, b);
+    }
+
+    pub fn ge(a: SoaFloat3, b: SoaFloat3) SimdInt4 {
+        return all(simd_int4.cmpGe, a, b);
+    }
+
+    /// Bitwise per lane, no tolerance, as ozz documents.
+    pub fn eq(a: SoaFloat3, b: SoaFloat3) SimdInt4 {
+        return all(simd_int4.cmpEq, a, b);
+    }
+
+    /// True on a lane where ANY component differs: an or-reduction, where
+    /// the comparisons above are and-reductions.
+    pub fn ne(a: SoaFloat3, b: SoaFloat3) SimdInt4 {
+        const cx = simd_int4.cmpNe(x(a), x(b));
+        const cy = simd_int4.cmpNe(y(a), y(b));
+        const cz = simd_int4.cmpNe(z(a), z(b));
+        return cx | cy | cz;
+    }
+
+    inline fn x(v: SoaFloat3) SimdFloat4 {
+        return v.x;
+    }
+    inline fn y(v: SoaFloat3) SimdFloat4 {
+        return v.y;
+    }
+    inline fn z(v: SoaFloat3) SimdFloat4 {
+        return v.z;
+    }
+    inline fn pack(vx: SimdFloat4, vy: SimdFloat4, vz: SimdFloat4) SoaFloat3 {
+        return .{ .x = vx, .y = vy, .z = vz };
+    }
+    inline fn all(
+        cmp: fn (SimdFloat4, SimdFloat4) SimdInt4,
+        a: SoaFloat3,
+        b: SoaFloat3,
+    ) SimdInt4 {
+        return cmp(x(a), x(b)) & cmp(y(a), y(b)) & cmp(z(a), z(b));
+    }
+};
+
+/// Mirrors ozz's free operators over `ozz::math::SoaQuaternion`.
+pub const soa_quaternion = struct {
+    /// The negation, which is the SAME rotation: a quaternion double-covers
+    /// the rotation group. `conjugate` is the inverse of a unit quaternion.
+    pub fn neg(q: SoaQuaternion) SoaQuaternion {
+        return pack(-x(q), -y(q), -z(q), -w(q));
+    }
+
+    pub fn conjugate(q: SoaQuaternion) SoaQuaternion {
+        return pack(-x(q), -y(q), -z(q), w(q));
+    }
+
+    pub fn add(a: SoaQuaternion, b: SoaQuaternion) SoaQuaternion {
+        return pack(x(a) + x(b), y(a) + y(b), z(a) + z(b), w(a) + w(b));
+    }
+
+    /// Composition. Normalized inputs give a normalized result.
+    pub fn mul(a: SoaQuaternion, b: SoaQuaternion) SoaQuaternion {
+        return pack(
+            w(a) * x(b) + x(a) * w(b) + y(a) * z(b) - z(a) * y(b),
+            w(a) * y(b) + y(a) * w(b) + z(a) * x(b) - x(a) * z(b),
+            w(a) * z(b) + z(a) * w(b) + x(a) * y(b) - y(a) * x(b),
+            w(a) * w(b) - x(a) * x(b) - y(a) * y(b) - z(a) * z(b),
+        );
+    }
+
+    /// ozz's `operator*(SoaQuaternion, SimdFloat4)`: one factor per lane.
+    pub fn mulScalar(q: SoaQuaternion, f: SimdFloat4) SoaQuaternion {
+        return pack(x(q) * f, y(q) * f, z(q) * f, w(q) * f);
+    }
+
+    pub fn dot(a: SoaQuaternion, b: SoaQuaternion) SimdFloat4 {
+        return x(a) * x(b) + y(a) * y(b) + z(a) * z(b) + w(a) * w(b);
+    }
+
+    /// Bitwise per lane, no tolerance, as ozz documents.
+    pub fn eq(a: SoaQuaternion, b: SoaQuaternion) SimdInt4 {
+        return simd_int4.cmpEq(x(a), x(b)) & simd_int4.cmpEq(y(a), y(b)) &
+            simd_int4.cmpEq(z(a), z(b)) & simd_int4.cmpEq(w(a), w(b));
+    }
+
+    inline fn x(q: SoaQuaternion) SimdFloat4 {
+        return q.x;
+    }
+    inline fn y(q: SoaQuaternion) SimdFloat4 {
+        return q.y;
+    }
+    inline fn z(q: SoaQuaternion) SimdFloat4 {
+        return q.z;
+    }
+    inline fn w(q: SoaQuaternion) SimdFloat4 {
+        return q.w;
+    }
+    inline fn pack(
+        qx: SimdFloat4,
+        qy: SimdFloat4,
+        qz: SimdFloat4,
+        qw: SimdFloat4,
+    ) SoaQuaternion {
+        return .{ .x = qx, .y = qy, .z = qz, .w = qw };
+    }
+};
 
 pub const Box = struct {
     min: [3]f32,

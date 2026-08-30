@@ -1,6 +1,9 @@
 //===----------------------------------------------------------------------===//
-// zozz — SoA pose storage and the SoA <-> AoS transposes.
+// zozz — the SoA <-> AoS transposes, and the operations over a caller-owned
+// SoA pose. No allocation happens here: the caller owns every buffer.
 //===----------------------------------------------------------------------===//
+
+#include <cmath>
 
 #include "zozz_internal.h"
 
@@ -93,87 +96,67 @@ void AosToSoa(const ZozzTransform* aos, ozz::math::SoaTransform* soa,
 
 extern "C" {
 
-ZozzResult zozzSoaPoseCreate(int num_joints, ZozzSoaPose** out) {
-  if (out == nullptr) return ZOZZ_RESULT_INVALID_ARGUMENT;
-  *out = nullptr;
-  if (num_joints <= 0 || num_joints > zozz::kMaxJoints) {
-    return ZOZZ_RESULT_INVALID_ARGUMENT;
-  }
-
-  const int blocks = zozz::SoaBlocks(num_joints);
-  ozz::memory::Allocator* allocator = ozz::memory::default_allocator();
-  void* storage =
-      allocator->Allocate(sizeof(ozz::math::SoaTransform) * blocks,
-                          alignof(ozz::math::SoaTransform));
-  if (storage == nullptr) return ZOZZ_RESULT_OUT_OF_MEMORY;
-
-  ZozzSoaPose* pose = zozz::New<ZozzSoaPose>();
-  if (pose == nullptr) {
-    allocator->Deallocate(storage);
-    return ZOZZ_RESULT_OUT_OF_MEMORY;
-  }
-
-  pose->data = static_cast<ozz::math::SoaTransform*>(storage);
-  pose->num_joints = num_joints;
-  pose->num_soa_joints = blocks;
-  for (int b = 0; b < blocks; ++b) {
-    pose->data[b] = ozz::math::SoaTransform::identity();
-  }
-
-  *out = pose;
-  return ZOZZ_RESULT_OK;
+size_t zozzSoaBlocks(int num_joints) {
+  if (num_joints < 1 || num_joints > zozz::kMaxJoints) return 0;
+  return static_cast<size_t>(zozz::SoaBlocks(num_joints));
 }
 
-void zozzSoaPoseDestroy(ZozzSoaPose* pose) {
-  if (pose == nullptr) return;
-  ozz::memory::default_allocator()->Deallocate(pose->data);
-  zozz::Delete(pose);
-}
-
-int zozzSoaPoseNumJoints(const ZozzSoaPose* pose) {
-  return pose == nullptr ? 0 : pose->num_joints;
-}
-
-ZozzResult zozzSoaPoseSetIdentity(ZozzSoaPose* pose) {
-  if (pose == nullptr) return ZOZZ_RESULT_INVALID_ARGUMENT;
-  for (int b = 0; b < pose->num_soa_joints; ++b) {
-    pose->data[b] = ozz::math::SoaTransform::identity();
+ZozzResult zozzSoaPoseSetIdentity(ZozzSoaTransform* pose, size_t blocks) {
+  if (pose == nullptr || blocks == 0) return ZOZZ_RESULT_INVALID_ARGUMENT;
+  if (!zozz::IsAligned16(pose)) return ZOZZ_RESULT_INVALID_ARGUMENT;
+  ozz::math::SoaTransform* soa = zozz::AsOzz(pose);
+  for (size_t b = 0; b < blocks; ++b) {
+    soa[b] = ozz::math::SoaTransform::identity();
   }
   return ZOZZ_RESULT_OK;
 }
 
-ZozzResult zozzSoaPoseSetRestPose(ZozzSoaPose* pose,
-                                  const ZozzSkeleton* skeleton) {
-  if (pose == nullptr || skeleton == nullptr) return ZOZZ_RESULT_INVALID_ARGUMENT;
-  if (pose->num_joints != skeleton->impl.num_joints()) {
-    return ZOZZ_RESULT_SKELETON_MISMATCH;
-  }
-  const ozz::span<const ozz::math::SoaTransform> rest =
-      skeleton->impl.joint_rest_poses();
-  for (int b = 0; b < pose->num_soa_joints; ++b) {
-    pose->data[b] = rest[b];
-  }
-  return ZOZZ_RESULT_OK;
-}
-
-ZozzResult zozzSoaPoseToLocalTransforms(const ZozzSoaPose* pose,
-                                        ZozzTransform* out, size_t count) {
+ZozzResult zozzSoaPoseToLocalTransforms(const ZozzSoaTransform* pose,
+                                        size_t blocks, ZozzTransform* out,
+                                        size_t num_joints) {
   if (pose == nullptr || out == nullptr) return ZOZZ_RESULT_INVALID_ARGUMENT;
-  if (count < static_cast<size_t>(pose->num_joints)) {
-    return ZOZZ_RESULT_BUFFER_TOO_SMALL;
-  }
-  zozz::SoaToAos(pose->data, out, pose->num_joints);
+  if (!zozz::IsAligned16(pose)) return ZOZZ_RESULT_INVALID_ARGUMENT;
+  if (num_joints == 0) return ZOZZ_RESULT_INVALID_ARGUMENT;
+  if (blocks < (num_joints + 3) / 4) return ZOZZ_RESULT_BUFFER_TOO_SMALL;
+  zozz::SoaToAos(zozz::AsOzz(pose), out, static_cast<int>(num_joints));
   return ZOZZ_RESULT_OK;
 }
 
-ZozzResult zozzSoaPoseFromLocalTransforms(ZozzSoaPose* pose,
-                                          const ZozzTransform* in,
-                                          size_t count) {
-  if (pose == nullptr || in == nullptr) return ZOZZ_RESULT_INVALID_ARGUMENT;
-  if (count < static_cast<size_t>(pose->num_joints)) {
-    return ZOZZ_RESULT_BUFFER_TOO_SMALL;
+ZozzResult zozzSoaPoseFromLocalTransforms(const ZozzTransform* in,
+                                          size_t num_joints,
+                                          ZozzSoaTransform* pose,
+                                          size_t blocks) {
+  if (in == nullptr || pose == nullptr) return ZOZZ_RESULT_INVALID_ARGUMENT;
+  if (!zozz::IsAligned16(pose)) return ZOZZ_RESULT_INVALID_ARGUMENT;
+  if (num_joints == 0) return ZOZZ_RESULT_INVALID_ARGUMENT;
+  if (blocks < (num_joints + 3) / 4) return ZOZZ_RESULT_BUFFER_TOO_SMALL;
+  zozz::AosToSoa(in, zozz::AsOzz(pose), static_cast<int>(num_joints));
+  return ZOZZ_RESULT_OK;
+}
+
+ZozzResult zozzSoaWeightsPack(const float* in, size_t num_joints,
+                              ZozzSimdFloat4* out, size_t blocks) {
+  if (in == nullptr || out == nullptr) return ZOZZ_RESULT_INVALID_ARGUMENT;
+  if (!zozz::IsAligned16(out)) return ZOZZ_RESULT_INVALID_ARGUMENT;
+  if (num_joints == 0) return ZOZZ_RESULT_INVALID_ARGUMENT;
+  if (blocks < (num_joints + 3) / 4) return ZOZZ_RESULT_BUFFER_TOO_SMALL;
+  for (size_t i = 0; i < num_joints; ++i) {
+    if (!std::isfinite(in[i])) return ZOZZ_RESULT_INVALID_ARGUMENT;
   }
-  zozz::AosToSoa(in, pose->data, pose->num_joints);
+
+  ozz::math::SimdFloat4* simd = zozz::AsOzz(out);
+  const size_t used = (num_joints + 3) / 4;
+  for (size_t b = 0; b < used; ++b) {
+    const size_t base = b * 4;
+    float lane[4] = {1.f, 1.f, 1.f, 1.f};
+    for (size_t l = 0; l < 4 && base + l < num_joints; ++l) {
+      lane[l] = in[base + l];
+    }
+    simd[b] = ozz::math::simd_float4::LoadPtrU(lane);
+  }
+  for (size_t b = used; b < blocks; ++b) {
+    simd[b] = ozz::math::simd_float4::one();
+  }
   return ZOZZ_RESULT_OK;
 }
 

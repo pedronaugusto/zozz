@@ -31,7 +31,8 @@ fn translationX(m: zozz.Mat4) f32 {
 /// joint i's model-space translation is exactly i.
 const Chain = struct {
     skeleton: zozz.Skeleton,
-    pose: zozz.SoaPose,
+    /// Four joints fit in one SoA block, so the pose lives in the fixture.
+    pose: [1]zozz.SoaTransform,
 
     fn init() !Chain {
         const raw = try zozz.RawSkeleton.init();
@@ -43,13 +44,12 @@ const Chain = struct {
         }
         const skeleton = try raw.build();
         errdefer skeleton.deinit();
-        const pose = try zozz.SoaPose.initForSkeleton(skeleton);
-        try pose.setRestPose(skeleton);
+        var pose: [1]zozz.SoaTransform = undefined;
+        try skeleton.restPoseSoa(&pose);
         return .{ .skeleton = skeleton, .pose = pose };
     }
 
     fn deinit(self: Chain) void {
-        self.pose.deinit();
         self.skeleton.deinit();
     }
 };
@@ -64,7 +64,7 @@ test "the default range walks the whole hierarchy" {
     var models: [4]zozz.Mat4 = .{poison} ** 4;
     try (zozz.LocalToModelJob{
         .skeleton = chain.skeleton,
-        .locals = chain.pose,
+        .locals = &chain.pose,
         .out = &models,
     }).run();
 
@@ -91,7 +91,7 @@ test "a from with a defaulted to still updates through the last joint" {
     var models: [4]zozz.Mat4 = .{poison} ** 4;
     try (zozz.LocalToModelJob{
         .skeleton = chain.skeleton,
-        .locals = chain.pose,
+        .locals = &chain.pose,
         .out = &models,
     }).run();
 
@@ -99,7 +99,7 @@ test "a from with a defaulted to still updates through the last joint" {
     models[3] = poison;
     try (zozz.LocalToModelJob{
         .skeleton = chain.skeleton,
-        .locals = chain.pose,
+        .locals = &chain.pose,
         .from = 2,
         .out = &models,
     }).run();
@@ -120,7 +120,7 @@ test "to ends the walk, leaving later joints untouched" {
     var models: [4]zozz.Mat4 = .{poison} ** 4;
     try (zozz.LocalToModelJob{
         .skeleton = chain.skeleton,
-        .locals = chain.pose,
+        .locals = &chain.pose,
         .to = 1,
         .out = &models,
     }).run();
@@ -141,7 +141,7 @@ test "from_excluded keeps from's matrix and updates its children" {
     var models: [4]zozz.Mat4 = .{poison} ** 4;
     try (zozz.LocalToModelJob{
         .skeleton = chain.skeleton,
-        .locals = chain.pose,
+        .locals = &chain.pose,
         .out = &models,
     }).run();
 
@@ -153,7 +153,7 @@ test "from_excluded keeps from's matrix and updates its children" {
 
     try (zozz.LocalToModelJob{
         .skeleton = chain.skeleton,
-        .locals = chain.pose,
+        .locals = &chain.pose,
         .from = 1,
         .from_excluded = true,
         .out = &models,
@@ -174,7 +174,7 @@ test "an out-of-range from or to is refused rather than writing nothing" {
     var models: [4]zozz.Mat4 = .{poison} ** 4;
     const base = zozz.LocalToModelJob{
         .skeleton = chain.skeleton,
-        .locals = chain.pose,
+        .locals = &chain.pose,
         .out = &models,
     };
 
@@ -209,7 +209,7 @@ test "a destination smaller than the skeleton is refused whatever the range" {
     var models: [2]zozz.Mat4 = .{poison} ** 2;
     try std.testing.expectError(zozz.Error.BufferTooSmall, (zozz.LocalToModelJob{
         .skeleton = chain.skeleton,
-        .locals = chain.pose,
+        .locals = &chain.pose,
         .from = 0,
         .to = 1,
         .out = &models,
@@ -223,6 +223,7 @@ test "max_joints is ozz's own ceiling, and a pose cannot exceed it" {
     try std.testing.expectEqual(@as(i32, 1024), zozz.max_joints);
     try std.testing.expectError(
         zozz.Error.InvalidArgument,
-        zozz.SoaPose.init(@as(u32, @intCast(zozz.max_joints)) + 1),
+        zozz.soaBlocks(@as(u32, @intCast(zozz.max_joints)) + 1),
     );
+    try std.testing.expectEqual(@as(usize, 256), try zozz.soaBlocks(@intCast(zozz.max_joints)));
 }
