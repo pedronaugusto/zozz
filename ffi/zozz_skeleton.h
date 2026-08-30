@@ -45,6 +45,21 @@ ZOZZ_API const char* zozzSkeletonJointName(const ZozzSkeleton* skeleton,
 ZOZZ_API int16_t zozzSkeletonJointParent(const ZozzSkeleton* skeleton,
                                          int joint);
 
+/// Borrowed view of ozz's own parent array, in depth-first order:
+/// Skeleton::joint_parents(). `out_count` receives the joint count. Valid
+/// while the skeleton is alive; NULL, with a zero count, for a NULL skeleton
+/// or a NULL `out_count`. This is the whole hierarchy in one crossing, where
+/// zozzSkeletonJointParent above costs one per joint.
+ZOZZ_API const int16_t* zozzSkeletonJointParents(const ZozzSkeleton* skeleton,
+                                                 size_t* out_count);
+
+/// Borrowed view of ozz's own name array: Skeleton::joint_names(), one
+/// NUL-terminated name per joint, owned by the skeleton. Same lifetime, same
+/// NULL rule and the same reason as the parent view above.
+ZOZZ_API const char* const* zozzSkeletonJointNames(
+    const ZozzSkeleton* skeleton,
+    size_t* out_count);
+
 /// Hard joint-count ceiling, ozz's own Skeleton::kMaxJoints. It is also the
 /// value ozz gives LocalToModelJob::to by default, meaning "to the last
 /// joint" -- zozz_abi.cpp static_asserts both against ozz.
@@ -63,6 +78,15 @@ ZOZZ_API ZozzResult zozzSkeletonRestPose(const ZozzSkeleton* skeleton,
 ZOZZ_API ZozzResult zozzSkeletonRestPoseSoa(const ZozzSkeleton* skeleton,
                                             ZozzSoaTransform* out,
                                             size_t blocks);
+
+/// Borrowed view of ozz's own rest pose, SoA and untransposed:
+/// Skeleton::joint_rest_poses(). `out_count` receives the BLOCK count, which
+/// is zozzSkeletonNumSoaJoints. Read-only, so a caller that means to write the
+/// pose wants zozzSkeletonRestPoseSoa above, which copies into its buffer;
+/// this one is for reading and costs nothing.
+ZOZZ_API const ZozzSoaTransform* zozzSkeletonJointRestPoses(
+    const ZozzSkeleton* skeleton,
+    size_t* out_count);
 
 #ifdef __cplusplus
 }  // extern "C"

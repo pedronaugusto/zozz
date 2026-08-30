@@ -187,6 +187,55 @@ test "the full pipeline runs against synthetic assets" {
     try expectPipelineWorks(gpa, skeleton, clip);
 }
 
+test "the bulk skeleton accessors are ozz's own arrays, not copies" {
+    const gpa = std.testing.allocator;
+    try zozz.setAllocator(gpa);
+    defer zozz.resetAllocator() catch unreachable;
+
+    const skeleton_blob = try FixtureBlob.init(zozzFixtureSkeleton);
+    defer skeleton_blob.deinit();
+    var skeleton = try zozz.Skeleton.initFromMemory(skeleton_blob.bytes);
+    defer skeleton.deinit();
+
+    const parents = skeleton.jointParents();
+    const names = skeleton.jointNames();
+    const rest = skeleton.jointRestPoses();
+
+    try std.testing.expectEqual(@as(usize, fixture_joints), parents.len);
+    try std.testing.expectEqual(@as(usize, fixture_joints), names.len);
+    try std.testing.expectEqual(@as(usize, skeleton.numSoaJoints()), rest.len);
+
+    // Every entry agrees with the per-joint accessor it replaces, which is
+    // what makes the bulk form a saving rather than a second answer.
+    for (0..skeleton.numJoints()) |i| {
+        const joint: u32 = @intCast(i);
+        try std.testing.expectEqual(skeleton.jointParent(joint), parents[i]);
+        try std.testing.expectEqualStrings(
+            skeleton.jointName(joint).?,
+            std.mem.span(names[i]),
+        );
+    }
+
+    // Parents are depth-first, so a joint's parent always precedes it. ozz
+    // relies on this in every local-to-model walk; nothing else here checks it.
+    for (parents, 0..) |parent, i| {
+        try std.testing.expect(parent < @as(i16, @intCast(i)));
+    }
+
+    // A VIEW, not a copy: the same call twice hands back the same storage, so
+    // no allocation happened and the caller may hold it for the skeleton's
+    // lifetime. A copying accessor would fail this.
+    try std.testing.expectEqual(parents.ptr, skeleton.jointParents().ptr);
+    try std.testing.expectEqual(names.ptr, skeleton.jointNames().ptr);
+    try std.testing.expectEqual(rest.ptr, skeleton.jointRestPoses().ptr);
+
+    // And it is the same rest pose zozzSkeletonRestPoseSoa copies out, which
+    // is the accessor a caller that means to WRITE the pose still needs.
+    var copy: [(fixture_joints + 3) / 4]zozz.SoaTransform align(16) = undefined;
+    try skeleton.restPoseSoa(&copy);
+    try std.testing.expectEqualSlices(zozz.SoaTransform, rest, &copy);
+}
+
 test "a sampling context can be reused across clips after invalidation" {
     const gpa = std.testing.allocator;
     try zozz.setAllocator(gpa);

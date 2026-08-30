@@ -22,9 +22,6 @@ animation/runtime	IterateJointsDF	BOUND	zozzSkeletonIterateJointsDepthFirst Zozz
 animation/runtime	IterateJointsDFReverse	BOUND	zozzSkeletonIterateJointsDepthFirstReverse
 animation/runtime	Lerp	INTERNAL	upstream libs/ozz/include/ozz/animation/runtime/track.h:46 (namespace)
 animation/runtime	end	BOUND	zozzTrackTriggeringIteratorValid zozzFloatTrackTriggeringJobRun zozz zozzSkeletonNumJoints
-animation/runtime	joint_names	BOUND	zozzSkeletonJointName zozzSkeletonNumJoints
-animation/runtime	joint_parents	BOUND	zozzSkeletonJointParent
-animation/runtime	joint_rest_poses	BOUND	zozzSkeletonRestPose
 animation/runtime	max_soa_tracks	BOUND	zozzSamplingContextMaxTracks
 animation/runtime	rising	BOUND	ZozzTrackEdge zozzFloatTrackTriggeringJobRun zozzTrackTriggeringIteratorGet
 animation/runtime	rotations_ctrl	BOUND	zozzAnimationKeyframesCtrl ZOZZ_KEYFRAME_CHANNEL_ROTATION

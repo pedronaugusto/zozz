@@ -64,6 +64,37 @@ pub const Skeleton = struct {
         return c.zozzSkeletonJointParent(self.handle.?, @intCast(joint));
     }
 
+    /// ozz's own parent array, in depth-first order, borrowed: no copy and
+    /// no allocation, valid while the skeleton is alive. One crossing for the
+    /// whole hierarchy, where `jointParent` costs one per joint. Empty for a
+    /// skeleton with no joints.
+    pub fn jointParents(self: Skeleton) []const i16 {
+        var count: usize = 0;
+        const ptr = c.zozzSkeletonJointParents(self.handle.?, &count) orelse
+            return &.{};
+        return ptr[0..count];
+    }
+
+    /// ozz's own name array, borrowed on the same terms. Each entry is a
+    /// NUL-terminated name owned by the skeleton; `std.mem.span` turns one
+    /// into a slice when a slice is what the caller wants.
+    pub fn jointNames(self: Skeleton) []const [*:0]const u8 {
+        var count: usize = 0;
+        const ptr = c.zozzSkeletonJointNames(self.handle.?, &count) orelse
+            return &.{};
+        return ptr[0..count];
+    }
+
+    /// ozz's own rest pose, SoA and untransposed, borrowed on the same terms.
+    /// The slice is `numSoaJoints` blocks long. `restPoseSoa` below is the
+    /// copying twin, for a caller that means to WRITE the pose it seeds.
+    pub fn jointRestPoses(self: Skeleton) []const math.SoaTransform {
+        var count: usize = 0;
+        const ptr = c.zozzSkeletonJointRestPoses(self.handle.?, &count) orelse
+            return &.{};
+        return ptr[0..count];
+    }
+
     /// Writes the rest pose as local transforms. `out` must hold at least
     /// `numJoints` entries.
     pub fn restPose(self: Skeleton, out: []math.Transform) err.Error!void {

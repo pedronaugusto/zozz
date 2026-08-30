@@ -332,18 +332,18 @@ NaN ratio that is refused.
 | | |
 |---:|---|
 | **0.4.0** | version, the same in `build.zig.zon` and `ffi/zozz_core.h` |
-| **355** | C entry points (`ZOZZ_API` in `ffi/*.h`) |
-| **355** | Zig externs (`pub extern fn` in `src/c.zig`) |
+| **358** | C entry points (`ZOZZ_API` in `ffi/*.h`) |
+| **358** | Zig externs (`pub extern fn` in `src/c.zig`) |
 | **21** | installed public headers |
-| **94** | ozz public names with a binding |
+| **97** | ozz public names with a binding |
 | **418** | ozz public names in the bound areas |
-| **191** | Zig tests `zig build test` executes |
+| **192** | Zig tests `zig build test` executes |
 | **10** | tests it skips, each needing a build option or an on-disk asset |
-| **155** | assertions in the standalone C smoke test |
+| **162** | assertions in the standalone C smoke test |
 | **41** | vendored ozz translation units `build.zig` compiles |
 | **20** | zozz C++ translation units (`ffi/*.cpp`) |
-| **14114** | Zig source lines (`src/`) |
-| **9424** | C++ source lines (`ffi/`) |
+| **14197** | Zig source lines (`src/`) |
+| **9486** | C++ source lines (`ffi/`) |
 | **18** | deliberate drifts `ci/check-abi-drift.sh` must refuse |
 | **18** | steps `ci/run.sh` runs |
 | **7** | further targets `ci/run.sh` cross-compiles |
