@@ -100,6 +100,10 @@ run 'documented numbers' ci/check-docs.sh
 # every non-MSVC target for a difference no object file has. See the script.
 run 'ZOZZ_ALIGN16 is applied to types' ci/check-alignment.sh
 
+# CI runs the scripts in ci/ by path. One committed without its executable bit
+# fails there and nowhere else, because every local runner invokes bash first.
+run 'every committed script is executable' ci/check-executable.sh
+
 #-----------------------------------------------------------------------------
 section 'Tests — native'
 #-----------------------------------------------------------------------------
