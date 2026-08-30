@@ -181,12 +181,27 @@ typedef struct ZozzTransform {
   float scale[3];
 } ZozzTransform;
 
+//===----------------------------------------------------------------------===//
+// 16-byte alignment
+//
+// ZOZZ_ALIGN16 is applied to a struct DEFINITION -- `struct ZOZZ_ALIGN16 X {}`
+// -- and never to a member. Zig 0.16's translate-c does not honour
+// `#pragma pack(pop)` on non-MSVC targets: after any `#pragma pack(push, 8)`
+// in an included header, a later MEMBER carrying `_Alignas(16)` reads back as
+// align 8. mingw's corecrt.h does exactly that around <stdint.h>, so on
+// x86_64-windows-gnu a member-aligned type reads as align 8 through @cImport
+// while the compiled library lays it out at 16, and ../src/abi_check.zig fires
+// on a difference no object file has. Alignment on the TYPE survives the
+// leaked pack on all four targets [measured 2026-08-30: windows-gnu,
+// windows-msvc, linux-gnu, macos]. It is also the truer statement.
+//===----------------------------------------------------------------------===//
+
 #if defined(__cplusplus)
 #define ZOZZ_ALIGN16 alignas(16)
 #elif defined(_MSC_VER)
 #define ZOZZ_ALIGN16 __declspec(align(16))
 #else
-#define ZOZZ_ALIGN16 _Alignas(16)
+#define ZOZZ_ALIGN16 __attribute__((aligned(16)))
 #endif
 
 /// A 4x4 matrix in COLUMN-MAJOR order: m[0..3] is the first column, matching
@@ -195,8 +210,8 @@ typedef struct ZozzTransform {
 /// written with aligned stores, so arrays of this type passed to
 /// zozzLocalToModel must start on a 16-byte boundary; the function rejects a
 /// misaligned pointer rather than faulting inside ozz.
-typedef struct ZozzFloat4x4 {
-  ZOZZ_ALIGN16 float m[16];
+typedef struct ZOZZ_ALIGN16 ZozzFloat4x4 {
+  float m[16];
 } ZozzFloat4x4;
 
 //===----------------------------------------------------------------------===//
