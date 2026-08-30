@@ -68,6 +68,32 @@ test "sqrt, sqrtX, rSqrtEstNR" {
     try expectVecApprox(.{ 0.5, 1.0 / 3.0, 0.25, 0.2 }, math.simd_float4.rSqrtEstNR(v), 1e-4);
 }
 
+// The four lane-0 estimates are the one place the port promises MORE than the
+// ozz it is a port of: ozz's SSE backend leaves y, z and w to whatever
+// _mm_rcp_ss / _mm_rsqrt_ss left in the register, which measurably differs
+// between optimisation levels, so src/mathref_test.zig compares lane 0 alone.
+// Pass-through is still what these return here, and this is what says so.
+test "the lane-0 estimates pass y, z and w through unchanged" {
+    const v: math.SimdFloat4 = .{ 4, -9, 16, -25 };
+    inline for (.{
+        math.simd_float4.rcpEstX,
+        math.simd_float4.rcpEstXNR,
+    }) |f| {
+        const r = f(v);
+        try std.testing.expectApproxEqRel(@as(f32, 0.25), r[0], 1e-3);
+        try std.testing.expectEqual([3]f32{ v[1], v[2], v[3] }, [3]f32{ r[1], r[2], r[3] });
+    }
+
+    inline for (.{
+        math.simd_float4.rSqrtEstX,
+        math.simd_float4.rSqrtEstXNR,
+    }) |f| {
+        const r = f(v);
+        try std.testing.expectApproxEqRel(@as(f32, 0.5), r[0], 1e-3);
+        try std.testing.expectEqual([3]f32{ v[1], v[2], v[3] }, [3]f32{ r[1], r[2], r[3] });
+    }
+}
+
 test "storePtrU, store3PtrU" {
     const v: math.SimdFloat4 = .{ 1, 2, 3, 4 };
     var out4: [4]f32 = undefined;
