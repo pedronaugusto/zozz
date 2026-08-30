@@ -49,7 +49,14 @@ work=$(mktemp -d)
 trap 'rm -rf "$work"' EXIT
 
 printf '%sfetching %s at %s%s\n' "$DIM" "$UPSTREAM_URL" "$UPSTREAM_TAG" "$OFF"
-git clone --quiet --depth 1 --branch "$UPSTREAM_TAG" "$UPSTREAM_URL" \
+# core.autocrlf is disabled for this clone, not left to the host's git. On a
+# Windows machine the global default rewrites every LF to CRLF on checkout,
+# and the diff below then reports all seven hundred vendored files as
+# modified when not one byte of libs/ has changed -- a check that accuses the
+# tree of the thing it exists to detect. What is compared has to be the blob,
+# not the host's idea of a line ending.
+git -c core.autocrlf=false -c core.eol=lf clone --quiet --depth 1 \
+  --branch "$UPSTREAM_TAG" "$UPSTREAM_URL" \
   "$work/upstream" 2>/dev/null || fail "clone failed"
 
 # A tag can be moved; the commit cannot. Check the SHA, not the label.
