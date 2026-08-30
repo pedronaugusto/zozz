@@ -298,12 +298,14 @@ const abi_layout_types = .{
     .{ "simd_float4", c.SimdFloat4 },
     .{ "soa_transform", c.SoaTransform },
     .{ "blending_layer", c.BlendingLayer },
+    .{ "track_triggering", c.TrackTriggeringIterator },
     .{ "allocator", c.Allocator },
 };
 
 /// What one `ZozzAbiLayout` field must hold, derived from its own name:
 /// `<type>_size`, `<type>_align` or `<type>_offset_<member>`.
 fn abiLayoutExpected(comptime field: []const u8) u32 {
+    @setEvalBranchQuota(4000);
     inline for (abi_layout_types) |entry| {
         const prefix = entry[0] ++ "_";
         if (comptime std.mem.startsWith(u8, field, prefix)) {

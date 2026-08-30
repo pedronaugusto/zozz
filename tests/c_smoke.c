@@ -339,6 +339,60 @@ static void test_sampling_context(void) {
   CHECK(zozzSamplingContextCreate(-1, &context) == ZOZZ_RESULT_INVALID_ARGUMENT);
 }
 
+static void test_track_triggering_on_the_stack(void) {
+  // A square wave: low, high, low, high over each quarter, step interpolated
+  // so each transition sits exactly on a keyframe ratio.
+  ZozzRawFloatTrack* raw = NULL;
+  CHECK(zozzRawFloatTrackCreate(&raw) == ZOZZ_RESULT_OK);
+  if (raw == NULL) return;
+  const float values[4] = {0.f, 1.f, 0.f, 1.f};
+  for (int i = 0; i < 4; ++i) {
+    CHECK(zozzRawFloatTrackPushKeyframe(raw, ZOZZ_TRACK_INTERPOLATION_STEP,
+                                        (float)i * 0.25f,
+                                        values[i]) == ZOZZ_RESULT_OK);
+  }
+
+  ZozzFloatTrack* track = NULL;
+  CHECK(zozzFloatTrackBuild(raw, &track) == ZOZZ_RESULT_OK);
+  zozzRawFloatTrackDestroy(raw);
+  if (track == NULL) return;
+
+  // The whole point of the caller-owned shape: this is a stack object in a C
+  // translation unit, sized by the header, and nothing is ever destroyed.
+  ZozzTrackTriggeringIterator iterator;
+  CHECK(zozzFloatTrackTriggeringJobRun(track, 0.f, 1.f, 0.5f, &iterator) ==
+        ZOZZ_RESULT_OK);
+
+  int edges = 0;
+  while (zozzTrackTriggeringIteratorValid(&iterator)) {
+    ZozzTrackEdge edge;
+    CHECK(zozzTrackTriggeringIteratorGet(&iterator, &edge) == ZOZZ_RESULT_OK);
+    ++edges;
+    CHECK(zozzTrackTriggeringIteratorNext(&iterator) == ZOZZ_RESULT_OK);
+  }
+  // Four, not three: a track is cyclic, so the seam at ratio 1 -> 0 is an
+  // edge too. Past the end is an error rather than an assert inside ozz.
+  CHECK(edges == 4);
+  CHECK(zozzTrackTriggeringIteratorNext(&iterator) ==
+        ZOZZ_RESULT_INVALID_ARGUMENT);
+
+  // Storage that was never run, and a byte-for-byte copy of a live session,
+  // are both refused: each carries the wrong guard word or the wrong address.
+  ZozzTrackTriggeringIterator never_run;
+  memset(&never_run, 0, sizeof(never_run));
+  CHECK(!zozzTrackTriggeringIteratorValid(&never_run));
+  CHECK(zozzTrackTriggeringIteratorNext(&never_run) ==
+        ZOZZ_RESULT_INVALID_ARGUMENT);
+
+  CHECK(zozzFloatTrackTriggeringJobRun(track, 0.f, 1.f, 0.5f, &iterator) ==
+        ZOZZ_RESULT_OK);
+  ZozzTrackTriggeringIterator moved = iterator;
+  CHECK(!zozzTrackTriggeringIteratorValid(&moved));
+  CHECK(zozzTrackTriggeringIteratorValid(&iterator));
+
+  zozzFloatTrackDestroy(track);
+}
+
 static void test_archive_round_trip(void) {
   MemStream mem;
   memset(&mem, 0, sizeof(mem));
@@ -725,6 +779,7 @@ int main(void) {
   test_pose_round_trip();
   test_joint_weight_packing();
   test_sampling_context();
+  test_track_triggering_on_the_stack();
   test_archive_round_trip();
   test_raw_archive_round_trip();
   test_archive_stream_rejection();

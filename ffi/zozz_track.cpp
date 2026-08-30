@@ -8,6 +8,8 @@
 
 #include <cmath>
 #include <cstdint>
+#include <new>
+#include <type_traits>
 
 #include "ozz/animation/runtime/track.h"
 #include "ozz/animation/runtime/track_sampling_job.h"
@@ -19,15 +21,57 @@
 // zozz_internal.h.
 //===----------------------------------------------------------------------===//
 
-// The iterator's job pointer (`job_` in ozz's Iterator) is only ever valid
-// for as long as the TrackTriggeringJob it was built from is alive, so the
-// two are allocated together: the handle IS the job's lifetime.
-struct ZozzTrackTriggeringIterator {
+namespace {
+
+//===----------------------------------------------------------------------===//
+// Triggering state
+//
+// What actually lives in a caller's ZozzTrackTriggeringIterator. ozz's
+// Iterator holds a pointer to the job it came from, so the job and the
+// iterator must share one lifetime; putting both in the caller's storage is
+// what lets that lifetime be the caller's stack frame, as it is in ozz.
+//
+// `self` and `magic` are the two guard words the header promises. Storage
+// that was never run, or was copied somewhere else, fails one of them and
+// gets ZOZZ_RESULT_INVALID_ARGUMENT instead of a dangling job pointer.
+//===----------------------------------------------------------------------===//
+
+struct TriggeringState {
   ozz::animation::TrackTriggeringJob job;
   ozz::animation::TrackTriggeringJob::Iterator it;
+  const void* self;
+  uint64_t magic;
 };
 
-namespace {
+constexpr uint64_t kTriggeringMagic = 0x7A6F7A7A54524747ull;
+
+// The header publishes a byte count; these are what make it true rather than
+// hopeful. A vendored ozz that grows either type fails the build here, which
+// is the one place that number has to change.
+static_assert(sizeof(TriggeringState) <= sizeof(ZozzTrackTriggeringIterator),
+              "ZOZZ_TRACK_TRIGGERING_ITERATOR_SIZE is too small for ozz's "
+              "TrackTriggeringJob and its Iterator");
+static_assert(alignof(TriggeringState) <=
+                  alignof(ZozzTrackTriggeringIterator),
+              "ZozzTrackTriggeringIterator is not aligned enough for ozz's "
+              "TrackTriggeringJob and its Iterator");
+static_assert(std::is_trivially_destructible<TriggeringState>::value,
+              "the caller's storage is never destroyed, so nothing in it may "
+              "need a destructor");
+
+/// The state inside a caller's storage, or NULL if that storage was never
+/// initialised by a Run or has been copied since.
+TriggeringState* StateOf(ZozzTrackTriggeringIterator* iterator) {
+  if (iterator == nullptr) return nullptr;
+  auto* state = reinterpret_cast<TriggeringState*>(iterator->storage);
+  if (state->magic != kTriggeringMagic) return nullptr;
+  if (state->self != iterator) return nullptr;
+  return state;
+}
+
+const TriggeringState* StateOf(const ZozzTrackTriggeringIterator* iterator) {
+  return StateOf(const_cast<ZozzTrackTriggeringIterator*>(iterator));
+}
 
 //===----------------------------------------------------------------------===//
 // Shared load / destroy / name, generic over the five track handle types.
@@ -375,55 +419,48 @@ ZozzResult zozzQuaternionTrackSteps(const ZozzQuaternionTrack* track,
 
 ZozzResult zozzFloatTrackTriggeringJobRun(
     const ZozzFloatTrack* track, float from, float to, float threshold,
-    ZozzTrackTriggeringIterator** out) {
-  if (out == nullptr) return ZOZZ_RESULT_INVALID_ARGUMENT;
-  *out = nullptr;
-  if (track == nullptr) return ZOZZ_RESULT_INVALID_ARGUMENT;
+    ZozzTrackTriggeringIterator* out) {
+  if (out == nullptr || track == nullptr) return ZOZZ_RESULT_INVALID_ARGUMENT;
   if (!std::isfinite(from) || !std::isfinite(to) || !std::isfinite(threshold)) {
     return ZOZZ_RESULT_INVALID_ARGUMENT;
   }
 
-  ZozzTrackTriggeringIterator* handle =
-      zozz::New<ZozzTrackTriggeringIterator>();
-  if (handle == nullptr) return ZOZZ_RESULT_OUT_OF_MEMORY;
+  // Placement-new into the caller's bytes: no allocation, and the job and its
+  // iterator end up adjacent, so the iterator's pointer back to the job is
+  // valid for exactly as long as the caller's storage is.
+  auto* state = new (out->storage) TriggeringState();
+  state->self = nullptr;
+  state->magic = 0;
+  state->job.track = &track->impl;
+  state->job.from = from;
+  state->job.to = to;
+  state->job.threshold = threshold;
+  state->job.iterator = &state->it;
 
-  handle->job.track = &track->impl;
-  handle->job.from = from;
-  handle->job.to = to;
-  handle->job.threshold = threshold;
-  handle->job.iterator = &handle->it;
-
-  if (!handle->job.Validate()) {
-    zozz::Delete(handle);
-    return ZOZZ_RESULT_INVALID_ARGUMENT;
-  }
-  if (!handle->job.Run()) {
-    zozz::Delete(handle);
+  if (!state->job.Validate() || !state->job.Run()) {
     return ZOZZ_RESULT_INVALID_ARGUMENT;
   }
 
-  *out = handle;
+  state->self = out;
+  state->magic = kTriggeringMagic;
   return ZOZZ_RESULT_OK;
-}
-
-void zozzTrackTriggeringIteratorDestroy(
-    ZozzTrackTriggeringIterator* iterator) {
-  zozz::Delete(iterator);
 }
 
 bool zozzTrackTriggeringIteratorValid(
     const ZozzTrackTriggeringIterator* iterator) {
-  if (iterator == nullptr) return false;
-  return iterator->it != iterator->job.end();
+  const TriggeringState* state = StateOf(iterator);
+  if (state == nullptr) return false;
+  return state->it != state->job.end();
 }
 
 ZozzResult zozzTrackTriggeringIteratorNext(
     ZozzTrackTriggeringIterator* iterator) {
-  if (iterator == nullptr) return ZOZZ_RESULT_INVALID_ARGUMENT;
+  TriggeringState* state = StateOf(iterator);
+  if (state == nullptr) return ZOZZ_RESULT_INVALID_ARGUMENT;
   // ozz's operator++ asserts (UB in release) when called on an end iterator;
   // this is the check that turns that precondition into a real error path.
-  if (iterator->it == iterator->job.end()) return ZOZZ_RESULT_INVALID_ARGUMENT;
-  ++iterator->it;
+  if (state->it == state->job.end()) return ZOZZ_RESULT_INVALID_ARGUMENT;
+  ++state->it;
   return ZOZZ_RESULT_OK;
 }
 
@@ -432,12 +469,13 @@ ZozzResult zozzTrackTriggeringIteratorGet(
   if (out == nullptr) return ZOZZ_RESULT_INVALID_ARGUMENT;
   out->ratio = 0.f;
   out->rising = false;
-  if (iterator == nullptr) return ZOZZ_RESULT_INVALID_ARGUMENT;
+  const TriggeringState* state = StateOf(iterator);
+  if (state == nullptr) return ZOZZ_RESULT_INVALID_ARGUMENT;
   // Dereferencing an end iterator is an ozz assert (UB in release); same
   // precondition as Next, guarded the same way.
-  if (iterator->it == iterator->job.end()) return ZOZZ_RESULT_INVALID_ARGUMENT;
+  if (state->it == state->job.end()) return ZOZZ_RESULT_INVALID_ARGUMENT;
 
-  const ozz::animation::TrackTriggeringJob::Edge& edge = *iterator->it;
+  const ozz::animation::TrackTriggeringJob::Edge& edge = *state->it;
   out->ratio = edge.ratio;
   out->rising = edge.rising;
   return ZOZZ_RESULT_OK;

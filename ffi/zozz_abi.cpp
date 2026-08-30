@@ -288,6 +288,13 @@ void zozzAbiLayout(ZozzAbiLayout* out) {
   out->blending_layer_offset_num_joint_weights =
       static_cast<uint32_t>(offsetof(ZozzBlendingLayer, num_joint_weights));
 
+  // The bound this reports is checked against ozz's own types in
+  // zozz_track.cpp, where TrackTriggeringJob and its Iterator are visible.
+  out->track_triggering_size =
+      static_cast<uint32_t>(sizeof(ZozzTrackTriggeringIterator));
+  out->track_triggering_align =
+      static_cast<uint32_t>(alignof(ZozzTrackTriggeringIterator));
+
   out->allocator_size = static_cast<uint32_t>(sizeof(ZozzAllocator));
   out->allocator_align = static_cast<uint32_t>(alignof(ZozzAllocator));
   out->allocator_offset_allocate =
