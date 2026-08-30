@@ -131,6 +131,28 @@ zozz already rejects, and suppressing the sanitizer to hide it would cost more
 than it saves. The truncated-archive test therefore runs with
 `-Dsanitize_c=false`.
 
+**`IKAimJob` has no weight-0 early-out, and its result is an ESTIMATE.**
+`IKTwoBoneJob::Run` starts with `if (weight <= 0.f)` and assigns
+`SimdQuaternion::identity()` (`src/animation/runtime/ik_two_bone_job.cc`).
+`IKAimJob::Run` has no such branch: at any `weight < 1` it returns
+`NormalizeEst4(Lerp(identity, q, weight))`
+(`src/animation/runtime/ik_aim_job.cc`). `NormalizeEst4` is `_mm_rsqrt_ps` on
+the SSE backend, a 12-bit estimate — `rsqrt(1.0)` is `0.999755859375`, so the
+"identity" a weight-0 aim returns is identity to ozz's own
+`kNormalizationToleranceEstSq` (`2e-3`) and no tighter. Not worked around:
+this is the precision ozz documents for its `Est` family, and forcing an exact
+normalisation would be a local patch to upstream behaviour. Recorded because
+it looks exactly like a binding defect from the outside, and because it is
+BACKEND-DEPENDENT.
+
+**ozz ships two SIMD backends: `ref` (scalar) and `sse`. There is no NEON
+one.** `include/ozz/base/maths/internal/` contains `simd_math_ref-inl.h` and
+`simd_math_sse-inl.h` only. An x86-64 build runs the SSE kernels; an
+Apple-Silicon or other non-x86 build runs the SCALAR reference kernels, where
+`NormalizeEst4` is an exact `1/sqrt` and the weight-0 aim above returns exactly
+1.0. A number measured on one architecture is not a number measured on the
+other — for precision or for speed.
+
 ## Re-vendoring procedure
 
 `ci/verify-vendor.sh` fetches the pinned commit and diffs it against

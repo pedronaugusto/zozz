@@ -56,9 +56,26 @@ pub const SimdFloat4 = @Vector(4, f32);
 /// all bits set (-1) for true, all clear (0) for false.
 pub const SimdInt4 = @Vector(4, i32);
 
-const k_normalization_tolerance_sq: f32 = 1e-6;
-const k_normalization_tolerance_est_sq: f32 = 2e-3;
-const k_orthogonalisation_tolerance_sq: f32 = 1e-16;
+// ozz::math, math_constant.h. Public because they are the tolerance ozz's own
+// operations are accurate to, and a caller checking an ozz result has no other
+// correct number to check it against: an assertion tighter than these is
+// asserting something ozz does not promise.
+
+/// Squared-length tolerance of the exact normalisations (`normalize*`).
+pub const normalization_tolerance_sq: f32 = 1e-6;
+
+/// Squared-length tolerance of the ESTIMATED normalisations (`normalizeEst*`,
+/// and every ozz job that ends in `NormalizeEst4` — `IKAimJob` at weight < 1).
+/// 200x looser than the exact one because the SSE backend's `_mm_rsqrt_ps` is
+/// a 12-bit estimate: `rsqrt(1.0)` is 0.999755859375, not 1.0.
+pub const normalization_tolerance_est_sq: f32 = 2e-3;
+
+/// Squared-length below which `mat4.toAffine` treats a column as degenerate.
+pub const orthogonalisation_tolerance_sq: f32 = 1e-16;
+
+const k_normalization_tolerance_sq = normalization_tolerance_sq;
+const k_normalization_tolerance_est_sq = normalization_tolerance_est_sq;
+const k_orthogonalisation_tolerance_sq = orthogonalisation_tolerance_sq;
 const k_pi_2: f32 = 1.5707963267948966192313216916398;
 
 /// Mirrors ozz's `simd_float4::` constant functions, plus the lane, compare,
