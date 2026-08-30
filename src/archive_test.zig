@@ -227,18 +227,17 @@ test "an animation written and read back compares equal, in metadata and in samp
     defer context_a.deinit();
     const context_b = try zozz.SamplingContext.init(roundtripped.numTracks());
     defer context_b.deinit();
-    const pose_a = try zozz.SoaPose.init(original.numTracks());
-    defer pose_a.deinit();
-    const pose_b = try zozz.SoaPose.init(roundtripped.numTracks());
-    defer pose_b.deinit();
+    // Two tracks fit in one SoA block.
+    var pose_a: [1]zozz.SoaTransform = undefined;
+    var pose_b: [1]zozz.SoaTransform = undefined;
 
     var locals_a: [2]zozz.Transform = undefined;
     var locals_b: [2]zozz.Transform = undefined;
     for ([_]f32{ 0.0, 0.3, 0.5, 0.75, 1.0 }) |ratio| {
-        try (zozz.SamplingJob{ .animation = original, .context = context_a, .ratio = ratio, .out = pose_a }).run();
-        try pose_a.toLocalTransforms(&locals_a);
-        try (zozz.SamplingJob{ .animation = roundtripped, .context = context_b, .ratio = ratio, .out = pose_b }).run();
-        try pose_b.toLocalTransforms(&locals_b);
+        try (zozz.SamplingJob{ .animation = original, .context = context_a, .ratio = ratio, .out = &pose_a }).run();
+        try zozz.pose.toLocalTransforms(&pose_a, &locals_a);
+        try (zozz.SamplingJob{ .animation = roundtripped, .context = context_b, .ratio = ratio, .out = &pose_b }).run();
+        try zozz.pose.toLocalTransforms(&pose_b, &locals_b);
 
         for (locals_a, locals_b) |a, b| {
             for (a.translation, b.translation) |x, y| try std.testing.expectApproxEqAbs(x, y, 1e-4);

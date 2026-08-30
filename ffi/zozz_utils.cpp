@@ -4,18 +4,11 @@
 
 #include "zozz_utils.h"
 
-#include <cstdint>
-
 #include "ozz/animation/runtime/animation_utils.h"
 #include "ozz/animation/runtime/skeleton_utils.h"
 #include "zozz_internal.h"
 
 namespace {
-
-/// ozz writes Float4x4 columns with aligned SIMD stores.
-bool IsAligned16(const void* pointer) {
-  return (reinterpret_cast<uintptr_t>(pointer) & 15u) == 0;
-}
 
 /// Shared body of the three per-track keyframe counters: same null and
 /// range checks, only the ozz-side function differs.
@@ -65,7 +58,7 @@ ZozzResult zozzSkeletonRestPoseModelSpace(const ZozzSkeleton* skeleton,
   if (skeleton == nullptr || out == nullptr) {
     return ZOZZ_RESULT_INVALID_ARGUMENT;
   }
-  if (!IsAligned16(out)) return ZOZZ_RESULT_INVALID_ARGUMENT;
+  if (!zozz::IsAligned16(out)) return ZOZZ_RESULT_INVALID_ARGUMENT;
   const int joints = skeleton->impl.num_joints();
   if (count < static_cast<size_t>(joints)) return ZOZZ_RESULT_BUFFER_TOO_SMALL;
 

@@ -1,5 +1,10 @@
 //===----------------------------------------------------------------------===//
-// zozz — the SoA pose buffer: storage, and conversion to/from AoS transforms.
+// zozz — operations over a caller-owned SoA pose: sizing, identity, and the
+// conversions to and from AoS transforms.
+//
+// The pose itself is ZozzSoaTransform in zozz_core.h. There is no pose object
+// here and no allocation: every function takes the caller's array and its
+// length in SoA blocks, exactly as ozz's own jobs take an ozz::span.
 //
 // Conventions, ownership and thread safety are documented in zozz_core.h.
 //===----------------------------------------------------------------------===//
@@ -15,37 +20,38 @@
 extern "C" {
 #endif
 
-/// A pose held in ozz's native structure-of-arrays layout: the currency of
-/// ozz's job pipeline (sampling writes it, blending consumes and produces it,
-/// local-to-model reads it). Keeping it opaque means consumers never depend on
-/// the SIMD layout while still chaining jobs without a conversion per step;
-/// convert to AoS only at the edges, with zozzSoaPoseToLocalTransforms.
-typedef struct ZozzSoaPose ZozzSoaPose;
+/// SoA blocks needed for `num_joints`: ceil(num_joints / 4), which is what
+/// ozz calls num_soa_joints. Returns 0 for a count below 1 or above
+/// ZOZZ_MAX_JOINTS, so a caller that ignores the bound allocates nothing and
+/// every call below then rejects the empty span.
+ZOZZ_API size_t zozzSoaBlocks(int num_joints);
 
-/// Allocates a pose buffer sized for `num_joints` (rounded up to a SoA block).
-ZOZZ_API ZozzResult zozzSoaPoseCreate(int num_joints, ZozzSoaPose** out);
+/// Fills every block with the identity transform.
+ZOZZ_API ZozzResult zozzSoaPoseSetIdentity(ZozzSoaTransform* pose,
+                                           size_t blocks);
 
-ZOZZ_API void zozzSoaPoseDestroy(ZozzSoaPose* pose);
-
-ZOZZ_API int zozzSoaPoseNumJoints(const ZozzSoaPose* pose);
-
-/// Fills the pose with identity transforms.
-ZOZZ_API ZozzResult zozzSoaPoseSetIdentity(ZozzSoaPose* pose);
-
-/// Fills the pose from a skeleton's rest pose. Joint counts must match.
-ZOZZ_API ZozzResult zozzSoaPoseSetRestPose(ZozzSoaPose* pose,
-                                           const ZozzSkeleton* skeleton);
-
-/// SoA -> AoS. `count` must be at least zozzSoaPoseNumJoints.
-ZOZZ_API ZozzResult zozzSoaPoseToLocalTransforms(const ZozzSoaPose* pose,
+/// SoA -> AoS for `num_joints` joints. `blocks` must cover them; joints in a
+/// trailing partial block that `num_joints` does not reach are not written.
+ZOZZ_API ZozzResult zozzSoaPoseToLocalTransforms(const ZozzSoaTransform* pose,
+                                                 size_t blocks,
                                                  ZozzTransform* out,
-                                                 size_t count);
+                                                 size_t num_joints);
 
-/// AoS -> SoA. `count` must be at least zozzSoaPoseNumJoints. Joints in the
-/// trailing partial SoA block are padded with identity.
-ZOZZ_API ZozzResult zozzSoaPoseFromLocalTransforms(ZozzSoaPose* pose,
-                                                   const ZozzTransform* in,
-                                                   size_t count);
+/// AoS -> SoA for `num_joints` joints. Lanes of a trailing partial block that
+/// `num_joints` does not reach are filled with identity, so the whole span is
+/// valid input to a job that reads it a block at a time.
+ZOZZ_API ZozzResult zozzSoaPoseFromLocalTransforms(const ZozzTransform* in,
+                                                   size_t num_joints,
+                                                   ZozzSoaTransform* pose,
+                                                   size_t blocks);
+
+/// Packs `num_joints` flat per-joint weights into SoA registers, for
+/// ZozzBlendingLayer::joint_weights. Lanes past `num_joints` are filled with
+/// 1.0 -- the "fully weighted" meaning ozz gives an absent mask. Values are
+/// not clamped: ozz treats a negative weight as 0, and above 1 is valid
+/// wherever normalisation allows it. Every value must be finite.
+ZOZZ_API ZozzResult zozzSoaWeightsPack(const float* in, size_t num_joints,
+                                       ZozzSimdFloat4* out, size_t blocks);
 
 #ifdef __cplusplus
 }  // extern "C"

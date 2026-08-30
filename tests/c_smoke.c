@@ -238,18 +238,19 @@ static void test_bad_input(void) {
   // Destroying NULL is defined and must not crash.
   zozzSkeletonDestroy(NULL);
   zozzAnimationDestroy(NULL);
-  zozzSoaPoseDestroy(NULL);
   zozzSamplingContextDestroy(NULL);
   zozzSamplingContextInvalidate(NULL);
 }
 
 static void test_pose_round_trip(void) {
-  ZozzSoaPose* pose = NULL;
-  CHECK(zozzSoaPoseCreate(5, &pose) == ZOZZ_RESULT_OK);
-  CHECK(pose != NULL);
-  if (pose == NULL) return;
+  // Five joints occupy two SoA blocks, the second one partial.
+  const size_t blocks = zozzSoaBlocks(5);
+  CHECK(blocks == 2);
+  CHECK(zozzSoaBlocks(0) == 0);
+  CHECK(zozzSoaBlocks(ZOZZ_MAX_JOINTS + 1) == 0);
 
-  CHECK(zozzSoaPoseNumJoints(pose) == 5);
+  ZozzSoaTransform pose[2];
+  CHECK(zozzSoaPoseSetIdentity(pose, blocks) == ZOZZ_RESULT_OK);
 
   ZozzTransform written[5];
   for (int i = 0; i < 5; ++i) {
@@ -266,11 +267,13 @@ static void test_pose_round_trip(void) {
     written[i].scale[2] = f;
   }
 
-  CHECK(zozzSoaPoseFromLocalTransforms(pose, written, 5) == ZOZZ_RESULT_OK);
+  CHECK(zozzSoaPoseFromLocalTransforms(written, 5, pose, blocks) ==
+        ZOZZ_RESULT_OK);
 
   ZozzTransform read_back[5];
   memset(read_back, 0, sizeof(read_back));
-  CHECK(zozzSoaPoseToLocalTransforms(pose, read_back, 5) == ZOZZ_RESULT_OK);
+  CHECK(zozzSoaPoseToLocalTransforms(pose, blocks, read_back, 5) ==
+        ZOZZ_RESULT_OK);
 
   for (int i = 0; i < 5; ++i) {
     for (int k = 0; k < 3; ++k) {
@@ -280,11 +283,39 @@ static void test_pose_round_trip(void) {
     CHECK(read_back[i].rotation[3] == 1.f);
   }
 
-  // Undersized buffers are refused, not truncated.
-  CHECK(zozzSoaPoseToLocalTransforms(pose, read_back, 2) ==
+  // A span too short for the joint count is refused, not truncated.
+  CHECK(zozzSoaPoseToLocalTransforms(pose, 1, read_back, 5) ==
+        ZOZZ_RESULT_BUFFER_TOO_SMALL);
+  CHECK(zozzSoaPoseFromLocalTransforms(written, 5, pose, 1) ==
         ZOZZ_RESULT_BUFFER_TOO_SMALL);
 
-  zozzSoaPoseDestroy(pose);
+  // Caller-owned memory means a caller can hand over a misaligned pointer,
+  // which ozz would read with an aligned SIMD load. `slack` is oversized so
+  // the offset span stays in bounds whatever the entry point does with it.
+  ZozzSoaTransform slack[3];
+  ZozzSoaTransform* misaligned = (ZozzSoaTransform*)((char*)slack + 4);
+  CHECK(zozzSoaPoseSetIdentity(misaligned, 1) == ZOZZ_RESULT_INVALID_ARGUMENT);
+  CHECK(zozzSoaPoseToLocalTransforms(misaligned, 1, read_back, 4) ==
+        ZOZZ_RESULT_INVALID_ARGUMENT);
+  CHECK(zozzSoaPoseFromLocalTransforms(written, 4, misaligned, 1) ==
+        ZOZZ_RESULT_INVALID_ARGUMENT);
+}
+
+static void test_joint_weight_packing(void) {
+  const float weights[5] = {0.f, 0.25f, 0.5f, 0.75f, 1.f};
+  ZozzSimdFloat4 packed[2];
+  CHECK(zozzSoaWeightsPack(weights, 5, packed, 2) == ZOZZ_RESULT_OK);
+  for (int i = 0; i < 5; ++i) {
+    CHECK(packed[i / 4].f[i % 4] == weights[i]);
+  }
+  // The lanes past the joint count mean "fully weighted", not zero.
+  for (int lane = 1; lane < 4; ++lane) {
+    CHECK(packed[1].f[lane] == 1.f);
+  }
+
+  CHECK(zozzSoaWeightsPack(weights, 5, packed, 1) ==
+        ZOZZ_RESULT_BUFFER_TOO_SMALL);
+  CHECK(zozzSoaWeightsPack(NULL, 5, packed, 2) == ZOZZ_RESULT_INVALID_ARGUMENT);
 }
 
 static void test_sampling_context(void) {
@@ -509,6 +540,7 @@ int main(void) {
 
   test_bad_input();
   test_pose_round_trip();
+  test_joint_weight_packing();
   test_sampling_context();
   test_archive_round_trip();
   test_archive_stream_rejection();

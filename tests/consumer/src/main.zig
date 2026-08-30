@@ -54,21 +54,21 @@ pub fn main() !void {
     const clip = try raw_clip.build();
     defer clip.deinit();
 
-    const pose = try zozz.SoaPose.initForSkeleton(skeleton);
-    defer pose.deinit();
+    // The caller owns the pose: two joints are one SoA block, on the stack.
+    var pose: [1]zozz.SoaTransform = undefined;
     const context = try zozz.SamplingContext.initForSkeleton(skeleton);
     defer context.deinit();
 
-    try pose.setRestPose(skeleton);
+    try skeleton.restPoseSoa(&pose);
     try (zozz.SamplingJob{
         .animation = clip,
         .context = context,
         .ratio = clip.ratioAt(1.0),
-        .out = pose,
+        .out = &pose,
     }).run();
 
     var locals: [2]zozz.Transform = undefined;
-    try pose.toLocalTransforms(&locals);
+    try zozz.pose.toLocalTransforms(&pose, &locals);
 
     // The whole point of linking a library rather than a header: halfway
     // through a 0 -> 4 lerp the root must have moved. The tolerance is the
@@ -87,7 +87,7 @@ pub fn main() !void {
     var models: [2]zozz.Mat4 = undefined;
     try (zozz.LocalToModelJob{
         .skeleton = skeleton,
-        .locals = pose,
+        .locals = &pose,
         .root = null,
         .out = &models,
     }).run();

@@ -39,6 +39,7 @@ pub const resultName = error_mod.name;
 
 pub const Transform = math_mod.Transform;
 pub const Mat4 = math_mod.Mat4;
+pub const SoaTransform = math_mod.SoaTransform;
 pub const transform_identity = math_mod.transform_identity;
 pub const mat4_identity = math_mod.mat4_identity;
 
@@ -57,7 +58,11 @@ pub const max_joints = skeleton_mod.max_joints;
 
 pub const Animation = animation_mod.Animation;
 
-pub const SoaPose = pose_mod.SoaPose;
+/// Operations over a caller-owned SoA pose: `soaBlocks` to size the array,
+/// identity, the AoS conversions, and the per-joint weight packer. The pose
+/// itself is a `[]SoaTransform` the caller owns.
+pub const pose = pose_mod;
+pub const soaBlocks = pose_mod.soaBlocks;
 
 pub const SamplingContext = sampling_mod.SamplingContext;
 pub const SamplingJob = sampling_mod.SamplingJob;
@@ -88,7 +93,9 @@ pub const countScaleKeys = utils_mod.countScaleKeys;
 pub const BlendLayer = motion_mod.BlendLayer;
 pub const MotionBlendingJob = motion_mod.MotionBlendingJob;
 
-pub const SoaWeights = blending_mod.SoaWeights;
+/// Blending: `layer` and `maskedLayer` build a `BlendingLayer`, and
+/// `default_threshold` is ozz's own.
+pub const blending = blending_mod;
 pub const BlendingLayer = blending_mod.Layer;
 pub const BlendingJob = blending_mod.BlendingJob;
 
@@ -264,6 +271,38 @@ test {
     _ = @import("abi_check.zig");
 }
 
+/// The type each `ZozzAbiLayout` field group describes. A field whose name
+/// matches no prefix here, or that is neither a size, an alignment nor an
+/// offset, fails to compile in `abiLayoutExpected` below.
+const abi_layout_types = .{
+    .{ "transform", c.Transform },
+    .{ "float4x4", c.Float4x4 },
+    .{ "simd_float4", c.SimdFloat4 },
+    .{ "soa_transform", c.SoaTransform },
+    .{ "blending_layer", c.BlendingLayer },
+    .{ "allocator", c.Allocator },
+};
+
+/// What one `ZozzAbiLayout` field must hold, derived from its own name:
+/// `<type>_size`, `<type>_align` or `<type>_offset_<member>`.
+fn abiLayoutExpected(comptime field: []const u8) u32 {
+    inline for (abi_layout_types) |entry| {
+        const prefix = entry[0] ++ "_";
+        if (comptime std.mem.startsWith(u8, field, prefix)) {
+            const T = entry[1];
+            const rest = field[prefix.len..];
+            if (comptime std.mem.eql(u8, rest, "size")) return @sizeOf(T);
+            if (comptime std.mem.eql(u8, rest, "align")) return @alignOf(T);
+            if (comptime std.mem.startsWith(u8, rest, "offset_")) {
+                return @offsetOf(T, rest["offset_".len..]);
+            }
+            @compileError("ZozzAbiLayout." ++ field ++
+                " is neither a size, an alignment nor an offset");
+        }
+    }
+    @compileError("ZozzAbiLayout." ++ field ++ " describes no type in abi_layout_types");
+}
+
 test "the C library agrees with the extern declarations in c.zig" {
     // What abi_check.zig cannot see, and why both checks exist: abi_check.zig
     // compares c.zig against ffi/zozz.h -- two SOURCE files -- saying nothing
@@ -276,39 +315,22 @@ test "the C library agrees with the extern declarations in c.zig" {
 
     try std.testing.expectEqual(@as(u32, @sizeOf(c.AbiLayout)), layout.layout_size);
 
-    try std.testing.expectEqual(@as(u32, @sizeOf(c.Transform)), layout.transform_size);
-    try std.testing.expectEqual(@as(u32, @alignOf(c.Transform)), layout.transform_align);
-    try std.testing.expectEqual(
-        @as(u32, @offsetOf(c.Transform, "translation")),
-        layout.transform_offset_translation,
-    );
-    try std.testing.expectEqual(
-        @as(u32, @offsetOf(c.Transform, "rotation")),
-        layout.transform_offset_rotation,
-    );
-    try std.testing.expectEqual(
-        @as(u32, @offsetOf(c.Transform, "scale")),
-        layout.transform_offset_scale,
-    );
+    // Every remaining field is checked, by its own name, against the type it
+    // describes -- not against a hand-written list that a new field can be
+    // added beside without anyone noticing.
+    inline for (@typeInfo(c.AbiLayout).@"struct".fields) |field| {
+        if (comptime std.mem.eql(u8, field.name, "layout_size")) continue;
+        if (comptime std.mem.eql(u8, field.name, "result_count")) continue;
+        try std.testing.expectEqual(
+            comptime abiLayoutExpected(field.name),
+            @field(layout, field.name),
+        );
+    }
 
-    try std.testing.expectEqual(@as(u32, @sizeOf(c.Float4x4)), layout.float4x4_size);
-    try std.testing.expectEqual(@as(u32, @alignOf(c.Float4x4)), layout.float4x4_align);
+    // Two alignments ozz depends on, stated rather than merely agreed on: the
+    // SIMD types are loaded and stored with aligned instructions.
     try std.testing.expectEqual(@as(u32, 16), layout.float4x4_align);
-
-    try std.testing.expectEqual(@as(u32, @sizeOf(c.Allocator)), layout.allocator_size);
-    try std.testing.expectEqual(@as(u32, @alignOf(c.Allocator)), layout.allocator_align);
-    try std.testing.expectEqual(
-        @as(u32, @offsetOf(c.Allocator, "allocate")),
-        layout.allocator_offset_allocate,
-    );
-    try std.testing.expectEqual(
-        @as(u32, @offsetOf(c.Allocator, "deallocate")),
-        layout.allocator_offset_deallocate,
-    );
-    try std.testing.expectEqual(
-        @as(u32, @offsetOf(c.Allocator, "user")),
-        layout.allocator_offset_user,
-    );
+    try std.testing.expectEqual(@as(u32, 16), layout.soa_transform_align);
 
     // The Zig error mapping must cover every C result.
     const result_fields = @typeInfo(c.Result).@"enum".fields;
@@ -356,8 +378,9 @@ test "a pose round-trips through AoS without drifting" {
 
     // 7 joints exercises a partial trailing SoA block (4 + 3).
     const joint_count = 7;
-    const pose = try SoaPose.init(joint_count);
-    defer pose.deinit();
+    var blocks: [2]SoaTransform = undefined;
+    try std.testing.expectEqual(blocks.len, try soaBlocks(joint_count));
+    try pose.setIdentity(&blocks);
 
     var written: [joint_count]Transform = undefined;
     for (&written, 0..) |*t, i| {
@@ -374,10 +397,10 @@ test "a pose round-trips through AoS without drifting" {
         };
     }
 
-    try pose.fromLocalTransforms(&written);
+    try pose.fromLocalTransforms(&written, &blocks);
 
     var read_back: [joint_count]Transform = undefined;
-    try pose.toLocalTransforms(&read_back);
+    try pose.toLocalTransforms(&blocks, &read_back);
 
     for (written, read_back) |expected, actual| {
         for (expected.translation, actual.translation) |e, a| {
@@ -397,12 +420,12 @@ test "buffer size and joint count mismatches are refused" {
     try setAllocator(gpa);
     defer resetAllocator();
 
-    const pose = try SoaPose.init(8);
-    defer pose.deinit();
+    // One block holds four joints; eight transforms do not fit in it.
+    var one_block: [1]SoaTransform = undefined;
+    var eight: [8]Transform = undefined;
+    try std.testing.expectError(Error.BufferTooSmall, pose.toLocalTransforms(&one_block, &eight));
+    try std.testing.expectError(Error.BufferTooSmall, pose.fromLocalTransforms(&eight, &one_block));
 
-    var too_small: [4]Transform = undefined;
-    try std.testing.expectError(Error.BufferTooSmall, pose.toLocalTransforms(&too_small));
-    try std.testing.expectError(Error.BufferTooSmall, pose.fromLocalTransforms(&too_small));
-
-    try std.testing.expectError(Error.InvalidArgument, SoaPose.init(0));
+    try std.testing.expectError(Error.InvalidArgument, soaBlocks(0));
+    try std.testing.expectError(Error.InvalidArgument, soaBlocks(@as(u32, @intCast(max_joints)) + 1));
 }

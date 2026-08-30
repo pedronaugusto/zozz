@@ -836,3 +836,134 @@ test "strmatch: exact, ?, and * per platform.h's contract" {
     try std.testing.expect(math.strmatch("abc", "?*?"));
     try std.testing.expect(!math.strmatch("a", "?*?"));
 }
+
+//===----------------------------------------------------------------------===//
+// SoA arithmetic
+//
+// One lane per case, so a component pair swapped inside a helper shows up as
+// a wrong number rather than as a coincidence four ways.
+//===----------------------------------------------------------------------===//
+
+fn soaFloat3(a: [4]f32, b: [4]f32, c: [4]f32) math.SoaFloat3 {
+    return .{ .x = a, .y = b, .z = c };
+}
+
+fn soaQuat(a: [4]f32, b: [4]f32, c: [4]f32, d: [4]f32) math.SoaQuaternion {
+    return .{ .x = a, .y = b, .z = c, .w = d };
+}
+
+test "soa_float3 arithmetic is componentwise, per lane" {
+    const a = soaFloat3(.{ 1, 2, 3, 4 }, .{ 10, 20, 30, 40 }, .{ 100, 200, 300, 400 });
+    const b = soaFloat3(.{ 1, 1, 1, 1 }, .{ 2, 2, 2, 2 }, .{ 4, 4, 4, 4 });
+
+    const sum = math.soa_float3.add(a, b);
+    try std.testing.expectEqual(@as(f32, 3), sum.x[1]);
+    try std.testing.expectEqual(@as(f32, 32), sum.y[2]);
+    try std.testing.expectEqual(@as(f32, 404), sum.z[3]);
+
+    const diff = math.soa_float3.sub(a, b);
+    try std.testing.expectEqual(@as(f32, 0), diff.x[0]);
+    try std.testing.expectEqual(@as(f32, 18), diff.y[1]);
+
+    const negated = math.soa_float3.neg(a);
+    try std.testing.expectEqual(@as(f32, -1), negated.x[0]);
+    try std.testing.expectEqual(@as(f32, -400), negated.z[3]);
+
+    const product = math.soa_float3.mul(a, b);
+    try std.testing.expectEqual(@as(f32, 4), product.x[3]);
+    try std.testing.expectEqual(@as(f32, 1200), product.z[2]);
+
+    const quotient = math.soa_float3.div(a, b);
+    try std.testing.expectEqual(@as(f32, 2), quotient.x[1]);
+    try std.testing.expectEqual(@as(f32, 100), quotient.z[3]);
+
+    // A scalar factor is one value per LANE, not one per component.
+    const scaled = math.soa_float3.mulScalar(a, .{ 1, 2, 3, 4 });
+    try std.testing.expectEqual(@as(f32, 1), scaled.x[0]);
+    try std.testing.expectEqual(@as(f32, 40), scaled.y[1]);
+    try std.testing.expectEqual(@as(f32, 1600), scaled.z[3]);
+
+    const halved = math.soa_float3.divScalar(a, .{ 1, 2, 3, 4 });
+    try std.testing.expectEqual(@as(f32, 10), halved.y[1]);
+}
+
+test "soa_float3 comparisons combine every component into one lane mask" {
+    const a = soaFloat3(.{ 1, 1, 1, 1 }, .{ 1, 1, 1, 1 }, .{ 1, 1, 1, 1 });
+    // Lane 0 is greater in every component; lane 1 in two of three; lane 2 is
+    // equal; lane 3 is smaller everywhere.
+    const b = soaFloat3(.{ 0, 0, 1, 2 }, .{ 0, 0, 1, 2 }, .{ 0, 5, 1, 2 });
+
+    const gt = math.soa_float3.gt(a, b);
+    try std.testing.expectEqual([4]i32{ -1, 0, 0, 0 }, @as([4]i32, gt));
+
+    const lt = math.soa_float3.lt(a, b);
+    try std.testing.expectEqual([4]i32{ 0, 0, 0, -1 }, @as([4]i32, lt));
+
+    const ge = math.soa_float3.ge(a, b);
+    try std.testing.expectEqual([4]i32{ -1, 0, -1, 0 }, @as([4]i32, ge));
+
+    const le = math.soa_float3.le(a, b);
+    try std.testing.expectEqual([4]i32{ 0, 0, -1, -1 }, @as([4]i32, le));
+
+    const eq = math.soa_float3.eq(a, b);
+    try std.testing.expectEqual([4]i32{ 0, 0, -1, 0 }, @as([4]i32, eq));
+
+    // Inequality is ANY component differing, so it is the exact complement of
+    // equality even on lane 1, where only one component differs.
+    const ne = math.soa_float3.ne(a, b);
+    try std.testing.expectEqual([4]i32{ -1, -1, 0, -1 }, @as([4]i32, ne));
+}
+
+test "soa_quaternion composes rotations lane by lane" {
+    // Lane 0: identity. Lane 1: 90 degrees about z. Lanes 2 and 3 repeat them
+    // so a helper reading the wrong lane cannot pass by symmetry.
+    const s = @sqrt(0.5);
+    const q = soaQuat(
+        .{ 0, 0, 0, 0 },
+        .{ 0, 0, 0, 0 },
+        .{ 0, s, 0, s },
+        .{ 1, s, 1, s },
+    );
+
+    // q * q: identity stays identity, 90 degrees about z becomes 180.
+    const squared = math.soa_quaternion.mul(q, q);
+    try std.testing.expectApproxEqAbs(@as(f32, 0), squared.z[0], tol);
+    try std.testing.expectApproxEqAbs(@as(f32, 1), squared.w[0], tol);
+    try std.testing.expectApproxEqAbs(@as(f32, 1), squared.z[1], tol);
+    try std.testing.expectApproxEqAbs(@as(f32, 0), squared.w[1], tol);
+
+    // q * conjugate(q) is the identity on every lane.
+    const undone = math.soa_quaternion.mul(q, math.soa_quaternion.conjugate(q));
+    for (0..4) |lane| {
+        try std.testing.expectApproxEqAbs(@as(f32, 0), undone.x[lane], tol);
+        try std.testing.expectApproxEqAbs(@as(f32, 0), undone.y[lane], tol);
+        try std.testing.expectApproxEqAbs(@as(f32, 0), undone.z[lane], tol);
+        try std.testing.expectApproxEqAbs(@as(f32, 1), undone.w[lane], tol);
+    }
+
+    // The negation is a different quaternion but the same rotation, so its
+    // dot product with the original is -1 on a unit input.
+    const negated = math.soa_quaternion.neg(q);
+    try std.testing.expectApproxEqAbs(@as(f32, -1), math.soa_quaternion.dot(q, negated)[1], tol);
+
+    const doubled = math.soa_quaternion.add(q, q);
+    try std.testing.expectApproxEqAbs(@as(f32, 2), doubled.w[0], tol);
+
+    const scaled = math.soa_quaternion.mulScalar(q, .{ 1, 2, 3, 4 });
+    try std.testing.expectApproxEqAbs(@as(f32, 2 * s), scaled.w[1], tol);
+    try std.testing.expectApproxEqAbs(@as(f32, 3), scaled.w[2], tol);
+
+    const same = math.soa_quaternion.eq(q, q);
+    try std.testing.expectEqual([4]i32{ -1, -1, -1, -1 }, @as([4]i32, same));
+    const differs = math.soa_quaternion.eq(q, negated);
+    try std.testing.expectEqual([4]i32{ 0, 0, 0, 0 }, @as([4]i32, differs));
+}
+
+test "the SoA types are exactly what a pose is made of" {
+    // The pose entry points hand these to ozz with no copy, so the sizes are
+    // part of the ABI rather than an implementation detail.
+    try std.testing.expectEqual(@as(usize, 48), @sizeOf(math.SoaFloat3));
+    try std.testing.expectEqual(@as(usize, 64), @sizeOf(math.SoaQuaternion));
+    try std.testing.expectEqual(@as(usize, 160), @sizeOf(math.SoaTransform));
+    try std.testing.expectEqual(@as(usize, 16), @alignOf(math.SoaTransform));
+}

@@ -19,17 +19,19 @@ numbers: a page instead of a file. It is a lead generator, not an oracle.
 
 This is the whole pattern. Read it instead of reading another area.
 
-`ffi/zozz_pose.h`
+`ffi/zozz_sampling.h`
 ```c
-ZOZZ_API ZozzResult zozzSoaPoseCreate(int num_joints, ZozzSoaPose** out);
+ZOZZ_API ZozzResult zozzSamplingContextCreate(int max_tracks,
+                                              ZozzSamplingContext** out);
 ```
 
-`ffi/zozz_pose.cpp`
+`ffi/zozz_sampling.cpp`
 ```cpp
-ZozzResult zozzSoaPoseCreate(int num_joints, ZozzSoaPose** out) {
+ZozzResult zozzSamplingContextCreate(int max_tracks,
+                                     ZozzSamplingContext** out) {
   if (out == nullptr) return ZOZZ_RESULT_INVALID_ARGUMENT;
   *out = nullptr;                       // clear the out BEFORE any failure
-  if (num_joints <= 0 || num_joints > zozz::kMaxJoints) {
+  if (max_tracks <= 0 || max_tracks > zozz::kMaxJoints) {
     return ZOZZ_RESULT_INVALID_ARGUMENT;
   }
   // ... allocate through ozz::memory::default_allocator(), which is the
@@ -39,17 +41,23 @@ ZozzResult zozzSoaPoseCreate(int num_joints, ZozzSoaPose** out) {
 
 `src/c.zig`
 ```zig
-pub extern fn zozzSoaPoseCreate(num_joints: c_int, out: **SoaPose) Result;
+pub extern fn zozzSamplingContextCreate(max_tracks: c_int, out: **SamplingContext) Result;
 ```
 
-`src/pose.zig`
+`src/sampling.zig`
 ```zig
-pub fn init(num_joints: u32) err.Error!SoaPose {
-    var handle: *c.SoaPose = undefined;
-    try err.check(c.zozzSoaPoseCreate(@intCast(num_joints), &handle));
+pub fn init(max_tracks: u32) err.Error!SamplingContext {
+    var handle: *c.SamplingContext = undefined;
+    try err.check(c.zozzSamplingContextCreate(@intCast(max_tracks), &handle));
     return .{ .handle = handle };
 }
 ```
+
+A handle is for state ozz itself owns and hides. **Plain data does not get
+one**: a pose, a weight mask and a blending layer are caller-owned spans of
+POD, laid out exactly as ozz lays them out, so a job takes them with no copy
+and no allocation — see `ffi/zozz_pose.h` and the static_asserts in
+`ffi/zozz_abi.cpp` that hold the layouts.
 
 `src/zozz.zig` — one re-export line. `build.zig` — the `.h` in the public
 header list, the `.cpp` in the FFI source list, any new ozz `.cc` in

@@ -93,4 +93,19 @@ ZozzResult zozzSkeletonRestPose(const ZozzSkeleton* skeleton,
   return ZOZZ_RESULT_OK;
 }
 
+ZozzResult zozzSkeletonRestPoseSoa(const ZozzSkeleton* skeleton,
+                                   ZozzSoaTransform* out, size_t blocks) {
+  if (skeleton == nullptr || out == nullptr) return ZOZZ_RESULT_INVALID_ARGUMENT;
+  if (!zozz::IsAligned16(out)) return ZOZZ_RESULT_INVALID_ARGUMENT;
+  const ozz::span<const ozz::math::SoaTransform> rest =
+      skeleton->impl.joint_rest_poses();
+  if (blocks < rest.size()) return ZOZZ_RESULT_BUFFER_TOO_SMALL;
+  ozz::math::SoaTransform* dst = zozz::AsOzz(out);
+  for (size_t b = 0; b < rest.size(); ++b) dst[b] = rest[b];
+  for (size_t b = rest.size(); b < blocks; ++b) {
+    dst[b] = ozz::math::SoaTransform::identity();
+  }
+  return ZOZZ_RESULT_OK;
+}
+
 }  // extern "C"

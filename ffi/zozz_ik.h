@@ -7,6 +7,8 @@
 #ifndef ZOZZ_IK_H_
 #define ZOZZ_IK_H_
 
+#include <stddef.h>
+
 #include "zozz.h"
 
 #ifndef __cplusplus
@@ -137,10 +139,10 @@ ZOZZ_API ZozzResult zozzIKAimJobRun(const ZozzIKAimJob* job);
 /// for the call only) onto `joint`'s current local rotation in `pose`, in
 /// place: pose[joint].rotation = correction * pose[joint].rotation. `joint`'s
 /// translation and scale, and every other joint, are left untouched. Returns
-/// ZOZZ_RESULT_INVALID_ARGUMENT if `pose` or `correction` is NULL, or if
-/// `joint` is negative or at least the pose's joint count.
-ZOZZ_API ZozzResult zozzSoaPoseApplyLocalCorrection(ZozzSoaPose* pose,
-                                                    int joint,
+/// ZOZZ_RESULT_INVALID_ARGUMENT if `pose` or `correction` is NULL, if `pose`
+/// is not 16-byte aligned, or if `joint` is negative or outside `blocks`.
+ZOZZ_API ZozzResult zozzSoaPoseApplyLocalCorrection(ZozzSoaTransform* pose,
+                                                    size_t blocks, int joint,
                                                     const float correction[4]);
 
 #ifdef __cplusplus

@@ -68,4 +68,12 @@ pub const Skeleton = struct {
     pub fn restPose(self: Skeleton, out: []math.Transform) err.Error!void {
         try err.check(c.zozzSkeletonRestPose(self.handle, out.ptr, out.len));
     }
+
+    /// Copies ozz's own `joint_rest_poses` into `out`, no transpose. Seed a
+    /// pose with this before sampling a clip that drives only some of the
+    /// skeleton's joints: the ones the clip misses keep the rest pose.
+    /// `out` must hold at least `numSoaJoints` blocks.
+    pub fn restPoseSoa(self: Skeleton, out: []math.SoaTransform) err.Error!void {
+        try err.check(c.zozzSkeletonRestPoseSoa(self.handle, out.ptr, out.len));
+    }
 };

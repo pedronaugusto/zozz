@@ -7,6 +7,7 @@
 #ifndef ZOZZ_INTERNAL_H_
 #define ZOZZ_INTERNAL_H_
 
+#include <cstdint>
 #include <cstring>
 #include <new>
 #include <utility>
@@ -60,6 +61,52 @@ int32_t RawEnum(const E& value) {
 
 /// Number of SoA blocks needed for `num_joints` joints.
 constexpr int SoaBlocks(int num_joints) { return (num_joints + 3) / 4; }
+
+//===----------------------------------------------------------------------===//
+// The SoA POD types, as ozz's own
+//
+// ZozzSoaTransform and ZozzSimdFloat4 are ozz::math::SoaTransform and
+// SimdFloat4 member for member, and zozz_abi.cpp asserts every size, alignment
+// and offset of both. That is what lets a caller's own array reach a job with
+// no copy and no allocation. The reinterpretation is written HERE and nowhere
+// else, so there is one place to read, one place to audit, and one place that
+// would have to change if a layout ever diverged.
+//===----------------------------------------------------------------------===//
+
+/// Whether `pointer` is on a 16-byte boundary. Every SoA and Float4x4 buffer
+/// crossing this ABI is caller-owned now, and ozz reads them with aligned SIMD
+/// loads: an unaligned one faults inside ozz rather than returning an error.
+inline bool IsAligned16(const void* pointer) {
+  return (reinterpret_cast<std::uintptr_t>(pointer) & 15u) == 0;
+}
+
+inline ozz::math::SoaTransform* AsOzz(ZozzSoaTransform* p) {
+  return reinterpret_cast<ozz::math::SoaTransform*>(p);
+}
+
+inline const ozz::math::SoaTransform* AsOzz(const ZozzSoaTransform* p) {
+  return reinterpret_cast<const ozz::math::SoaTransform*>(p);
+}
+
+inline ozz::math::SimdFloat4* AsOzz(ZozzSimdFloat4* p) {
+  return reinterpret_cast<ozz::math::SimdFloat4*>(p);
+}
+
+inline const ozz::math::SimdFloat4* AsOzz(const ZozzSimdFloat4* p) {
+  return reinterpret_cast<const ozz::math::SimdFloat4*>(p);
+}
+
+/// A caller's SoA array as the span every ozz job takes. `count` is in SoA
+/// blocks, not joints, which is also what ozz's spans count.
+inline ozz::span<const ozz::math::SoaTransform> AsSpan(
+    const ZozzSoaTransform* p, size_t count) {
+  return ozz::span<const ozz::math::SoaTransform>(AsOzz(p), count);
+}
+
+inline ozz::span<ozz::math::SoaTransform> AsSpan(ZozzSoaTransform* p,
+                                                 size_t count) {
+  return ozz::span<ozz::math::SoaTransform>(AsOzz(p), count);
+}
 
 //===----------------------------------------------------------------------===//
 // Allocation
@@ -295,12 +342,6 @@ struct ZozzAnimation {
 
 struct ZozzSamplingContext {
   ozz::animation::SamplingJob::Context impl;
-};
-
-struct ZozzSoaPose {
-  ozz::math::SoaTransform* data;
-  int num_joints;
-  int num_soa_joints;
 };
 
 /// The raw-animation handle also lives here rather than beside

@@ -13,6 +13,7 @@
 
 #include <cstddef>
 
+#include "ozz/animation/runtime/blending_job.h"
 #include "ozz/base/log.h"
 #include "ozz/base/maths/simd_math.h"
 #include "zozz_internal.h"
@@ -58,6 +59,76 @@ static_assert(sizeof(ozz::math::SoaTransform) == 160,
               "SoaTransform is expected to be 10 SimdFloat4 (4 joints)");
 static_assert(alignof(ozz::math::SoaTransform) == 16,
               "SoaTransform must stay 16-byte aligned");
+
+//===----------------------------------------------------------------------===//
+// The SoA POD types are ozz's own
+//
+// zozz_internal.h's AsOzz reinterprets a caller's ZozzSoaTransform array as
+// ozz::math::SoaTransform, and zozz_blending.cpp reinterprets a caller's
+// ZozzBlendingLayer array as BlendingJob::Layer. Neither copies, so every
+// size, alignment and offset below is what makes that sound rather than
+// hopeful. A field reordered on either side fails to compile here.
+//===----------------------------------------------------------------------===//
+
+static_assert(sizeof(ZozzSimdFloat4) == sizeof(ozz::math::SimdFloat4),
+              "ZozzSimdFloat4 must match ozz::math::SimdFloat4 in size");
+static_assert(alignof(ZozzSimdFloat4) == alignof(ozz::math::SimdFloat4),
+              "ZozzSimdFloat4 must match ozz::math::SimdFloat4 in alignment");
+
+static_assert(sizeof(ZozzSoaFloat3) == sizeof(ozz::math::SoaFloat3),
+              "ZozzSoaFloat3 must match ozz::math::SoaFloat3 in size");
+static_assert(offsetof(ZozzSoaFloat3, x) == offsetof(ozz::math::SoaFloat3, x),
+              "field moved");
+static_assert(offsetof(ZozzSoaFloat3, y) == offsetof(ozz::math::SoaFloat3, y),
+              "field moved");
+static_assert(offsetof(ZozzSoaFloat3, z) == offsetof(ozz::math::SoaFloat3, z),
+              "field moved");
+
+static_assert(sizeof(ZozzSoaQuaternion) == sizeof(ozz::math::SoaQuaternion),
+              "ZozzSoaQuaternion must match ozz::math::SoaQuaternion in size");
+static_assert(offsetof(ZozzSoaQuaternion, w) ==
+                  offsetof(ozz::math::SoaQuaternion, w),
+              "the quaternion component order changed");
+
+static_assert(sizeof(ZozzSoaTransform) == sizeof(ozz::math::SoaTransform),
+              "ZozzSoaTransform must match ozz::math::SoaTransform in size");
+static_assert(alignof(ZozzSoaTransform) == alignof(ozz::math::SoaTransform),
+              "ZozzSoaTransform must match ozz::math::SoaTransform alignment");
+static_assert(offsetof(ZozzSoaTransform, translation) ==
+                  offsetof(ozz::math::SoaTransform, translation),
+              "field moved");
+static_assert(offsetof(ZozzSoaTransform, rotation) ==
+                  offsetof(ozz::math::SoaTransform, rotation),
+              "field moved");
+static_assert(offsetof(ZozzSoaTransform, scale) ==
+                  offsetof(ozz::math::SoaTransform, scale),
+              "field moved");
+
+using ZozzOzzLayer = ozz::animation::BlendingJob::Layer;
+static_assert(sizeof(ZozzBlendingLayer) == sizeof(ZozzOzzLayer),
+              "ZozzBlendingLayer must match BlendingJob::Layer in size");
+static_assert(alignof(ZozzBlendingLayer) == alignof(ZozzOzzLayer),
+              "ZozzBlendingLayer must match BlendingJob::Layer in alignment");
+static_assert(offsetof(ZozzBlendingLayer, weight) ==
+                  offsetof(ZozzOzzLayer, weight),
+              "field moved");
+static_assert(offsetof(ZozzBlendingLayer, transform) ==
+                  offsetof(ZozzOzzLayer, transform),
+              "field moved");
+static_assert(offsetof(ZozzBlendingLayer, joint_weights) ==
+                  offsetof(ZozzOzzLayer, joint_weights),
+              "field moved");
+static_assert(sizeof(ozz::span<const ozz::math::SoaTransform>) ==
+                  sizeof(const ZozzSoaTransform*) + sizeof(size_t),
+              "ozz::span is expected to be a pointer and a count");
+static_assert(offsetof(ZozzBlendingLayer, num_transform) ==
+                  offsetof(ZozzBlendingLayer, transform) +
+                      sizeof(const ZozzSoaTransform*),
+              "the count must follow its pointer, as ozz::span lays them out");
+static_assert(offsetof(ZozzBlendingLayer, num_joint_weights) ==
+                  offsetof(ZozzBlendingLayer, joint_weights) +
+                      sizeof(const ZozzSimdFloat4*),
+              "the count must follow its pointer, as ozz::span lays them out");
 
 //===----------------------------------------------------------------------===//
 // Skeleton limits
@@ -188,6 +259,32 @@ void zozzAbiLayout(ZozzAbiLayout* out) {
 
   out->float4x4_size = static_cast<uint32_t>(sizeof(ZozzFloat4x4));
   out->float4x4_align = static_cast<uint32_t>(alignof(ZozzFloat4x4));
+
+  out->simd_float4_size = static_cast<uint32_t>(sizeof(ZozzSimdFloat4));
+  out->simd_float4_align = static_cast<uint32_t>(alignof(ZozzSimdFloat4));
+
+  out->soa_transform_size = static_cast<uint32_t>(sizeof(ZozzSoaTransform));
+  out->soa_transform_align = static_cast<uint32_t>(alignof(ZozzSoaTransform));
+  out->soa_transform_offset_translation =
+      static_cast<uint32_t>(offsetof(ZozzSoaTransform, translation));
+  out->soa_transform_offset_rotation =
+      static_cast<uint32_t>(offsetof(ZozzSoaTransform, rotation));
+  out->soa_transform_offset_scale =
+      static_cast<uint32_t>(offsetof(ZozzSoaTransform, scale));
+
+  out->blending_layer_size = static_cast<uint32_t>(sizeof(ZozzBlendingLayer));
+  out->blending_layer_align =
+      static_cast<uint32_t>(alignof(ZozzBlendingLayer));
+  out->blending_layer_offset_weight =
+      static_cast<uint32_t>(offsetof(ZozzBlendingLayer, weight));
+  out->blending_layer_offset_transform =
+      static_cast<uint32_t>(offsetof(ZozzBlendingLayer, transform));
+  out->blending_layer_offset_num_transform =
+      static_cast<uint32_t>(offsetof(ZozzBlendingLayer, num_transform));
+  out->blending_layer_offset_joint_weights =
+      static_cast<uint32_t>(offsetof(ZozzBlendingLayer, joint_weights));
+  out->blending_layer_offset_num_joint_weights =
+      static_cast<uint32_t>(offsetof(ZozzBlendingLayer, num_joint_weights));
 
   out->allocator_size = static_cast<uint32_t>(sizeof(ZozzAllocator));
   out->allocator_align = static_cast<uint32_t>(alignof(ZozzAllocator));
