@@ -68,7 +68,7 @@ fn hostInterface() zozz.ImporterInterface {
 test "gltf: import a skeleton and an animation from a fixture file" {
     if (!zozz.options.gltf) return error.SkipZigTest;
 
-    const importer = try zozz.Importer.initFromGltf(fixture_path);
+    var importer = try zozz.Importer.initFromGltf(fixture_path);
     defer importer.deinit();
 
     const all_types = zozz.ImportNodeType{
@@ -80,7 +80,7 @@ test "gltf: import a skeleton and an animation from a fixture file" {
         .null = true,
         .any = true,
     };
-    const raw_skel = try importer.importSkeleton(all_types);
+    var raw_skel = try importer.importSkeleton(all_types);
     defer raw_skel.deinit();
 
     // Joint names and parent indices: root -> child, depth-first.
@@ -90,7 +90,7 @@ test "gltf: import a skeleton and an animation from a fixture file" {
     try std.testing.expectEqual(@as(?u32, null), raw_skel.jointParent(0));
     try std.testing.expectEqual(@as(?u32, 0), raw_skel.jointParent(1));
 
-    const skel = try raw_skel.build();
+    var skel = try raw_skel.build();
     defer skel.deinit();
 
     var animation_count: usize = 0;
@@ -106,7 +106,7 @@ test "gltf: import a skeleton and an animation from a fixture file" {
     try std.testing.expectEqual(@as(usize, 1), animation_count);
     try std.testing.expect(found_clip);
 
-    const raw_anim = try importer.importAnimation("clip", skel, 0.0);
+    var raw_anim = try importer.importAnimation("clip", skel, 0.0);
     defer raw_anim.deinit();
     try std.testing.expectEqual(@as(u32, 2), raw_anim.numTracks());
     try std.testing.expectEqual(@as(f32, 1.0), raw_anim.duration());
@@ -141,11 +141,11 @@ test "gltf: a host-supplied importer round-trips a two-joint skeleton" {
     if (!zozz.options.options) return error.SkipZigTest;
 
     var interface = hostInterface();
-    const importer = try zozz.Importer.init(&interface);
+    var importer = try zozz.Importer.init(&interface);
     defer importer.deinit();
     try importer.load("ignored-by-the-host");
 
-    const raw_skel = try importer.importSkeleton(std.mem.zeroes(zozz.ImportNodeType));
+    var raw_skel = try importer.importSkeleton(std.mem.zeroes(zozz.ImportNodeType));
     defer raw_skel.deinit();
 
     try std.testing.expectEqual(@as(u32, 2), raw_skel.numJoints());
@@ -156,9 +156,9 @@ test "gltf: a host-supplied importer round-trips a two-joint skeleton" {
 
     // Round-trips through a built runtime skeleton and back into an
     // animation import too, exercising the whole host path end to end.
-    const skel = try raw_skel.build();
+    var skel = try raw_skel.build();
     defer skel.deinit();
-    const raw_anim = try importer.importAnimation("clip", skel, 0.0);
+    var raw_anim = try importer.importAnimation("clip", skel, 0.0);
     defer raw_anim.deinit();
     try std.testing.expectEqual(@as(u32, 2), raw_anim.numTracks());
 }
@@ -186,7 +186,7 @@ test "gltf: the CLI driver is always unsupported (jsoncpp is not vendored)" {
     const argv = [_][*:0]const u8{"prog"};
 
     if (zozz.options.gltf) {
-        const importer = try zozz.Importer.initFromGltf(fixture_path);
+        var importer = try zozz.Importer.initFromGltf(fixture_path);
         defer importer.deinit();
         try std.testing.expectError(zozz.Error.Unsupported, importer.run(&argv));
         return;
