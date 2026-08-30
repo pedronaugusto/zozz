@@ -74,8 +74,8 @@ section 'Hygiene'
 
 # Only our own Zig sources: libs/ozz is vendored verbatim and must not be
 # reformatted, or the next re-vendor becomes an unreadable diff.
-run 'zig fmt (src, tests, build.zig)' \
-  $ZIG fmt --check src tests/consumer build.zig
+run 'zig fmt (src, examples, tests, build.zig)' \
+  $ZIG fmt --check src examples tests/consumer build.zig
 
 # Every header ffi/zozz.h pulls in has to be installed with the library, or a C
 # consumer gets an umbrella header that does not resolve. The consumer test
@@ -150,7 +150,8 @@ if [ $QUICK -eq 0 ]; then
   # -Doptions and -Dgltf are off by default, so nothing above compiles either
   # of them, let alone the six tests that only exist behind them. A build
   # option no gate ever turns on is an option that rots.
-  run 'test -Doptions -Dgltf (the optional halves)' \n    $ZIG build test -Doptions=true -Dgltf=true -Dsanitize_c=false
+  run 'test -Doptions -Dgltf (the optional halves)' \
+    $ZIG build test -Doptions=true -Dgltf=true -Dsanitize_c=false
 
   # Consuming zozz as a dependency is a different code path from building it —
   # artifact registration and installed-header spelling are invisible to the
