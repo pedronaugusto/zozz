@@ -91,6 +91,10 @@ run 'comment standard' ci/check-comments.sh
 
 run 'coverage (every name has a verdict)' ci/check-coverage.sh
 
+# ZOZZ_ALIGN16 on a member instead of the type makes the ABI oracle fail on
+# every non-MSVC target for a difference no object file has. See the script.
+run 'ZOZZ_ALIGN16 is applied to types' ci/check-alignment.sh
+
 #-----------------------------------------------------------------------------
 section 'Tests — native'
 #-----------------------------------------------------------------------------
