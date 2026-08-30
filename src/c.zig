@@ -778,17 +778,17 @@ pub extern fn zozzMotionBlend(layers: ?[*]const MotionBlendLayer, count: usize, 
 //=============================================================================
 
 pub const IKTwoBoneJob = extern struct {
-    target: [3]f32,
-    mid_axis: [3]f32,
-    pole_vector: [3]f32,
+    target: SimdFloat4,
+    mid_axis: SimdFloat4,
+    pole_vector: SimdFloat4,
     twist_angle: f32,
     soften: f32,
     weight: f32,
     start_joint: *const Float4x4,
     mid_joint: *const Float4x4,
     end_joint: *const Float4x4,
-    start_joint_correction: *[4]f32,
-    mid_joint_correction: *[4]f32,
+    start_joint_correction: *SimdFloat4,
+    mid_joint_correction: *SimdFloat4,
     reached: ?*bool,
 };
 
@@ -796,26 +796,32 @@ pub extern fn zozzIKTwoBoneJobDefaults(out: *IKTwoBoneJob) void;
 pub extern fn zozzIKTwoBoneJobRun(job: *const IKTwoBoneJob) Result;
 
 pub const IKAimJob = extern struct {
-    target: [3]f32,
-    forward: [3]f32,
-    offset: [3]f32,
-    up: [3]f32,
-    pole_vector: [3]f32,
+    target: SimdFloat4,
+    forward: SimdFloat4,
+    offset: SimdFloat4,
+    up: SimdFloat4,
+    pole_vector: SimdFloat4,
     twist_angle: f32,
     weight: f32,
     joint: *const Float4x4,
-    joint_correction: *[4]f32,
+    joint_correction: *SimdFloat4,
     reached: ?*bool,
 };
 
 pub extern fn zozzIKAimJobDefaults(out: *IKAimJob) void;
 pub extern fn zozzIKAimJobRun(job: *const IKAimJob) Result;
 
-pub extern fn zozzSoaPoseApplyLocalCorrection(
+/// One joint's local-space rotation correction, `ZozzJointCorrection`.
+pub const JointCorrection = extern struct {
+    rotation: SimdFloat4,
+    joint: i32,
+};
+
+pub extern fn zozzSoaPoseApplyLocalCorrections(
     pose: [*]SoaTransform,
     blocks: usize,
-    joint: c_int,
-    correction: *const [4]f32,
+    corrections: [*]const JointCorrection,
+    count: usize,
 ) Result;
 
 //=============================================================================

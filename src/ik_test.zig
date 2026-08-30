@@ -81,15 +81,19 @@ test "two-bone IK moves the end effector toward the target, and reaches an in-ra
         const before = distance(position(models[2]), target);
 
         const result = try (zozz.ik.TwoBoneJob{
-            .target = target,
+            .target = .{ target[0], target[1], target[2], 0 },
             .start_joint = &models[0],
             .mid_joint = &models[1],
             .end_joint = &models[2],
         }).run();
         try std.testing.expect(!result.reached);
 
-        try zozz.ik.applyCorrection(&pose, start, result.start_joint_correction);
-        try zozz.ik.applyCorrection(&pose, mid, result.mid_joint_correction);
+        // Both joints of the chain in ONE crossing, which is what a batch is
+        // for: they are in the same SoA block, so this is also one transpose.
+        try zozz.ik.applyCorrections(&pose, &.{
+            zozz.ik.correction(start, result.start_joint_correction),
+            zozz.ik.correction(mid, result.mid_joint_correction),
+        });
         try (zozz.LocalToModelJob{ .skeleton = skel, .locals = &pose, .root = null, .out = &models }).run();
         const after = distance(position(models[2]), target);
 
@@ -104,13 +108,15 @@ test "two-bone IK moves the end effector toward the target, and reaches an in-ra
     {
         const target = [3]f32{ 1.5, 0.5, 0 };
         const result = try (zozz.ik.TwoBoneJob{
-            .target = target,
+            .target = .{ target[0], target[1], target[2], 0 },
             .start_joint = &models[0],
             .mid_joint = &models[1],
             .end_joint = &models[2],
         }).run();
         try std.testing.expect(result.reached);
 
+        // The single-joint spelling, twice: the same entry point with a
+        // one-element batch, and it must land the chain in the same place.
         try zozz.ik.applyCorrection(&pose, start, result.start_joint_correction);
         try zozz.ik.applyCorrection(&pose, mid, result.mid_joint_correction);
         try (zozz.LocalToModelJob{ .skeleton = skel, .locals = &pose, .root = null, .out = &models }).run();
@@ -135,7 +141,7 @@ test "aim IK points the forward axis at the target" {
     const joint_matrix = zozz.mat4_identity;
 
     const result = try (zozz.ik.AimJob{
-        .target = .{ 0, 0, 5 },
+        .target = .{ 0, 0, 5, 0 },
         .joint = &joint_matrix,
     }).run();
 
@@ -169,7 +175,7 @@ test "weight = 0 is identity: exactly for TwoBoneJob, to ozz's Est tolerance for
     try (zozz.LocalToModelJob{ .skeleton = skel, .locals = &pose, .root = null, .out = &models }).run();
 
     const two_bone = try (zozz.ik.TwoBoneJob{
-        .target = .{ 5, 5, 5 }, // wildly off-axis; would normally bend hard.
+        .target = .{ 5, 5, 5, 0 }, // wildly off-axis; would normally bend hard.
         .weight = 0,
         .start_joint = &models[0],
         .mid_joint = &models[1],
@@ -178,7 +184,7 @@ test "weight = 0 is identity: exactly for TwoBoneJob, to ozz's Est tolerance for
     // IKTwoBoneJob::Run has an explicit `weight <= 0` early-out that assigns
     // SimdQuaternion::identity() (ik_two_bone_job.cc), so this half is exact
     // on every backend and is held to an exact bar.
-    for ([_][4]f32{ two_bone.start_joint_correction, two_bone.mid_joint_correction }) |c| {
+    for ([_]zozz.ik.Vec4{ two_bone.start_joint_correction, two_bone.mid_joint_correction }) |c| {
         try std.testing.expectEqual(@as(f32, 0), c[0]);
         try std.testing.expectEqual(@as(f32, 0), c[1]);
         try std.testing.expectEqual(@as(f32, 0), c[2]);
@@ -187,7 +193,7 @@ test "weight = 0 is identity: exactly for TwoBoneJob, to ozz's Est tolerance for
 
     const joint_matrix = zozz.mat4_identity;
     const aim = try (zozz.ik.AimJob{
-        .target = .{ 5, 5, 5 },
+        .target = .{ 5, 5, 5, 0 },
         .weight = 0,
         .joint = &joint_matrix,
     }).run();
@@ -226,7 +232,7 @@ test "AimJob's weight-0 identity is exact on a scalar ozz backend and estimated 
 
     const joint_matrix = zozz.mat4_identity;
     const aim = try (zozz.ik.AimJob{
-        .target = .{ 5, 5, 5 },
+        .target = .{ 5, 5, 5, 0 },
         .weight = 0,
         .joint = &joint_matrix,
     }).run();
@@ -257,9 +263,9 @@ test "IK job defaults match ozz's own" {
         .mid_joint = &dummy,
         .end_joint = &dummy,
     };
-    try std.testing.expectEqual(two_bone_defaults.target, two_bone.target);
-    try std.testing.expectEqual(two_bone_defaults.mid_axis, two_bone.mid_axis);
-    try std.testing.expectEqual(two_bone_defaults.pole_vector, two_bone.pole_vector);
+    try std.testing.expectEqual(two_bone_defaults.target, @as(c.SimdFloat4, @bitCast(two_bone.target)));
+    try std.testing.expectEqual(two_bone_defaults.mid_axis, @as(c.SimdFloat4, @bitCast(two_bone.mid_axis)));
+    try std.testing.expectEqual(two_bone_defaults.pole_vector, @as(c.SimdFloat4, @bitCast(two_bone.pole_vector)));
     try std.testing.expectEqual(two_bone_defaults.twist_angle, two_bone.twist_angle);
     try std.testing.expectEqual(two_bone_defaults.soften, two_bone.soften);
     try std.testing.expectEqual(two_bone_defaults.weight, two_bone.weight);
@@ -267,11 +273,61 @@ test "IK job defaults match ozz's own" {
     var aim_defaults: c.IKAimJob = undefined;
     c.zozzIKAimJobDefaults(&aim_defaults);
     const aim = zozz.ik.AimJob{ .joint = &dummy };
-    try std.testing.expectEqual(aim_defaults.target, aim.target);
-    try std.testing.expectEqual(aim_defaults.forward, aim.forward);
-    try std.testing.expectEqual(aim_defaults.offset, aim.offset);
-    try std.testing.expectEqual(aim_defaults.up, aim.up);
-    try std.testing.expectEqual(aim_defaults.pole_vector, aim.pole_vector);
+    try std.testing.expectEqual(aim_defaults.target, @as(c.SimdFloat4, @bitCast(aim.target)));
+    try std.testing.expectEqual(aim_defaults.forward, @as(c.SimdFloat4, @bitCast(aim.forward)));
+    try std.testing.expectEqual(aim_defaults.offset, @as(c.SimdFloat4, @bitCast(aim.offset)));
+    try std.testing.expectEqual(aim_defaults.up, @as(c.SimdFloat4, @bitCast(aim.up)));
+    try std.testing.expectEqual(aim_defaults.pole_vector, @as(c.SimdFloat4, @bitCast(aim.pole_vector)));
     try std.testing.expectEqual(aim_defaults.twist_angle, aim.twist_angle);
     try std.testing.expectEqual(aim_defaults.weight, aim.weight);
+}
+
+test "a batch of corrections is the same as applying them one at a time" {
+    const gpa = std.testing.allocator;
+    try zozz.setAllocator(gpa);
+    defer zozz.resetAllocator() catch unreachable;
+
+    const h = @sqrt(0.5);
+    const q_z: zozz.ik.Vec4 = .{ 0, 0, h, h };
+    const q_x: zozz.ik.Vec4 = .{ h, 0, 0, h };
+    const q_y: zozz.ik.Vec4 = .{ 0, h, 0, h };
+
+    // Eight joints, so two SoA blocks: the batch below spans the block
+    // boundary AND has two corrections inside block 0, which is the run the
+    // implementation hoists a single transpose over.
+    var batched: [2]zozz.SoaTransform = undefined;
+    var one_by_one: [2]zozz.SoaTransform = undefined;
+    try zozz.pose.setIdentity(&batched);
+    try zozz.pose.setIdentity(&one_by_one);
+
+    try zozz.ik.applyCorrections(&batched, &.{
+        zozz.ik.correction(0, q_z),
+        zozz.ik.correction(2, q_x),
+        zozz.ik.correction(5, q_y),
+    });
+    try zozz.ik.applyCorrection(&one_by_one, 0, q_z);
+    try zozz.ik.applyCorrection(&one_by_one, 2, q_x);
+    try zozz.ik.applyCorrection(&one_by_one, 5, q_y);
+
+    var from_batch: [8]zozz.Transform = undefined;
+    var from_singles: [8]zozz.Transform = undefined;
+    try zozz.pose.toLocalTransforms(&batched, &from_batch);
+    try zozz.pose.toLocalTransforms(&one_by_one, &from_singles);
+    try std.testing.expectEqualSlices(zozz.Transform, &from_singles, &from_batch);
+
+    // An out-of-range joint anywhere in the batch is refused BEFORE anything
+    // is written: half an IK pass is worse than none of it.
+    try std.testing.expectError(error.InvalidArgument, zozz.ik.applyCorrections(&batched, &.{
+        zozz.ik.correction(1, q_z),
+        zozz.ik.correction(99, q_z),
+    }));
+    var after_failure: [8]zozz.Transform = undefined;
+    try zozz.pose.toLocalTransforms(&batched, &after_failure);
+    try std.testing.expectEqualSlices(zozz.Transform, &from_batch, &after_failure);
+
+    // An empty batch is a no-op, not an error: a pass that found nothing to
+    // correct should not have to special-case the call.
+    try zozz.ik.applyCorrections(&batched, &.{});
+    try zozz.pose.toLocalTransforms(&batched, &after_failure);
+    try std.testing.expectEqualSlices(zozz.Transform, &from_batch, &after_failure);
 }

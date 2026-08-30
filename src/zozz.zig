@@ -256,6 +256,8 @@ test {
         _ = &ik_mod.TwoBoneJob.run;
         _ = &ik_mod.AimJob.run;
         _ = &ik_mod.applyCorrection;
+        _ = &ik_mod.applyCorrections;
+        _ = &ik_mod.correction;
         _ = &skinning_mod.Job.run;
     }
 
