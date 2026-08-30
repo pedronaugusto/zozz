@@ -17,16 +17,15 @@ and no asset system attached.
   memory-corruption bug: every type, signature, enumerator and constant is
   cross-checked at comptime, with no hand-kept list of what to check.
 
-Status: **v0.3** — load, sample, convert, local-to-model, blend, apply IK, skin
-a mesh, and offline building (author a skeleton or clip in memory, optimise or
-extract motion from it, and build it into the same runtime objects the loaders
-produce). See [Scope](#scope) for what that covers and what still is not
-exposed.
+What works today: load, sample, convert, local-to-model, blend, apply IK, skin
+a mesh, import glTF, and offline building — author a skeleton or clip in
+memory, optimise or extract motion from it, and build it into the same runtime
+objects the loaders produce. See [Scope](#scope) for what that covers and what
+is not exposed, and [By the numbers](#by-the-numbers) for the version.
 
-v0.3 is a breaking change from v0.2 and there is no compatibility layer: every
-job is now a struct with a `run` method, mirroring ozz's own shape, and the
-pre-v0.2 result spellings are gone. There is exactly one way to spell
-everything.
+Every release so far has been a breaking change and there is no compatibility
+layer: each job is a struct with a `run` method, mirroring ozz's own shape.
+There is exactly one way to spell everything.
 
 ## Usage
 
@@ -145,10 +144,9 @@ So the loaders here bracket ozz's parser with the checks it does not perform:
   ozz. That is not fixable from outside; it is documented with file and line in
   [UPSTREAM.md](UPSTREAM.md). Sampling, once loaded, allocates nothing.
 
-Every prefix of a valid archive — all ~15 000 of them across both fixtures — is
-verified to be rejected, and the whole archives still load. NaN ratios and
-misaligned matrix buffers are refused too, rather than faulting inside SIMD
-code.
+Every prefix of a valid archive, across both fixtures, is verified to be
+rejected, and the whole archives still load. NaN ratios and misaligned matrix
+buffers are refused too, rather than faulting inside SIMD code.
 
 What this does **not** claim: ozz's parser is not hardened against arbitrary
 hostile input, and zozz cannot make it so from the outside. The guarantee here
@@ -234,8 +232,7 @@ The guard enforces both.
 zig build test
 ```
 
-51 tests, plus one skipped by default. The suite is self-contained: assets are
-built at test time through ozz's own
+The suite is self-contained: assets are built at test time through ozz's own
 offline builders and serialised in memory (`tests/fixture.cpp`), so it is always
 version-matched to the vendored runtime and ships no third-party clips. That
 fixture doubles as proof the offline builders compile and link — the foundation
@@ -268,11 +265,6 @@ zero-filled count produces. That is real, if benign, undefined behaviour *in
 ozz*, and being able to see it is worth more than switching the sanitizer off
 globally to silence it. See [UPSTREAM.md](UPSTREAM.md).
 
-Every number this README quotes comes from `ci/measurements.sh`, which
-recomputes them — entry points on each side of the ABI and whether they agree,
-tests as the build actually runs them, translation units, and the guard
-counts. Run it before editing one.
-
 To additionally check a real asset on disk:
 
 ```sh
@@ -285,13 +277,50 @@ transforms, parent-precedes-child joint ordering, root joints whose model
 matrix matches their local translation, a clip that demonstrably moves, and a
 NaN ratio that is refused.
 
+### By the numbers
+
+<!-- BEGIN GENERATED ci/measurements.sh --markdown -->
+| | |
+|---:|---|
+| **0.4.0** | version, the same in `build.zig.zon` and `ffi/zozz_core.h` |
+| **275** | C entry points (`ZOZZ_API` in `ffi/*.h`) |
+| **275** | Zig externs (`pub extern fn` in `src/c.zig`) |
+| **21** | installed public headers |
+| **89** | ozz public names with a binding |
+| **391** | ozz public names in the bound areas |
+| **157** | Zig tests `zig build test` executes |
+| **10** | tests it skips, each needing a build option or an on-disk asset |
+| **97** | assertions in the standalone C smoke test |
+| **39** | vendored ozz translation units `build.zig` compiles |
+| **20** | zozz C++ translation units (`ffi/*.cpp`) |
+| **10987** | Zig source lines (`src/`) |
+| **8076** | C++ source lines (`ffi/`) |
+| **17** | deliberate drifts `ci/check-abi-drift.sh` must refuse |
+| **16** | steps `ci/run.sh` runs |
+| **7** | further targets `ci/run.sh` cross-compiles |
+<!-- END GENERATED -->
+
+Not one of those is typed into this file. `ci/measurements.sh` recomputes them
+from the tree, `ci/check-docs.sh` regenerates the block and fails the build if
+what is committed differs, and the same gate refuses any other hand-written
+number in these documents unless `tools/doc_numbers.txt` says why it cannot go
+stale. Adding a claim means adding its measurement.
+
+**What the numbers do not say.** A count is a count. Names *with a binding* are
+matched by spelling, which proves neither that a binding is correct nor that an
+unbound name is worth having — `ci/check-coverage.sh` holds those verdicts one
+by one. Source lines measure volume, not surface. And the gate itself has three
+blind spots: a number spelled as a word, a number inside `code` — where it is
+an identifier or a citation rather than a claim — and a sentence that is wrong
+without containing a number at all.
+
 ### Continuous integration
 
-CI runs the whole suite on **Linux, macOS and Windows**, in four optimize modes
-with the sanitizer both on and off, plus the standalone C test and the
-downstream-consumer build — and cross-compiles eight further targets, runs the
-ABI drift mutation test, and verifies the vendored tree. See
-[`.github/workflows/ci.yml`](.github/workflows/ci.yml).
+CI runs the whole suite on **Linux, macOS and Windows**, in every optimize
+mode with the sanitizer both on and off, plus the standalone C test and the
+downstream-consumer build — and cross-compiles the further targets listed in
+`ci/run.sh`, runs the ABI drift mutation test, and verifies the vendored tree.
+See [`.github/workflows/ci.yml`](.github/workflows/ci.yml).
 
 The same matrix runs locally, so a failure is reproducible on your machine
 before it is a red mark on a pull request:
@@ -302,8 +331,7 @@ ci/run.sh --quick    # native Debug only, for the inner loop
 ci/install-hooks.sh  # run it automatically before every push
 ```
 
-About twenty seconds for the full run. It reports every failure rather than
-stopping at the first.
+It reports every failure rather than stopping at the first.
 
 ### Platform coverage
 
@@ -325,15 +353,15 @@ whether it still passes on the commit you are reading.
 
 ## Scope
 
-164 C entry points across 18 headers, one per concern (see `ffi/zozz.h`, the
-umbrella that pulls all of them in). Every one is mirrored by a Zig wrapper
-that a reflective cross-check pairs at build time:
+One header per concern, gathered by the umbrella `ffi/zozz.h`. Every C entry
+point is mirrored by a Zig wrapper that a reflective cross-check pairs at build
+time:
 
 - Skeleton and animation loading, from file or memory
 - Sampling with a frame-coherency context
 - SoA pose storage, and SoA ↔ AoS conversion
-- Local-to-model, full and range-limited (the latter for re-running only the
-  chain an IK correction touched)
+- Local-to-model, over the whole hierarchy or over ozz's own `from`/`to`
+  joint range, for re-running only the chain an IK correction touched
 - Pose blending (`BlendingJob`): weighted, additive, and per-joint partial
   blending
 - Two-bone and aim IK, and folding a correction back into a pose
@@ -354,18 +382,24 @@ that a reflective cross-check pairs at build time:
   stream (or straight to a file) with `OArchive`, and reading them back from
   one with `IArchive` — including a tag test that answers "is the next object
   a T?" without consuming it, for a host reading a mixed archive
+- Importing: `OzzImporter` in both directions — a glTF-backed importer
+  (`Importer.initFromGltf`, `-Dgltf`) and a host-implementable
+  `ImporterInterface` for a host with its own source format (`-Doptions`)
 
-Importers (glTF and friends) are not exposed; see below for why.
+**What the importer is and is not.** `-Dgltf` compiles ozz's own
+`GltfImporter`, which reads glTF and glb through the vendored `tiny_gltf.h`,
+and hands back the same `RawSkeleton` and `RawAnimation` the offline builders
+take — so a glTF file can be imported, optimised and built entirely in
+process. Both options are off by default: each pulls in a large translation
+unit, and a library must not charge every consumer for a feature it does not
+use. With one off, the calls behind it return `error.Unsupported` rather than
+failing to compile.
 
-**A glTF → `.ozz` cook is a different matter**, and it is worth being exact
-about why rather than leaving it on a list. `gltf2ozz.cc` is vendored and has
-its own `main`, but it is written as a subclass of ozz's `OzzImporter` tool
-framework, and that framework is configured through jsoncpp — which is *not*
-vendored here, because it lives in upstream's `extern/` alongside glfw and
-gtest. So the cook is not a binding of vendored code that nobody has typed yet;
-it is either vendoring a JSON library and a command-line tool framework, or
-reimplementing the import against `tiny_gltf.h` directly. Both are real
-projects, and neither is on this list until it is chosen.
+What is **not** there is `gltf2ozz`'s command line. Its driver
+(`OzzImporter::operator()`, `Importer.run`) is configured through jsoncpp,
+which lives in upstream's excluded `extern/`, so `run` always reports
+`error.Unsupported`. A cook is a host's own program over `initFromGltf`, the
+optimizer and `OArchive`, not a vendored executable.
 
 The **FBX** importer is not a candidate at all: it needs the proprietary
 Autodesk FBX SDK, and its sources are excluded for that reason.

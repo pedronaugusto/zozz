@@ -26,7 +26,7 @@ Taken: `include/`, `src/`, `LICENSE.md`, `AUTHORS.md`, `CHANGES.md`.
 
 | Excluded | Reason |
 |---|---|
-| `media/` (90 MB) | Sample assets; unclear per-asset provenance. Tests use synthetic fixtures instead — see below. |
+| `media/` | Sample assets; unclear per-asset provenance. Tests use synthetic fixtures instead — see below. |
 | `samples/`, `howtos/`, `test/` | Upstream's own demos and GTest suite. |
 | `extern/` | glfw, gtest, jsoncpp — only needed by the above. |
 | `src/animation/offline/fbx` | Requires the proprietary Autodesk FBX SDK. |
@@ -42,9 +42,14 @@ includes `<json/json.h>` — which lives in the excluded `extern/` directory.
 
 So these sources do not build as they stand, and a cook built on them means
 vendoring jsoncpp and the tool framework as well, or reimplementing the import
-against `tiny_gltf.h` directly. They are kept because they are the reference
-for what a correct glTF import does, and they cost nothing on disk. They are
-not a cook waiting to be typed.
+against `tiny_gltf.h` directly. So `gltf2ozz.cc`'s own `main` and the CLI driver behind it do not build here,
+and `Importer.run` reports `error.Unsupported` for that reason. What DOES
+build is the importer underneath it: `GltfImporter` reads glTF through the
+vendored `tiny_gltf.h` and needs no jsoncpp, so `-Dgltf` compiles it as a
+`ZozzImporter` (`ffi/zozz_gltf_backend.cpp`) and `Importer.initFromGltf`
+imports skeletons, animations and tracks. It is off by default because
+tinygltf's implementation is a large translation unit no consumer should pay
+for unimported.
 
 Which translation units actually compile is decided explicitly in `build.zig`
 (`ozz_runtime_sources`, `ozz_offline_sources`), never by a directory glob.
@@ -52,12 +57,26 @@ Which translation units actually compile is decided explicitly in `build.zig`
 ## Archive versions
 
 ozz archives are versioned per type, and the runtime refuses anything it does
-not recognise. At the pinned version:
+not recognise. At the pinned version, read out of the vendored headers:
 
-| Type | Archive version |
-|---|---|
-| `Skeleton` | 2 |
-| `Animation` | 7 |
+<!-- BEGIN GENERATED tools/archive_versions.sh -->
+| Type | Archive version | Declared in |
+|---|---:|---|
+| `animation::Animation` | 7 | `animation/runtime/animation.h` |
+| `animation::Float2Track` | 1 | `animation/runtime/track.h` |
+| `animation::Float3Track` | 1 | `animation/runtime/track.h` |
+| `animation::Float4Track` | 1 | `animation/runtime/track.h` |
+| `animation::FloatTrack` | 1 | `animation/runtime/track.h` |
+| `animation::QuaternionTrack` | 1 | `animation/runtime/track.h` |
+| `animation::Skeleton` | 2 | `animation/runtime/skeleton.h` |
+| `animation::offline::RawAnimation` | 3 | `animation/offline/raw_animation.h` |
+| `animation::offline::RawFloat2Track` | 1 | `animation/offline/raw_track.h` |
+| `animation::offline::RawFloat3Track` | 1 | `animation/offline/raw_track.h` |
+| `animation::offline::RawFloat4Track` | 1 | `animation/offline/raw_track.h` |
+| `animation::offline::RawFloatTrack` | 1 | `animation/offline/raw_track.h` |
+| `animation::offline::RawQuaternionTrack` | 1 | `animation/offline/raw_track.h` |
+| `animation::offline::RawSkeleton` | 1 | `animation/offline/raw_skeleton.h` |
+<!-- END GENERATED -->
 
 **This matters in practice.** `.ozz` clips produced by older ozz offline
 tools circulate widely — **animation version 6** files are common — and are
@@ -110,7 +129,7 @@ is not survivable anyway. Sampling, once loaded, allocates nothing.
 
 **Serialising an empty array memcpy's a null source.** The save side of the
 same class as the entry below, found by CI's sanitized ubuntu arm (run
-32667186311): `MemoryStream::Write` (`src/base/io/stream.cc:160`) calls
+`32667186311`): `MemoryStream::Write` (`src/base/io/stream.cc:160`) calls
 `std::memcpy(buffer_ + tell_, _buffer, _size)` without a size check, and an
 empty `ozz::vector` hands the archive a null data pointer — `memcpy`'s source
 is declared nonnull even for size 0, so the sanitizer traps. Unlike the load
