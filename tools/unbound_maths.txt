@@ -210,3 +210,11 @@ base/maths	x_axis	ZIG	src/math.zig:simd_float4
 base/maths	y_axis	ZIG	src/math.zig:simd_float4
 base/maths	z_axis	ZIG	src/math.zig:simd_float4
 base/maths	zero	ZIG	src/math.zig:simd_float4
+base/maths	Float4x4::operator*	ZIG	src/math.zig:mat4.mul src/math.zig:mat4.mulVec
+base/maths	Float4x4::operator+	ZIG	src/math.zig:mat4.add
+base/maths	Float4x4::operator-	ZIG	src/math.zig:mat4.sub
+base/maths	SimdFloat4::operator*	LANGUAGE	@Vector(4, f32) multiplies per lane
+base/maths	SimdFloat4::operator+	LANGUAGE	@Vector(4, f32) adds per lane
+base/maths	SimdFloat4::operator-	LANGUAGE	@Vector(4, f32) subtracts per lane
+base/maths	SimdFloat4::operator/	LANGUAGE	@Vector(4, f32) divides per lane
+base/maths	Transform::operator*	ZIG	src/math.zig:transform.mul

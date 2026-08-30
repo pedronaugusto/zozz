@@ -282,6 +282,133 @@ test "mat4.transformPoint applies translation, mat4.transformVector does not" {
     try expectVecApprox(.{ 1, 1, 1, 0 }, math.mat4.transformVector(m, .{ 1, 1, 1, 0 }), tol);
 }
 
+test "mat4.mul applies its right operand first" {
+    const t = math.mat4.translate(zozz.mat4_identity, .{ 5, 6, 7, 0 });
+    const scale = math.mat4.scaling(.{ 2, 3, 4, 0 });
+
+    // Scale, then translate: (1,1,1) -> (2,3,4) -> (7,9,11).
+    try expectVecApprox(
+        .{ 7, 9, 11, 1 },
+        math.mat4.transformPoint(math.mat4.mul(t, scale), .{ 1, 1, 1, 0 }),
+        tol,
+    );
+    // The other order: translate, then scale.
+    try expectVecApprox(
+        .{ 12, 21, 32, 1 },
+        math.mat4.transformPoint(math.mat4.mul(scale, t), .{ 1, 1, 1, 0 }),
+        tol,
+    );
+    // Identity on either side changes nothing.
+    try expectVecApprox(
+        math.mat4.transformPoint(t, .{ 1, 1, 1, 0 }),
+        math.mat4.transformPoint(math.mat4.mul(t, zozz.mat4_identity), .{ 1, 1, 1, 0 }),
+        tol,
+    );
+}
+
+test "mat4.mul is what a skinning matrix is: model times inverse bind" {
+    const bind = math.mat4.translate(zozz.mat4_identity, .{ 1, 2, 3, 0 });
+    var invertible: math.SimdInt4 = undefined;
+    const inverse_bind = math.mat4.invert(bind, &invertible);
+    try std.testing.expect(invertible[0] != 0);
+
+    // A vertex at the bind pose, skinned by an unmoved joint, must not move.
+    const skinning = math.mat4.mul(bind, inverse_bind);
+    try expectVecApprox(.{ 4, 5, 6, 1 }, math.mat4.transformPoint(skinning, .{ 4, 5, 6, 0 }), tol);
+}
+
+test "mat4.mulVec uses w, unlike transformPoint and transformVector" {
+    const t = math.mat4.translate(zozz.mat4_identity, .{ 5, 6, 7, 0 });
+    try expectVecApprox(.{ 6, 7, 8, 1 }, math.mat4.mulVec(t, .{ 1, 1, 1, 1 }), tol);
+    try expectVecApprox(.{ 1, 1, 1, 0 }, math.mat4.mulVec(t, .{ 1, 1, 1, 0 }), tol);
+    // w = 2 is neither of those shorthands: the translation is applied twice.
+    try expectVecApprox(.{ 11, 13, 15, 2 }, math.mat4.mulVec(t, .{ 1, 1, 1, 2 }), tol);
+}
+
+test "mat4.add and mat4.sub are per element" {
+    const a = mat4(.{ .{ 1, 2, 3, 4 }, .{ 5, 6, 7, 8 }, .{ 9, 10, 11, 12 }, .{ 13, 14, 15, 16 } });
+    const sum = math.mat4.add(a, a);
+    const diff = math.mat4.sub(sum, a);
+    for (0..16) |i| {
+        try std.testing.expectApproxEqAbs(a.m[i] * 2, sum.m[i], tol);
+        try std.testing.expectApproxEqAbs(a.m[i], diff.m[i], tol);
+    }
+}
+
+test "quaternion.transformVector rotates without touching length" {
+    const rot_z_90: math.SimdFloat4 = .{ 0, 0, @sqrt(0.5), @sqrt(0.5) };
+    const rotated = math.quaternion.transformVector(rot_z_90, .{ 1, 0, 0, 0 });
+    try std.testing.expectApproxEqAbs(@as(f32, 0), rotated[0], tol);
+    try std.testing.expectApproxEqAbs(@as(f32, 1), rotated[1], tol);
+    try std.testing.expectApproxEqAbs(@as(f32, 0), rotated[2], tol);
+}
+
+test "transform.mul composes as the product of the two matrices does" {
+    const rot_z_90: math.SimdFloat4 = .{ 0, 0, @sqrt(0.5), @sqrt(0.5) };
+    const parent: zozz.Transform = .{
+        .translation = .{ 1, 2, 3 },
+        .rotation = rot_z_90,
+        .scale = .{ 2, 2, 2 },
+    };
+    const child: zozz.Transform = .{
+        .translation = .{ 1, 0, 0 },
+        .rotation = .{ 0, 0, 0, 1 },
+        .scale = .{ 3, 3, 3 },
+    };
+
+    const composed = math.transform.mul(parent, child);
+    // The child's x offset is scaled by 2 and turned onto +y by the parent.
+    try expectVecApprox(
+        .{ 1, 4, 3, 0 },
+        .{ composed.translation[0], composed.translation[1], composed.translation[2], 0 },
+        tol,
+    );
+    try expectVecApprox(.{ 6, 6, 6, 0 }, .{ composed.scale[0], composed.scale[1], composed.scale[2], 0 }, tol);
+
+    // And the same thing said with matrices, which is the real invariant.
+    const as_matrix = math.mat4.fromAffine(
+        .{ composed.translation[0], composed.translation[1], composed.translation[2], 0 },
+        composed.rotation,
+        .{ composed.scale[0], composed.scale[1], composed.scale[2], 0 },
+    );
+    const product = math.mat4.mul(
+        math.mat4.fromAffine(
+            .{ parent.translation[0], parent.translation[1], parent.translation[2], 0 },
+            parent.rotation,
+            .{ parent.scale[0], parent.scale[1], parent.scale[2], 0 },
+        ),
+        math.mat4.fromAffine(
+            .{ child.translation[0], child.translation[1], child.translation[2], 0 },
+            child.rotation,
+            .{ child.scale[0], child.scale[1], child.scale[2], 0 },
+        ),
+    );
+    for (0..16) |i| try std.testing.expectApproxEqAbs(product.m[i], as_matrix.m[i], tol);
+}
+
+test "Box.invalid merges as the identity and contains nothing" {
+    try std.testing.expect(!math.Box.invalid.isValid());
+    try std.testing.expect(!math.Box.invalid.isInside(.{ 0, 0, 0 }));
+    const unit: math.Box = .{ .min = .{ 0, 0, 0 }, .max = .{ 1, 1, 1 } };
+    try std.testing.expectEqual(unit, math.Box.invalid.merge(unit));
+    try std.testing.expectEqual(unit, unit.merge(math.Box.invalid));
+}
+
+test "Box.fromPoints walks a strided buffer and bounds every point" {
+    // Two points inside an interleaved buffer: 3 floats of payload after each.
+    const buffer = [_]f32{
+        -1, 2, 5, 0, 0, 0,
+        4,  0, 7, 0, 0, 0,
+    };
+    const box = math.Box.fromPoints(&buffer, 6 * @sizeOf(f32), 2);
+    try std.testing.expectEqual([3]f32{ -1, 0, 5 }, box.min);
+    try std.testing.expectEqual([3]f32{ 4, 2, 7 }, box.max);
+    try std.testing.expect(box.isInside(.{ 0, 1, 6 }));
+
+    // No points at all is the invalid box, not a box around the origin.
+    try std.testing.expectEqual(math.Box.invalid, math.Box.fromPoints(&buffer, 6 * @sizeOf(f32), 0));
+}
+
 test "mat4.isOrthogonal" {
     try std.testing.expectEqual(@as(i32, -1), math.mat4.isOrthogonal(zozz.mat4_identity)[0]);
 

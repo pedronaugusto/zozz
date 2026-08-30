@@ -828,6 +828,16 @@ pub const quaternion = struct {
         };
     }
 
+    /// Rotates `v` by the unit quaternion `q` — ozz's `TransformVector` for
+    /// both `Quaternion` and `SimdQuaternion`, equivalent to the product
+    /// `q.conjugate() * v * q`. The w lane of the result is undefined, as it
+    /// is upstream; `mat4.transformVector` is the matrix form.
+    pub fn transformVector(q: SimdFloat4, v: SimdFloat4) SimdFloat4 {
+        const cross1 = simd_float4.mAdd(simd_float4.splatW(q), v, simd_float4.cross3(q, v));
+        const cross2 = simd_float4.cross3(q, cross1);
+        return v + cross2 + cross2;
+    }
+
     /// Linear interpolation followed by exact normalization. No zero-length
     /// guard — matches ozz's `NLerp`, which has none either.
     pub fn nlerp(a: SimdFloat4, b: SimdFloat4, f: f32) SimdFloat4 {
@@ -1013,6 +1023,10 @@ pub const quaternion = struct {
 // Matrices. Mat4 stores its 16 floats column-major and flat (see the doc
 // comment above); these two helpers are the only place that shape is
 // unpacked into/from the 4 SimdFloat4 columns ozz's Float4x4 uses natively.
+
+fn splat(f: f32) SimdFloat4 {
+    return @splat(f);
+}
 
 fn col4(m: Mat4, i: usize) SimdFloat4 {
     return .{ m.m[i * 4 + 0], m.m[i * 4 + 1], m.m[i * 4 + 2], m.m[i * 4 + 3] };
@@ -1305,15 +1319,114 @@ pub const mat4 = struct {
         const s = (1.0 / @sqrt(t)) * 0.5;
         return .{ (c2[0] + c0[2]) * s, (c1[2] + c2[1]) * s, s * t, (c0[1] - c1[0]) * s };
     }
+
+    /// The full `Float4x4 * SimdFloat4`, ozz's `operator*(const Float4x4&,
+    /// _SimdFloat4)`: every lane of `v` including w. `transformPoint` and
+    /// `transformVector` are its w=1 and w=0 shorthands, and are what a
+    /// caller with a position or a direction wants instead.
+    pub fn mulVec(m: Mat4, v: SimdFloat4) SimdFloat4 {
+        const xxxx = splat(v[0]) * col4(m, 0);
+        const zzzz = splat(v[2]) * col4(m, 2);
+        const a01 = splat(v[1]) * col4(m, 1) + xxxx;
+        const a23 = splat(v[3]) * col4(m, 3) + zzzz;
+        return a01 + a23;
+    }
+
+    /// `a * b`, ozz's `operator*(const Float4x4&, const Float4x4&)`: `b`
+    /// applied first, then `a`. The skinning matrix of one joint is
+    /// `mul(model[joint], inverse_bind[joint])`.
+    pub fn mul(a: Mat4, b: Mat4) Mat4 {
+        return mat4FromCols(
+            mulVec(a, col4(b, 0)),
+            mulVec(a, col4(b, 1)),
+            mulVec(a, col4(b, 2)),
+            mulVec(a, col4(b, 3)),
+        );
+    }
+
+    /// Per-element addition, ozz's `operator+`. Not a composition of two
+    /// transforms — `mul` is that.
+    pub fn add(a: Mat4, b: Mat4) Mat4 {
+        var out: Mat4 = undefined;
+        for (&out.m, a.m, b.m) |*o, x, y| o.* = x + y;
+        return out;
+    }
+
+    /// Per-element subtraction, ozz's `operator-`.
+    pub fn sub(a: Mat4, b: Mat4) Mat4 {
+        var out: Mat4 = undefined;
+        for (&out.m, a.m, b.m) |*o, x, y| o.* = x - y;
+        return out;
+    }
 };
 
-// Box. Only min/max and `transform` are ported — ozz's other Box members
-// (is_valid, is_inside, Merge, the point-cloud constructor) were not asked
-// for.
+/// ozz::math::Transform operations. `Transform` is the re-exported C type
+/// (see the file header) and cannot carry its own methods, so composition is
+/// grouped here: `transform.mul(parent, child)`.
+pub const transform = struct {
+    /// `lhs * rhs`, ozz's `operator*(const Transform&, const Transform&)`:
+    /// `rhs` expressed in `lhs`'s space, so a child's local transform composed
+    /// under its parent is `mul(parent, child)`. ozz documents that non-uniform
+    /// scale is not handled correctly by this composition, and this port keeps
+    /// that behaviour rather than diverging from the runtime it binds.
+    pub fn mul(lhs: Transform, rhs: Transform) Transform {
+        const scaled: SimdFloat4 = .{
+            rhs.translation[0] * lhs.scale[0],
+            rhs.translation[1] * lhs.scale[1],
+            rhs.translation[2] * lhs.scale[2],
+            0,
+        };
+        const rotated = quaternion.transformVector(lhs.rotation, scaled);
+        const rotation = quaternion.mul(lhs.rotation, rhs.rotation);
+        return .{
+            .translation = .{
+                lhs.translation[0] + rotated[0],
+                lhs.translation[1] + rotated[1],
+                lhs.translation[2] + rotated[2],
+            },
+            .rotation = rotation,
+            .scale = .{
+                lhs.scale[0] * rhs.scale[0],
+                lhs.scale[1] * rhs.scale[1],
+                lhs.scale[2] * rhs.scale[2],
+            },
+        };
+    }
+};
+
+// Box. ozz::math::Box member for member, with its three constructors spelled
+// as `invalid`, an initialiser and `fromPoints`.
 
 pub const Box = struct {
     min: [3]f32,
     max: [3]f32,
+
+    /// ozz's default-constructed box: min at +FLT_MAX and max at -FLT_MAX, so
+    /// it is INVALID and merges as the identity. A zeroed box is not this —
+    /// it contains the origin, and growing it from there is a common bug.
+    pub const invalid: Box = .{
+        .min = .{ std.math.floatMax(f32), std.math.floatMax(f32), std.math.floatMax(f32) },
+        .max = .{ -std.math.floatMax(f32), -std.math.floatMax(f32), -std.math.floatMax(f32) },
+    };
+
+    /// The smallest box containing `count` points starting at `first`, each
+    /// `stride` BYTES after the last — ozz's `Box(const Float3*, size_t,
+    /// size_t)`. `stride` is what lets an interleaved vertex buffer be bounded
+    /// in place; it must be at least `@sizeOf([3]f32)`. `count` of 0 gives
+    /// `invalid`.
+    pub fn fromPoints(first: [*]align(4) const f32, stride: usize, count: usize) Box {
+        std.debug.assert(stride >= @sizeOf([3]f32));
+        var out = invalid;
+        var p = first;
+        for (0..count) |_| {
+            for (0..3) |i| {
+                out.min[i] = @min(out.min[i], p[i]);
+                out.max[i] = @max(out.max[i], p[i]);
+            }
+            p = pointerStride(p, stride);
+        }
+        return out;
+    }
 
     /// A box is valid when every component of `min` is at most its `max`.
     pub fn isValid(self: Box) bool {
