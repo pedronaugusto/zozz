@@ -337,6 +337,38 @@ typedef struct ZozzAbiLayout {
 /// Fills `out` with the layout the library was compiled with. Never fails.
 ZOZZ_API void zozzAbiLayout(ZozzAbiLayout* out);
 
+//===----------------------------------------------------------------------===//
+// Build features
+//
+// Parts of this ABI are declared unconditionally but compiled only when their
+// build option is on; every entry point behind an option that is off answers
+// ZOZZ_RESULT_UNSUPPORTED. That code alone cannot tell a caller whether the
+// feature is missing from THIS library or whether the call itself failed, so
+// the answer is queryable rather than inferable. Check it at start-up and
+// refuse the work, instead of discovering it on the first import.
+//===----------------------------------------------------------------------===//
+
+typedef struct ZozzBuildFeatures {
+  /// sizeof(ZozzBuildFeatures). Read this first, as with ZozzAbiLayout: a
+  /// disagreement means the struct changed and no field below can be trusted.
+  uint32_t features_size;
+
+  /// -Doptions: ozz's command-line option parser (zozz_options.h) and the
+  /// host-implementable ZozzImporterInterface half of zozz_gltf.h.
+  bool options;
+
+  /// -Dgltf: the concrete glTF importer backend, zozzGltfImporterCreate.
+  bool gltf;
+
+  /// ozz's internal asserts are live (the library was compiled without
+  /// NDEBUG). Not a feature to branch on — a fact for a bug report.
+  bool asserts;
+} ZozzBuildFeatures;
+
+/// Fills `out` with what this library was actually COMPILED with, not what a
+/// build script was asked for. Never fails.
+ZOZZ_API void zozzBuildFeatures(ZozzBuildFeatures* out);
+
 #ifdef __cplusplus
 }  // extern "C"
 #endif

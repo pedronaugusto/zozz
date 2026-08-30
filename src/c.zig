@@ -186,6 +186,16 @@ pub const AbiLayout = extern struct {
     result_count: u32,
 };
 
+/// What the linked library was COMPILED with — `ZozzBuildFeatures`. The
+/// entry points behind an option that is off answer `.unsupported`, which on
+/// its own cannot say whether the feature is absent or the call failed.
+pub const BuildFeatures = extern struct {
+    features_size: u32,
+    options: bool,
+    gltf: bool,
+    asserts: bool,
+};
+
 //=============================================================================
 // Constants
 //=============================================================================
@@ -322,6 +332,7 @@ pub extern fn zozzSetAllocator(alloc: ?*const Allocator) Result;
 pub extern fn zozzGetAllocator(out: *Allocator, installed: *bool) Result;
 pub extern fn zozzAllocatorLiveBlocks() usize;
 pub extern fn zozzAbiLayout(out: *AbiLayout) void;
+pub extern fn zozzBuildFeatures(out: *BuildFeatures) void;
 
 pub extern fn zozzSetLogLevel(level: LogLevel) Result;
 pub extern fn zozzGetLogLevel() LogLevel;

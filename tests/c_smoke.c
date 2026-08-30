@@ -176,6 +176,35 @@ static void test_abi_layout(void) {
   CHECK(layout.result_count == (uint32_t)ZOZZ_RESULT_ALLOCATOR_IN_USE + 1u);
 }
 
+static void test_build_features(void) {
+  ZozzBuildFeatures features;
+  memset(&features, 0xAB, sizeof(features));
+  zozzBuildFeatures(&features);
+  CHECK(features.features_size == (uint32_t)sizeof(ZozzBuildFeatures));
+
+  // Each flag must agree with the entry point behind it: a feature reported
+  // present whose call answers UNSUPPORTED is the exact lie this query exists
+  // to make impossible.
+  ZozzImporter* importer = NULL;
+  const ZozzResult gltf_result =
+      zozzGltfImporterCreate("does-not-exist.gltf", &importer);
+  if (features.gltf) {
+    CHECK(gltf_result != ZOZZ_RESULT_UNSUPPORTED);
+  } else {
+    CHECK(gltf_result == ZOZZ_RESULT_UNSUPPORTED);
+  }
+  if (importer != NULL) zozzImporterDestroy(importer);
+
+  ZozzOptionsParser* parser = NULL;
+  const ZozzResult options_result = zozzOptionsParserCreate(&parser);
+  if (features.options) {
+    CHECK(options_result == ZOZZ_RESULT_OK);
+  } else {
+    CHECK(options_result == ZOZZ_RESULT_UNSUPPORTED);
+  }
+  if (parser != NULL) zozzOptionsParserDestroy(parser);
+}
+
 static void test_allocator_rejects_incomplete(void) {
   ZozzAllocator bad;
   bad.allocate = NULL;
@@ -841,6 +870,7 @@ int main(void) {
   test_version();
   test_result_names();
   test_abi_layout();
+  test_build_features();
   test_allocator_rejects_incomplete();
   test_allocator_getter_reports_not_installed();
   test_log_level();

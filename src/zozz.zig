@@ -169,9 +169,22 @@ pub const ImportNodeType = importer_mod.ImportNodeType;
 pub const NodePropertyType = importer_mod.NodePropertyType;
 pub const NodeProperty = importer_mod.NodeProperty;
 
-/// Build options the C library was actually compiled with, so a consumer can
-/// branch on them instead of assuming.
+/// The build options THIS build graph was configured with. Available at
+/// comptime, which is what a consumer wants for `if (zozz.options.gltf)`.
+/// Only meaningful for a zozz built from source in the same graph — a
+/// prebuilt library is described by `buildFeatures()` below, and the test
+/// "the build options and the compiled library agree" holds the two together.
 pub const options = @import("zozz_options");
+
+/// What the LINKED library was compiled with, asked of the library itself.
+/// The entry points behind an option that is off answer `error.Unsupported`,
+/// and that error alone cannot say whether the feature is absent from this
+/// build or the call failed: check this once at start-up instead.
+pub fn buildFeatures() c.BuildFeatures {
+    var features: c.BuildFeatures = undefined;
+    c.zozzBuildFeatures(&features);
+    return features;
+}
 
 //=============================================================================
 // Versions
@@ -357,6 +370,18 @@ test "the C library agrees with the extern declarations in c.zig" {
     // The Zig error mapping must cover every C result.
     const result_fields = @typeInfo(c.Result).@"enum".fields;
     try std.testing.expectEqual(@as(u32, result_fields.len), layout.result_count);
+}
+
+test "the build options and the compiled library agree" {
+    // Two homes for the same fact, unavoidably: build.zig adds a C macro for
+    // each option AND mirrors it into the `zozz_options` module. Nothing made
+    // them agree, so defining one and forgetting the other compiled cleanly
+    // and left `zozz.options.gltf` true over a library with no glTF backend.
+    const features = buildFeatures();
+    try std.testing.expectEqual(@as(u32, @sizeOf(c.BuildFeatures)), features.features_size);
+    try std.testing.expectEqual(options.options, features.options);
+    try std.testing.expectEqual(options.gltf, features.gltf);
+    try std.testing.expectEqual(options.enable_asserts, features.asserts);
 }
 
 test "version reporting is wired up" {
