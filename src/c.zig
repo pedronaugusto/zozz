@@ -236,6 +236,56 @@ pub const TrackEdge = extern struct {
     rising: bool,
 };
 
+/// One authored key of a raw animation channel. Mirrors
+/// `ZozzRawTranslationKey` and its two siblings (ffi/zozz_offline.h); the
+/// rotation is (x, y, z, w) — w last.
+pub const RawTranslationKey = extern struct {
+    time: f32,
+    value: [3]f32,
+};
+
+pub const RawRotationKey = extern struct {
+    time: f32,
+    value: [4]f32,
+};
+
+pub const RawScaleKey = extern struct {
+    time: f32,
+    value: [3]f32,
+};
+
+/// One authored keyframe of a raw track. Mirrors `ZozzRawFloatKeyframe` and
+/// its four siblings (ffi/zozz_rawtrack.h).
+pub const RawFloatKeyframe = extern struct {
+    interpolation: TrackInterpolation,
+    ratio: f32,
+    value: f32,
+};
+
+pub const RawFloat2Keyframe = extern struct {
+    interpolation: TrackInterpolation,
+    ratio: f32,
+    value: [2]f32,
+};
+
+pub const RawFloat3Keyframe = extern struct {
+    interpolation: TrackInterpolation,
+    ratio: f32,
+    value: [3]f32,
+};
+
+pub const RawFloat4Keyframe = extern struct {
+    interpolation: TrackInterpolation,
+    ratio: f32,
+    value: [4]f32,
+};
+
+pub const RawQuaternionKeyframe = extern struct {
+    interpolation: TrackInterpolation,
+    ratio: f32,
+    value: [4]f32,
+};
+
 pub const AnimationOptimizer = opaque {};
 pub const FixedRateSamplingTime = opaque {};
 pub const MotionExtractor = opaque {};
@@ -314,6 +364,7 @@ pub extern fn zozzRawSkeletonJointName(raw: ?*const RawSkeleton, joint: i32) ?[*
 pub extern fn zozzRawSkeletonJointParent(raw: ?*const RawSkeleton, joint: i32) i32;
 pub extern fn zozzRawSkeletonJointRest(raw: ?*const RawSkeleton, joint: i32, out: *Transform) Result;
 pub extern fn zozzRawSkeletonIterateJointsBreadthFirst(raw: ?*const RawSkeleton, visitor: JointVisitor, user: ?*anyopaque) Result;
+pub extern fn zozzRawSkeletonValidate(raw: ?*const RawSkeleton) bool;
 pub extern fn zozzSkeletonBuild(raw: *const RawSkeleton, out: **Skeleton) Result;
 
 pub extern fn zozzRawAnimationCreate(num_tracks: c_int, duration: f32, name: ?[*:0]const u8, out: **RawAnimation) Result;
@@ -323,6 +374,21 @@ pub extern fn zozzRawAnimationDuration(raw: ?*const RawAnimation) f32;
 pub extern fn zozzRawAnimationPushTranslation(raw: *RawAnimation, track: c_int, time: f32, value: *const [3]f32) Result;
 pub extern fn zozzRawAnimationPushRotation(raw: *RawAnimation, track: c_int, time: f32, value: *const [4]f32) Result;
 pub extern fn zozzRawAnimationPushScale(raw: *RawAnimation, track: c_int, time: f32, value: *const [3]f32) Result;
+pub extern fn zozzRawAnimationValidate(raw: ?*const RawAnimation) bool;
+pub extern fn zozzRawAnimationSize(raw: ?*const RawAnimation) usize;
+pub extern fn zozzRawAnimationName(raw: ?*const RawAnimation) ?[*:0]const u8;
+pub extern fn zozzRawAnimationSetName(raw: ?*RawAnimation, name: ?[*:0]const u8) Result;
+pub extern fn zozzRawAnimationSetDuration(raw: ?*RawAnimation, duration: f32) Result;
+pub extern fn zozzRawAnimationNumTranslations(raw: ?*const RawAnimation, track: c_int) c_int;
+pub extern fn zozzRawAnimationNumRotations(raw: ?*const RawAnimation, track: c_int) c_int;
+pub extern fn zozzRawAnimationNumScales(raw: ?*const RawAnimation, track: c_int) c_int;
+pub extern fn zozzRawAnimationTranslations(raw: ?*const RawAnimation, track: c_int, out: [*]RawTranslationKey, count: usize) Result;
+pub extern fn zozzRawAnimationRotations(raw: ?*const RawAnimation, track: c_int, out: [*]RawRotationKey, count: usize) Result;
+pub extern fn zozzRawAnimationScales(raw: ?*const RawAnimation, track: c_int, out: [*]RawScaleKey, count: usize) Result;
+pub extern fn zozzRawAnimationClearTranslations(raw: ?*RawAnimation, track: c_int) Result;
+pub extern fn zozzRawAnimationClearRotations(raw: ?*RawAnimation, track: c_int) Result;
+pub extern fn zozzRawAnimationClearScales(raw: ?*RawAnimation, track: c_int) Result;
+pub extern fn zozzRawAnimationClearTrack(raw: ?*RawAnimation, track: c_int) Result;
 pub extern fn zozzAnimationBuild(raw: *const RawAnimation, out: **Animation) Result;
 
 //=============================================================================
@@ -417,6 +483,11 @@ pub extern fn zozzRawFloatTrackNumKeyframes(raw: ?*const RawFloatTrack) c_int;
 pub extern fn zozzRawFloatTrackPushKeyframe(raw: *RawFloatTrack, interpolation: TrackInterpolation, ratio: f32, value: f32) Result;
 pub extern fn zozzFloatTrackBuild(raw: *const RawFloatTrack, out: **FloatTrack) Result;
 pub extern fn zozzRawFloatTrackOptimize(input: *const RawFloatTrack, tolerance: f32, output: *RawFloatTrack) Result;
+pub extern fn zozzRawFloatTrackValidate(raw: ?*const RawFloatTrack) bool;
+pub extern fn zozzRawFloatTrackName(raw: ?*const RawFloatTrack) ?[*:0]const u8;
+pub extern fn zozzRawFloatTrackSetName(raw: ?*RawFloatTrack, name: ?[*:0]const u8) Result;
+pub extern fn zozzRawFloatTrackKeyframes(raw: ?*const RawFloatTrack, out: [*]RawFloatKeyframe, count: usize) Result;
+pub extern fn zozzRawFloatTrackClear(raw: ?*RawFloatTrack) Result;
 
 pub extern fn zozzRawFloat2TrackCreate(out: **RawFloat2Track) Result;
 pub extern fn zozzRawFloat2TrackDestroy(raw: ?*RawFloat2Track) void;
@@ -424,6 +495,11 @@ pub extern fn zozzRawFloat2TrackNumKeyframes(raw: ?*const RawFloat2Track) c_int;
 pub extern fn zozzRawFloat2TrackPushKeyframe(raw: *RawFloat2Track, interpolation: TrackInterpolation, ratio: f32, value: *const [2]f32) Result;
 pub extern fn zozzFloat2TrackBuild(raw: *const RawFloat2Track, out: **Float2Track) Result;
 pub extern fn zozzRawFloat2TrackOptimize(input: *const RawFloat2Track, tolerance: f32, output: *RawFloat2Track) Result;
+pub extern fn zozzRawFloat2TrackValidate(raw: ?*const RawFloat2Track) bool;
+pub extern fn zozzRawFloat2TrackName(raw: ?*const RawFloat2Track) ?[*:0]const u8;
+pub extern fn zozzRawFloat2TrackSetName(raw: ?*RawFloat2Track, name: ?[*:0]const u8) Result;
+pub extern fn zozzRawFloat2TrackKeyframes(raw: ?*const RawFloat2Track, out: [*]RawFloat2Keyframe, count: usize) Result;
+pub extern fn zozzRawFloat2TrackClear(raw: ?*RawFloat2Track) Result;
 
 pub extern fn zozzRawFloat3TrackCreate(out: **RawFloat3Track) Result;
 pub extern fn zozzRawFloat3TrackDestroy(raw: ?*RawFloat3Track) void;
@@ -431,6 +507,11 @@ pub extern fn zozzRawFloat3TrackNumKeyframes(raw: ?*const RawFloat3Track) c_int;
 pub extern fn zozzRawFloat3TrackPushKeyframe(raw: *RawFloat3Track, interpolation: TrackInterpolation, ratio: f32, value: *const [3]f32) Result;
 pub extern fn zozzFloat3TrackBuild(raw: *const RawFloat3Track, out: **Float3Track) Result;
 pub extern fn zozzRawFloat3TrackOptimize(input: *const RawFloat3Track, tolerance: f32, output: *RawFloat3Track) Result;
+pub extern fn zozzRawFloat3TrackValidate(raw: ?*const RawFloat3Track) bool;
+pub extern fn zozzRawFloat3TrackName(raw: ?*const RawFloat3Track) ?[*:0]const u8;
+pub extern fn zozzRawFloat3TrackSetName(raw: ?*RawFloat3Track, name: ?[*:0]const u8) Result;
+pub extern fn zozzRawFloat3TrackKeyframes(raw: ?*const RawFloat3Track, out: [*]RawFloat3Keyframe, count: usize) Result;
+pub extern fn zozzRawFloat3TrackClear(raw: ?*RawFloat3Track) Result;
 
 pub extern fn zozzRawFloat4TrackCreate(out: **RawFloat4Track) Result;
 pub extern fn zozzRawFloat4TrackDestroy(raw: ?*RawFloat4Track) void;
@@ -438,6 +519,11 @@ pub extern fn zozzRawFloat4TrackNumKeyframes(raw: ?*const RawFloat4Track) c_int;
 pub extern fn zozzRawFloat4TrackPushKeyframe(raw: *RawFloat4Track, interpolation: TrackInterpolation, ratio: f32, value: *const [4]f32) Result;
 pub extern fn zozzFloat4TrackBuild(raw: *const RawFloat4Track, out: **Float4Track) Result;
 pub extern fn zozzRawFloat4TrackOptimize(input: *const RawFloat4Track, tolerance: f32, output: *RawFloat4Track) Result;
+pub extern fn zozzRawFloat4TrackValidate(raw: ?*const RawFloat4Track) bool;
+pub extern fn zozzRawFloat4TrackName(raw: ?*const RawFloat4Track) ?[*:0]const u8;
+pub extern fn zozzRawFloat4TrackSetName(raw: ?*RawFloat4Track, name: ?[*:0]const u8) Result;
+pub extern fn zozzRawFloat4TrackKeyframes(raw: ?*const RawFloat4Track, out: [*]RawFloat4Keyframe, count: usize) Result;
+pub extern fn zozzRawFloat4TrackClear(raw: ?*RawFloat4Track) Result;
 
 pub extern fn zozzRawQuaternionTrackCreate(out: **RawQuaternionTrack) Result;
 pub extern fn zozzRawQuaternionTrackDestroy(raw: ?*RawQuaternionTrack) void;
@@ -445,6 +531,11 @@ pub extern fn zozzRawQuaternionTrackNumKeyframes(raw: ?*const RawQuaternionTrack
 pub extern fn zozzRawQuaternionTrackPushKeyframe(raw: *RawQuaternionTrack, interpolation: TrackInterpolation, ratio: f32, value: *const [4]f32) Result;
 pub extern fn zozzQuaternionTrackBuild(raw: *const RawQuaternionTrack, out: **QuaternionTrack) Result;
 pub extern fn zozzRawQuaternionTrackOptimize(input: *const RawQuaternionTrack, tolerance: f32, output: *RawQuaternionTrack) Result;
+pub extern fn zozzRawQuaternionTrackValidate(raw: ?*const RawQuaternionTrack) bool;
+pub extern fn zozzRawQuaternionTrackName(raw: ?*const RawQuaternionTrack) ?[*:0]const u8;
+pub extern fn zozzRawQuaternionTrackSetName(raw: ?*RawQuaternionTrack, name: ?[*:0]const u8) Result;
+pub extern fn zozzRawQuaternionTrackKeyframes(raw: ?*const RawQuaternionTrack, out: [*]RawQuaternionKeyframe, count: usize) Result;
+pub extern fn zozzRawQuaternionTrackClear(raw: ?*RawQuaternionTrack) Result;
 
 pub extern fn zozzSamplingContextCreate(max_tracks: c_int, out: **SamplingContext) Result;
 pub extern fn zozzSamplingContextDestroy(context: ?*SamplingContext) void;
@@ -581,6 +672,13 @@ pub extern fn zozzOArchiveSaveFloat2Track(archive: ?*OArchive, track: ?*const Fl
 pub extern fn zozzOArchiveSaveFloat3Track(archive: ?*OArchive, track: ?*const Float3Track) Result;
 pub extern fn zozzOArchiveSaveFloat4Track(archive: ?*OArchive, track: ?*const Float4Track) Result;
 pub extern fn zozzOArchiveSaveQuaternionTrack(archive: ?*OArchive, track: ?*const QuaternionTrack) Result;
+pub extern fn zozzOArchiveSaveRawSkeleton(archive: ?*OArchive, raw: ?*const RawSkeleton) Result;
+pub extern fn zozzOArchiveSaveRawAnimation(archive: ?*OArchive, raw: ?*const RawAnimation) Result;
+pub extern fn zozzOArchiveSaveRawFloatTrack(archive: ?*OArchive, raw: ?*const RawFloatTrack) Result;
+pub extern fn zozzOArchiveSaveRawFloat2Track(archive: ?*OArchive, raw: ?*const RawFloat2Track) Result;
+pub extern fn zozzOArchiveSaveRawFloat3Track(archive: ?*OArchive, raw: ?*const RawFloat3Track) Result;
+pub extern fn zozzOArchiveSaveRawFloat4Track(archive: ?*OArchive, raw: ?*const RawFloat4Track) Result;
+pub extern fn zozzOArchiveSaveRawQuaternionTrack(archive: ?*OArchive, raw: ?*const RawQuaternionTrack) Result;
 
 pub extern fn zozzIArchiveCreate(stream: ?*const Stream, out: **IArchive) Result;
 pub extern fn zozzIArchiveDestroy(archive: ?*IArchive) void;
@@ -595,6 +693,13 @@ pub extern fn zozzIArchiveLoadFloat2Track(archive: ?*IArchive, out: **Float2Trac
 pub extern fn zozzIArchiveLoadFloat3Track(archive: ?*IArchive, out: **Float3Track) Result;
 pub extern fn zozzIArchiveLoadFloat4Track(archive: ?*IArchive, out: **Float4Track) Result;
 pub extern fn zozzIArchiveLoadQuaternionTrack(archive: ?*IArchive, out: **QuaternionTrack) Result;
+pub extern fn zozzIArchiveLoadRawSkeleton(archive: ?*IArchive, out: **RawSkeleton) Result;
+pub extern fn zozzIArchiveLoadRawAnimation(archive: ?*IArchive, out: **RawAnimation) Result;
+pub extern fn zozzIArchiveLoadRawFloatTrack(archive: ?*IArchive, out: **RawFloatTrack) Result;
+pub extern fn zozzIArchiveLoadRawFloat2Track(archive: ?*IArchive, out: **RawFloat2Track) Result;
+pub extern fn zozzIArchiveLoadRawFloat3Track(archive: ?*IArchive, out: **RawFloat3Track) Result;
+pub extern fn zozzIArchiveLoadRawFloat4Track(archive: ?*IArchive, out: **RawFloat4Track) Result;
+pub extern fn zozzIArchiveLoadRawQuaternionTrack(archive: ?*IArchive, out: **RawQuaternionTrack) Result;
 pub extern fn zozzIArchiveTestSkeleton(archive: ?*IArchive) bool;
 pub extern fn zozzIArchiveTestAnimation(archive: ?*IArchive) bool;
 pub extern fn zozzIArchiveTestFloatTrack(archive: ?*IArchive) bool;
@@ -602,6 +707,13 @@ pub extern fn zozzIArchiveTestFloat2Track(archive: ?*IArchive) bool;
 pub extern fn zozzIArchiveTestFloat3Track(archive: ?*IArchive) bool;
 pub extern fn zozzIArchiveTestFloat4Track(archive: ?*IArchive) bool;
 pub extern fn zozzIArchiveTestQuaternionTrack(archive: ?*IArchive) bool;
+pub extern fn zozzIArchiveTestRawSkeleton(archive: ?*IArchive) bool;
+pub extern fn zozzIArchiveTestRawAnimation(archive: ?*IArchive) bool;
+pub extern fn zozzIArchiveTestRawFloatTrack(archive: ?*IArchive) bool;
+pub extern fn zozzIArchiveTestRawFloat2Track(archive: ?*IArchive) bool;
+pub extern fn zozzIArchiveTestRawFloat3Track(archive: ?*IArchive) bool;
+pub extern fn zozzIArchiveTestRawFloat4Track(archive: ?*IArchive) bool;
+pub extern fn zozzIArchiveTestRawQuaternionTrack(archive: ?*IArchive) bool;
 
 pub extern fn zozzSkeletonSaveFile(skeleton: ?*const Skeleton, path: [*:0]const u8) Result;
 pub extern fn zozzAnimationSaveFile(animation: ?*const Animation, path: [*:0]const u8) Result;
@@ -610,6 +722,27 @@ pub extern fn zozzFloat2TrackSaveFile(track: ?*const Float2Track, path: [*:0]con
 pub extern fn zozzFloat3TrackSaveFile(track: ?*const Float3Track, path: [*:0]const u8) Result;
 pub extern fn zozzFloat4TrackSaveFile(track: ?*const Float4Track, path: [*:0]const u8) Result;
 pub extern fn zozzQuaternionTrackSaveFile(track: ?*const QuaternionTrack, path: [*:0]const u8) Result;
+pub extern fn zozzRawSkeletonSaveFile(raw: ?*const RawSkeleton, path: [*:0]const u8) Result;
+pub extern fn zozzRawAnimationSaveFile(raw: ?*const RawAnimation, path: [*:0]const u8) Result;
+pub extern fn zozzRawFloatTrackSaveFile(raw: ?*const RawFloatTrack, path: [*:0]const u8) Result;
+pub extern fn zozzRawFloat2TrackSaveFile(raw: ?*const RawFloat2Track, path: [*:0]const u8) Result;
+pub extern fn zozzRawFloat3TrackSaveFile(raw: ?*const RawFloat3Track, path: [*:0]const u8) Result;
+pub extern fn zozzRawFloat4TrackSaveFile(raw: ?*const RawFloat4Track, path: [*:0]const u8) Result;
+pub extern fn zozzRawQuaternionTrackSaveFile(raw: ?*const RawQuaternionTrack, path: [*:0]const u8) Result;
+pub extern fn zozzRawSkeletonLoadFile(path: [*:0]const u8, out: **RawSkeleton) Result;
+pub extern fn zozzRawSkeletonLoadMemory(data: [*]const u8, size: usize, out: **RawSkeleton) Result;
+pub extern fn zozzRawAnimationLoadFile(path: [*:0]const u8, out: **RawAnimation) Result;
+pub extern fn zozzRawAnimationLoadMemory(data: [*]const u8, size: usize, out: **RawAnimation) Result;
+pub extern fn zozzRawFloatTrackLoadFile(path: [*:0]const u8, out: **RawFloatTrack) Result;
+pub extern fn zozzRawFloatTrackLoadMemory(data: [*]const u8, size: usize, out: **RawFloatTrack) Result;
+pub extern fn zozzRawFloat2TrackLoadFile(path: [*:0]const u8, out: **RawFloat2Track) Result;
+pub extern fn zozzRawFloat2TrackLoadMemory(data: [*]const u8, size: usize, out: **RawFloat2Track) Result;
+pub extern fn zozzRawFloat3TrackLoadFile(path: [*:0]const u8, out: **RawFloat3Track) Result;
+pub extern fn zozzRawFloat3TrackLoadMemory(data: [*]const u8, size: usize, out: **RawFloat3Track) Result;
+pub extern fn zozzRawFloat4TrackLoadFile(path: [*:0]const u8, out: **RawFloat4Track) Result;
+pub extern fn zozzRawFloat4TrackLoadMemory(data: [*]const u8, size: usize, out: **RawFloat4Track) Result;
+pub extern fn zozzRawQuaternionTrackLoadFile(path: [*:0]const u8, out: **RawQuaternionTrack) Result;
+pub extern fn zozzRawQuaternionTrackLoadMemory(data: [*]const u8, size: usize, out: **RawQuaternionTrack) Result;
 pub extern fn zozzSkeletonJointRestPoseLocal(skeleton: ?*const Skeleton, joint: c_int, out: *Transform) Result;
 pub extern fn zozzSkeletonRestPoseModelSpace(skeleton: ?*const Skeleton, out: [*]Float4x4, count: usize) Result;
 pub extern fn zozzSkeletonJointIsLeaf(skeleton: ?*const Skeleton, joint: c_int, out: *bool) Result;

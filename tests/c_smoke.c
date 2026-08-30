@@ -462,6 +462,127 @@ static void test_archive_round_trip(void) {
   mem_stream_free(&mem);
 }
 
+static void test_raw_archive_round_trip(void) {
+  MemStream mem;
+  memset(&mem, 0, sizeof(mem));
+
+  ZozzTransform rest;
+  memset(&rest, 0, sizeof(rest));
+  rest.rotation[3] = 1.f;
+  rest.scale[0] = rest.scale[1] = rest.scale[2] = 1.f;
+
+  // Authored child-before-parent on purpose: the archive stores the tree, so
+  // the load side comes back DEPTH-FIRST and the indices are not the ones
+  // used here. Names and parents survive; the numbering is the tree's.
+  ZozzRawSkeleton* raw_skeleton = NULL;
+  CHECK(zozzRawSkeletonCreate(&raw_skeleton) == ZOZZ_RESULT_OK);
+  int32_t root_index = -1;
+  CHECK(zozzRawSkeletonAddJoint(raw_skeleton, ZOZZ_NO_PARENT, "root", &rest,
+                                &root_index) == ZOZZ_RESULT_OK);
+  int32_t second_root = -1;
+  CHECK(zozzRawSkeletonAddJoint(raw_skeleton, ZOZZ_NO_PARENT, "other", &rest,
+                                &second_root) == ZOZZ_RESULT_OK);
+  CHECK(zozzRawSkeletonAddJoint(raw_skeleton, root_index, "child", &rest,
+                                NULL) == ZOZZ_RESULT_OK);
+  CHECK(zozzRawSkeletonValidate(raw_skeleton));
+
+  ZozzRawAnimation* raw_animation = NULL;
+  CHECK(zozzRawAnimationCreate(1, 2.0f, "raw-smoke", &raw_animation) ==
+        ZOZZ_RESULT_OK);
+  const float t0[3] = {1.f, 2.f, 3.f};
+  const float t1[3] = {4.f, 5.f, 6.f};
+  CHECK(zozzRawAnimationPushTranslation(raw_animation, 0, 0.0f, t0) ==
+        ZOZZ_RESULT_OK);
+  CHECK(zozzRawAnimationPushTranslation(raw_animation, 0, 1.5f, t1) ==
+        ZOZZ_RESULT_OK);
+  CHECK(zozzRawAnimationValidate(raw_animation));
+
+  ZozzStream write_stream;
+  write_stream.opened = mem_opened;
+  write_stream.write = mem_write;
+  write_stream.read = NULL;
+  write_stream.seek = NULL;
+  write_stream.tell = NULL;
+  write_stream.user = &mem;
+
+  ZozzOArchive* out_archive = NULL;
+  CHECK(zozzOArchiveCreate(&write_stream, ZOZZ_ENDIANNESS_LITTLE,
+                           &out_archive) == ZOZZ_RESULT_OK);
+  CHECK(zozzOArchiveSaveRawSkeleton(out_archive, raw_skeleton) ==
+        ZOZZ_RESULT_OK);
+  CHECK(zozzOArchiveSaveRawAnimation(out_archive, raw_animation) ==
+        ZOZZ_RESULT_OK);
+  zozzOArchiveDestroy(out_archive);
+
+  mem.pos = 0;
+  ZozzStream read_stream;
+  read_stream.opened = mem_opened;
+  read_stream.write = NULL;
+  read_stream.read = mem_read;
+  read_stream.seek = mem_seek;
+  read_stream.tell = mem_tell;
+  read_stream.user = &mem;
+
+  ZozzIArchive* in_archive = NULL;
+  CHECK(zozzIArchiveCreate(&read_stream, &in_archive) == ZOZZ_RESULT_OK);
+  if (in_archive != NULL) {
+    // A raw archive and a runtime archive carry different ozz tags, so the
+    // runtime test refuses it rather than parsing foreign bytes.
+    CHECK(!zozzIArchiveTestSkeleton(in_archive));
+    CHECK(zozzIArchiveTestRawSkeleton(in_archive));
+
+    ZozzRawSkeleton* loaded_skeleton = NULL;
+    CHECK(zozzIArchiveLoadRawSkeleton(in_archive, &loaded_skeleton) ==
+          ZOZZ_RESULT_OK);
+    if (loaded_skeleton != NULL) {
+      CHECK(zozzRawSkeletonNumJoints(loaded_skeleton) == 3);
+      CHECK(strcmp(zozzRawSkeletonJointName(loaded_skeleton, 0), "root") == 0);
+      CHECK(strcmp(zozzRawSkeletonJointName(loaded_skeleton, 1), "child") == 0);
+      CHECK(strcmp(zozzRawSkeletonJointName(loaded_skeleton, 2), "other") == 0);
+      CHECK(zozzRawSkeletonJointParent(loaded_skeleton, 1) == 0);
+      CHECK(zozzRawSkeletonJointParent(loaded_skeleton, 2) == ZOZZ_NO_PARENT);
+      zozzRawSkeletonDestroy(loaded_skeleton);
+    }
+
+    ZozzRawAnimation* loaded_animation = NULL;
+    CHECK(zozzIArchiveTestRawAnimation(in_archive));
+    CHECK(zozzIArchiveLoadRawAnimation(in_archive, &loaded_animation) ==
+          ZOZZ_RESULT_OK);
+    if (loaded_animation != NULL) {
+      CHECK(strcmp(zozzRawAnimationName(loaded_animation), "raw-smoke") == 0);
+      CHECK(zozzRawAnimationDuration(loaded_animation) == 2.0f);
+      CHECK(zozzRawAnimationNumTranslations(loaded_animation, 0) == 2);
+
+      // The out-buffer is the caller's, and a short one is refused before
+      // anything is written — the sentinel below still reads back.
+      ZozzRawTranslationKey one;
+      one.time = -1.f;
+      CHECK(zozzRawAnimationTranslations(loaded_animation, 0, &one, 1) ==
+            ZOZZ_RESULT_BUFFER_TOO_SMALL);
+      CHECK(one.time == -1.f);
+
+      ZozzRawTranslationKey keys[4];
+      CHECK(zozzRawAnimationTranslations(loaded_animation, 0, keys, 4) ==
+            ZOZZ_RESULT_OK);
+      CHECK(keys[0].time == 0.0f);
+      CHECK(keys[0].value[0] == 1.f && keys[0].value[2] == 3.f);
+      CHECK(keys[1].time == 1.5f);
+      CHECK(keys[1].value[0] == 4.f && keys[1].value[2] == 6.f);
+
+      CHECK(zozzRawAnimationClearTranslations(loaded_animation, 0) ==
+            ZOZZ_RESULT_OK);
+      CHECK(zozzRawAnimationNumTranslations(loaded_animation, 0) == 0);
+      zozzRawAnimationDestroy(loaded_animation);
+    }
+
+    zozzIArchiveDestroy(in_archive);
+  }
+
+  zozzRawAnimationDestroy(raw_animation);
+  zozzRawSkeletonDestroy(raw_skeleton);
+  mem_stream_free(&mem);
+}
+
 static void test_archive_stream_rejection(void) {
   MemStream mem;
   memset(&mem, 0, sizeof(mem));
@@ -582,6 +703,7 @@ int main(void) {
   test_joint_weight_packing();
   test_sampling_context();
   test_archive_round_trip();
+  test_raw_archive_round_trip();
   test_archive_stream_rejection();
 
   // The seam must actually have been used, and everything taken must have

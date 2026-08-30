@@ -18,7 +18,6 @@ base/io	Read	EXTENSION	ZozzStream zozzIArchiveCreate zozzIArchiveLoad*
 base/io	Seek	EXTENSION	ZozzStream ZozzSeekOrigin zozzIArchiveTest*
 base/io	Tell	EXTENSION	ZozzStream zozzIArchiveTest*
 base/io	TestTag	BOUND	zozzIArchiveTestSkeleton zozzIArchiveTestAnimation zozzIArchiveTestFloatTrack zozzIArchiveTestFloat2Track zozzIArchiveTestFloat3Track zozzIArchiveTestFloat4Track zozzIArchiveTestQuaternionTrack
-base/io	Validate	BOUND	ZOZZ_RESULT_JOB_INVALID zozzSample zozzLocalToModel zozzBlendingRun zozzSkinningJobRun zozzIKTwoBoneJobRun zozzFloatTrackTriggeringJobRun zozzSkeletonBuild zozzAnimationBuild zozzFloatTrackBuild ZOZZ_RESULT_INVALID_DATA zozzIArchiveTestSkeleton
 base/io	Write	EXTENSION	ZozzStream zozzOArchiveCreate
 base/io	opened	EXTENSION	ZozzStream zozzOArchiveCreate
 base/io	IArchive::operator>>	BOUND	zozzIArchiveLoad*

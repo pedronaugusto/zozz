@@ -33,34 +33,18 @@ namespace {
 // Shared load / destroy / name, generic over the five track handle types.
 //===----------------------------------------------------------------------===//
 
+// The two loaders are zozz::LoadHandleFromFile and LoadHandleFromMemory
+// (zozz_internal.h): the offline types need the identical allocate-load-unwind
+// shape, and one home is what keeps the unwind from being wrong in one of two
+// copies.
 template <typename Handle>
 ZozzResult TrackLoadFile(const char* path, Handle** out) {
-  if (out == nullptr) return ZOZZ_RESULT_INVALID_ARGUMENT;
-  *out = nullptr;
-  Handle* handle = zozz::New<Handle>();
-  if (handle == nullptr) return ZOZZ_RESULT_OUT_OF_MEMORY;
-  const ZozzResult result = zozz::LoadFromFile(path, &handle->impl);
-  if (result != ZOZZ_RESULT_OK) {
-    zozz::Delete(handle);
-    return result;
-  }
-  *out = handle;
-  return ZOZZ_RESULT_OK;
+  return zozz::LoadHandleFromFile(path, out);
 }
 
 template <typename Handle>
 ZozzResult TrackLoadMemory(const void* data, size_t size, Handle** out) {
-  if (out == nullptr) return ZOZZ_RESULT_INVALID_ARGUMENT;
-  *out = nullptr;
-  Handle* handle = zozz::New<Handle>();
-  if (handle == nullptr) return ZOZZ_RESULT_OUT_OF_MEMORY;
-  const ZozzResult result = zozz::LoadFromMemory(data, size, &handle->impl);
-  if (result != ZOZZ_RESULT_OK) {
-    zozz::Delete(handle);
-    return result;
-  }
-  *out = handle;
-  return ZOZZ_RESULT_OK;
+  return zozz::LoadHandleFromMemory(data, size, out);
 }
 
 template <typename Handle>

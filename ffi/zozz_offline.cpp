@@ -109,6 +109,13 @@ void IterateBreadthFirst(const ozz::vector<ozz::vector<int32_t>>& children,
   }
 }
 
+/// Copies an ozz Float3 into the three floats a C key struct carries.
+void Write3(float out[3], const ozz::math::Float3& value) {
+  out[0] = value.x;
+  out[1] = value.y;
+  out[2] = value.z;
+}
+
 /// Depth-first pre-order flattening of a nested ozz Joint tree, pushed into
 /// `out` — the reverse of FillChildren above, and what gives BuildFlatSkeleton
 /// below the same insertion-order convention zozzSkeletonBuild documents.
@@ -244,6 +251,15 @@ ZozzResult zozzRawSkeletonJointRest(const ZozzRawSkeleton* raw, int32_t joint,
   return ZOZZ_RESULT_OK;
 }
 
+bool zozzRawSkeletonValidate(const ZozzRawSkeleton* raw) {
+  if (raw == nullptr) return false;
+  // ozz's RawSkeleton::Validate is `num_joints() > kMaxJoints` and nothing
+  // else (raw_skeleton.cc:40-45), and flattening is a bijection on joints, so
+  // this handle's size IS that num_joints(). zozz::kMaxJoints is ozz's own
+  // constant, not a copy of its value.
+  return raw->joints.size() <= static_cast<size_t>(zozz::kMaxJoints);
+}
+
 ZozzResult zozzRawSkeletonIterateJointsBreadthFirst(const ZozzRawSkeleton* raw,
                                                     ZozzJointVisitor visitor,
                                                     void* user) {
@@ -331,16 +347,15 @@ ZozzResult CheckPush(ZozzRawAnimation* raw, int track, float time,
                      const float* value, int value_count,
                      ozz::animation::offline::RawAnimation::JointTrack**
                          out_track) {
-  if (raw == nullptr || value == nullptr) return ZOZZ_RESULT_INVALID_ARGUMENT;
-  if (track < 0 || track >= static_cast<int>(raw->impl.tracks.size())) {
-    return ZOZZ_RESULT_INVALID_ARGUMENT;
-  }
+  if (value == nullptr) return ZOZZ_RESULT_INVALID_ARGUMENT;
+  auto* joint = zozz::MutableJointTrackAt(raw, track);
+  if (joint == nullptr) return ZOZZ_RESULT_INVALID_ARGUMENT;
   if (!std::isfinite(time) || time < 0.f || time > raw->impl.duration) {
     return ZOZZ_RESULT_INVALID_ARGUMENT;
   }
   const bool finite = value_count == 4 ? Finite4(value) : Finite3(value);
   if (!finite) return ZOZZ_RESULT_INVALID_ARGUMENT;
-  *out_track = &raw->impl.tracks[static_cast<size_t>(track)];
+  *out_track = joint;
   return ZOZZ_RESULT_OK;
 }
 
@@ -390,6 +405,124 @@ ZozzResult zozzAnimationBuild(const ZozzRawAnimation* raw,
   if (animation == nullptr) return ZOZZ_RESULT_OUT_OF_MEMORY;
   animation->impl = std::move(*built);
   *out = animation;
+  return ZOZZ_RESULT_OK;
+}
+
+//===----------------------------------------------------------------------===//
+// Raw animation read-back and editing
+//===----------------------------------------------------------------------===//
+
+bool zozzRawAnimationValidate(const ZozzRawAnimation* raw) {
+  return raw != nullptr && raw->impl.Validate();
+}
+
+size_t zozzRawAnimationSize(const ZozzRawAnimation* raw) {
+  return raw == nullptr ? 0 : raw->impl.size();
+}
+
+const char* zozzRawAnimationName(const ZozzRawAnimation* raw) {
+  return raw == nullptr ? nullptr : raw->impl.name.c_str();
+}
+
+ZozzResult zozzRawAnimationSetName(ZozzRawAnimation* raw, const char* name) {
+  if (raw == nullptr) return ZOZZ_RESULT_INVALID_ARGUMENT;
+  raw->impl.name = name == nullptr ? "" : name;
+  return ZOZZ_RESULT_OK;
+}
+
+ZozzResult zozzRawAnimationSetDuration(ZozzRawAnimation* raw, float duration) {
+  if (raw == nullptr) return ZOZZ_RESULT_INVALID_ARGUMENT;
+  if (!std::isfinite(duration) || duration <= 0.f) {
+    return ZOZZ_RESULT_INVALID_ARGUMENT;
+  }
+  raw->impl.duration = duration;
+  return ZOZZ_RESULT_OK;
+}
+
+int zozzRawAnimationNumTranslations(const ZozzRawAnimation* raw, int track) {
+  const auto* joint = zozz::JointTrackAt(raw, track);
+  return joint == nullptr ? 0 : static_cast<int>(joint->translations.size());
+}
+
+int zozzRawAnimationNumRotations(const ZozzRawAnimation* raw, int track) {
+  const auto* joint = zozz::JointTrackAt(raw, track);
+  return joint == nullptr ? 0 : static_cast<int>(joint->rotations.size());
+}
+
+int zozzRawAnimationNumScales(const ZozzRawAnimation* raw, int track) {
+  const auto* joint = zozz::JointTrackAt(raw, track);
+  return joint == nullptr ? 0 : static_cast<int>(joint->scales.size());
+}
+
+ZozzResult zozzRawAnimationTranslations(const ZozzRawAnimation* raw, int track,
+                                        ZozzRawTranslationKey* out,
+                                        size_t count) {
+  const auto* joint = zozz::JointTrackAt(raw, track);
+  if (joint == nullptr || out == nullptr) return ZOZZ_RESULT_INVALID_ARGUMENT;
+  if (count < joint->translations.size()) return ZOZZ_RESULT_BUFFER_TOO_SMALL;
+  for (size_t i = 0; i < joint->translations.size(); ++i) {
+    out[i].time = joint->translations[i].time;
+    Write3(out[i].value, joint->translations[i].value);
+  }
+  return ZOZZ_RESULT_OK;
+}
+
+ZozzResult zozzRawAnimationRotations(const ZozzRawAnimation* raw, int track,
+                                     ZozzRawRotationKey* out, size_t count) {
+  const auto* joint = zozz::JointTrackAt(raw, track);
+  if (joint == nullptr || out == nullptr) return ZOZZ_RESULT_INVALID_ARGUMENT;
+  if (count < joint->rotations.size()) return ZOZZ_RESULT_BUFFER_TOO_SMALL;
+  for (size_t i = 0; i < joint->rotations.size(); ++i) {
+    const ozz::math::Quaternion& q = joint->rotations[i].value;
+    out[i].time = joint->rotations[i].time;
+    out[i].value[0] = q.x;
+    out[i].value[1] = q.y;
+    out[i].value[2] = q.z;
+    out[i].value[3] = q.w;
+  }
+  return ZOZZ_RESULT_OK;
+}
+
+ZozzResult zozzRawAnimationScales(const ZozzRawAnimation* raw, int track,
+                                  ZozzRawScaleKey* out, size_t count) {
+  const auto* joint = zozz::JointTrackAt(raw, track);
+  if (joint == nullptr || out == nullptr) return ZOZZ_RESULT_INVALID_ARGUMENT;
+  if (count < joint->scales.size()) return ZOZZ_RESULT_BUFFER_TOO_SMALL;
+  for (size_t i = 0; i < joint->scales.size(); ++i) {
+    out[i].time = joint->scales[i].time;
+    Write3(out[i].value, joint->scales[i].value);
+  }
+  return ZOZZ_RESULT_OK;
+}
+
+ZozzResult zozzRawAnimationClearTranslations(ZozzRawAnimation* raw,
+                                             int track) {
+  auto* joint = zozz::MutableJointTrackAt(raw, track);
+  if (joint == nullptr) return ZOZZ_RESULT_INVALID_ARGUMENT;
+  joint->translations.clear();
+  return ZOZZ_RESULT_OK;
+}
+
+ZozzResult zozzRawAnimationClearRotations(ZozzRawAnimation* raw, int track) {
+  auto* joint = zozz::MutableJointTrackAt(raw, track);
+  if (joint == nullptr) return ZOZZ_RESULT_INVALID_ARGUMENT;
+  joint->rotations.clear();
+  return ZOZZ_RESULT_OK;
+}
+
+ZozzResult zozzRawAnimationClearScales(ZozzRawAnimation* raw, int track) {
+  auto* joint = zozz::MutableJointTrackAt(raw, track);
+  if (joint == nullptr) return ZOZZ_RESULT_INVALID_ARGUMENT;
+  joint->scales.clear();
+  return ZOZZ_RESULT_OK;
+}
+
+ZozzResult zozzRawAnimationClearTrack(ZozzRawAnimation* raw, int track) {
+  auto* joint = zozz::MutableJointTrackAt(raw, track);
+  if (joint == nullptr) return ZOZZ_RESULT_INVALID_ARGUMENT;
+  joint->translations.clear();
+  joint->rotations.clear();
+  joint->scales.clear();
   return ZOZZ_RESULT_OK;
 }
 
