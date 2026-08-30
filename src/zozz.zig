@@ -53,6 +53,7 @@ pub const getAllocator = memory_mod.getAllocator;
 
 pub const Skeleton = skeleton_mod.Skeleton;
 pub const no_parent = skeleton_mod.no_parent;
+pub const max_joints = skeleton_mod.max_joints;
 
 pub const Animation = animation_mod.Animation;
 
@@ -244,6 +245,7 @@ test {
 
     // Behavioural tests, one file per area.
     _ = @import("math_test.zig");
+    _ = @import("sampling_test.zig");
     _ = @import("blending_test.zig");
     _ = @import("ik_test.zig");
     _ = @import("archive_test.zig");
@@ -316,7 +318,7 @@ test "the C library agrees with the extern declarations in c.zig" {
 test "version reporting is wired up" {
     const v = version();
     try std.testing.expectEqual(@as(u8, 0), v.major);
-    try std.testing.expectEqual(@as(u8, 3), v.minor);
+    try std.testing.expectEqual(@as(u8, 4), v.minor);
 
     const ozz = ozzVersion();
     try std.testing.expectEqual(@as(u8, 17), ozz.minor);
