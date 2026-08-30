@@ -18,6 +18,18 @@ const err = @import("error.zig");
 const math = @import("math.zig");
 const SoaTransform = @import("math.zig").SoaTransform;
 
+/// A vector or quaternion as ozz's own job fields hold it. Positions and axes
+/// ignore w; a scalar caller writes `.{ x, y, z, 0 }`.
+pub const Vec4 = math.SimdFloat4;
+
+// `math.SimdFloat4` is the `@Vector(4, f32)` this module's callers use;
+// `c.SimdFloat4` is the struct the header declares. The bitcasts below are
+// free, and these are what make them sound rather than assumed.
+comptime {
+    std.debug.assert(@sizeOf(Vec4) == @sizeOf(c.SimdFloat4));
+    std.debug.assert(@alignOf(Vec4) == @alignOf(c.SimdFloat4));
+}
+
 /// Solves a three-joint chain (two bones) so its end reaches `target`.
 ///
 /// `mid_axis`, `pole_vector`, `soften` and `weight` default to ozz's own
@@ -25,9 +37,9 @@ const SoaTransform = @import("math.zig").SoaTransform;
 /// by the job's own validation, so a zeroed struct would run "successfully"
 /// and silently produce an identity correction rather than erroring.
 pub const TwoBoneJob = struct {
-    target: [3]f32 = .{ 0, 0, 0 },
-    mid_axis: [3]f32 = .{ 0, 0, 1 },
-    pole_vector: [3]f32 = .{ 0, 1, 0 },
+    target: Vec4 = .{ 0, 0, 0, 0 },
+    mid_axis: Vec4 = .{ 0, 0, 1, 0 },
+    pole_vector: Vec4 = .{ 0, 1, 0, 0 },
     twist_angle: f32 = 0,
     soften: f32 = 1,
     weight: f32 = 1,
@@ -37,13 +49,13 @@ pub const TwoBoneJob = struct {
 
     /// Runs a two-bone IK solve.
     pub fn run(self: TwoBoneJob) err.Error!TwoBoneResult {
-        var start_correction: [4]f32 = undefined;
-        var mid_correction: [4]f32 = undefined;
+        var start_correction: c.SimdFloat4 = undefined;
+        var mid_correction: c.SimdFloat4 = undefined;
         var reached: bool = false;
         var raw = c.IKTwoBoneJob{
-            .target = self.target,
-            .mid_axis = self.mid_axis,
-            .pole_vector = self.pole_vector,
+            .target = @bitCast(self.target),
+            .mid_axis = @bitCast(self.mid_axis),
+            .pole_vector = @bitCast(self.pole_vector),
             .twist_angle = self.twist_angle,
             .soften = self.soften,
             .weight = self.weight,
@@ -56,8 +68,8 @@ pub const TwoBoneJob = struct {
         };
         try err.check(c.zozzIKTwoBoneJobRun(&raw));
         return .{
-            .start_joint_correction = start_correction,
-            .mid_joint_correction = mid_correction,
+            .start_joint_correction = @bitCast(start_correction),
+            .mid_joint_correction = @bitCast(mid_correction),
             .reached = reached,
         };
     }
@@ -66,9 +78,9 @@ pub const TwoBoneJob = struct {
 pub const TwoBoneResult = struct {
     /// Local-space correction for `start_joint`/`mid_joint` (xyzw, w LAST).
     /// Left-multiply onto the joint's current local rotation — or hand it to
-    /// `applyCorrection`.
-    start_joint_correction: [4]f32,
-    mid_joint_correction: [4]f32,
+    /// `applyCorrections`.
+    start_joint_correction: Vec4,
+    mid_joint_correction: Vec4,
     /// False if the chain's length, softening, or weight kept the target out
     /// of reach.
     reached: bool,
@@ -81,51 +93,68 @@ pub const TwoBoneResult = struct {
 /// for the same reason as `TwoBoneJob`: `weight` is unchecked, so it is not
 /// zero-defaulted.
 pub const AimJob = struct {
-    target: [3]f32 = .{ 0, 0, 0 },
-    forward: [3]f32 = .{ 1, 0, 0 },
-    offset: [3]f32 = .{ 0, 0, 0 },
-    up: [3]f32 = .{ 0, 1, 0 },
-    pole_vector: [3]f32 = .{ 0, 1, 0 },
+    target: Vec4 = .{ 0, 0, 0, 0 },
+    forward: Vec4 = .{ 1, 0, 0, 0 },
+    offset: Vec4 = .{ 0, 0, 0, 0 },
+    up: Vec4 = .{ 0, 1, 0, 0 },
+    pole_vector: Vec4 = .{ 0, 1, 0, 0 },
     twist_angle: f32 = 0,
     weight: f32 = 1,
     joint: *const math.Mat4,
 
     /// Runs an aim IK solve.
     pub fn run(self: AimJob) err.Error!AimResult {
-        var correction: [4]f32 = undefined;
+        var joint_correction: c.SimdFloat4 = undefined;
         var reached: bool = false;
         var raw = c.IKAimJob{
-            .target = self.target,
-            .forward = self.forward,
-            .offset = self.offset,
-            .up = self.up,
-            .pole_vector = self.pole_vector,
+            .target = @bitCast(self.target),
+            .forward = @bitCast(self.forward),
+            .offset = @bitCast(self.offset),
+            .up = @bitCast(self.up),
+            .pole_vector = @bitCast(self.pole_vector),
             .twist_angle = self.twist_angle,
             .weight = self.weight,
             .joint = self.joint,
-            .joint_correction = &correction,
+            .joint_correction = &joint_correction,
             .reached = &reached,
         };
         try err.check(c.zozzIKAimJobRun(&raw));
-        return .{ .joint_correction = correction, .reached = reached };
+        return .{ .joint_correction = @bitCast(joint_correction), .reached = reached };
     }
 };
 
 pub const AimResult = struct {
     /// Local-space correction for `joint` (xyzw, w LAST).
-    joint_correction: [4]f32,
+    joint_correction: Vec4,
     reached: bool,
 };
 
-/// Left-multiplies `correction` (xyzw, w LAST) onto `joint`'s current
-/// local-space rotation in `pose`, in place. This is how a `TwoBoneResult`'s
-/// or `AimResult`'s correction gets folded back before the pose is next
-/// converted to model-space.
-pub fn applyCorrection(pose: []SoaTransform, joint: u32, correction: [4]f32) err.Error!void {
-    try err.check(c.zozzSoaPoseApplyLocalCorrection(
+/// One joint's local-space rotation correction, as an IK job produces it.
+/// The layout is `c.JointCorrection`'s, which is what `abi_check.zig`
+/// compares against the header; `correction` below is how one is built.
+pub const JointCorrection = c.JointCorrection;
+
+/// Pairs a joint index with the rotation an IK job produced for it.
+pub fn correction(joint: u32, rotation: Vec4) JointCorrection {
+    return .{ .rotation = @bitCast(rotation), .joint = @intCast(joint) };
+}
+
+/// Left-multiplies each correction onto its joint's current local-space
+/// rotation in `pose`, in place: how an IK pass gets folded back before the
+/// pose is next converted to model-space. One call for the whole pass, not
+/// one per joint, and corrections in the same SoA block share one transpose.
+/// Nothing is written unless every index is in range.
+pub fn applyCorrections(pose: []SoaTransform, corrections: []const JointCorrection) err.Error!void {
+    try err.check(c.zozzSoaPoseApplyLocalCorrections(
         pose.ptr,
         pose.len,
-        @intCast(joint),
-        &correction,
+        corrections.ptr,
+        corrections.len,
     ));
+}
+
+/// `applyCorrections` for a single joint. Same call, one-element batch.
+pub fn applyCorrection(pose: []SoaTransform, joint: u32, rotation: Vec4) err.Error!void {
+    const one = [_]JointCorrection{correction(joint, rotation)};
+    try applyCorrections(pose, &one);
 }

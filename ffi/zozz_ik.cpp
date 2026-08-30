@@ -27,9 +27,9 @@ bool BuildTwoBone(const ZozzIKTwoBoneJob& in, ozz::animation::IKTwoBoneJob* out,
       in.mid_joint_correction == nullptr) {
     return false;
   }
-  out->target = m::simd_float4::Load3PtrU(in.target);
-  out->mid_axis = m::simd_float4::Load3PtrU(in.mid_axis);
-  out->pole_vector = m::simd_float4::Load3PtrU(in.pole_vector);
+  out->target = *zozz::AsOzz(&in.target);
+  out->mid_axis = *zozz::AsOzz(&in.mid_axis);
+  out->pole_vector = *zozz::AsOzz(&in.pole_vector);
   out->twist_angle = in.twist_angle;
   out->soften = in.soften;
   out->weight = in.weight;
@@ -49,11 +49,11 @@ bool BuildAim(const ZozzIKAimJob& in, ozz::animation::IKAimJob* out,
   if (in.joint == nullptr || in.joint_correction == nullptr) {
     return false;
   }
-  out->target = m::simd_float4::Load3PtrU(in.target);
-  out->forward = m::simd_float4::Load3PtrU(in.forward);
-  out->offset = m::simd_float4::Load3PtrU(in.offset);
-  out->up = m::simd_float4::Load3PtrU(in.up);
-  out->pole_vector = m::simd_float4::Load3PtrU(in.pole_vector);
+  out->target = *zozz::AsOzz(&in.target);
+  out->forward = *zozz::AsOzz(&in.forward);
+  out->offset = *zozz::AsOzz(&in.offset);
+  out->up = *zozz::AsOzz(&in.up);
+  out->pole_vector = *zozz::AsOzz(&in.pole_vector);
   out->twist_angle = in.twist_angle;
   out->weight = in.weight;
   out->joint = reinterpret_cast<const m::Float4x4*>(in.joint);
@@ -69,9 +69,9 @@ extern "C" {
 void zozzIKTwoBoneJobDefaults(ZozzIKTwoBoneJob* out) {
   if (out == nullptr) return;
   const ozz::animation::IKTwoBoneJob defaults;
-  m::Store3PtrU(defaults.target, out->target);
-  m::Store3PtrU(defaults.mid_axis, out->mid_axis);
-  m::Store3PtrU(defaults.pole_vector, out->pole_vector);
+  *zozz::AsOzz(&out->target) = defaults.target;
+  *zozz::AsOzz(&out->mid_axis) = defaults.mid_axis;
+  *zozz::AsOzz(&out->pole_vector) = defaults.pole_vector;
   out->twist_angle = defaults.twist_angle;
   out->soften = defaults.soften;
   out->weight = defaults.weight;
@@ -102,8 +102,8 @@ ZozzResult zozzIKTwoBoneJobRun(const ZozzIKTwoBoneJob* job) {
   if (!ozz_job.Validate()) return ZOZZ_RESULT_JOB_INVALID;
   if (!ozz_job.Run()) return ZOZZ_RESULT_JOB_INVALID;
 
-  m::StorePtrU(start_correction.xyzw, job->start_joint_correction);
-  m::StorePtrU(mid_correction.xyzw, job->mid_joint_correction);
+  *zozz::AsOzz(job->start_joint_correction) = start_correction.xyzw;
+  *zozz::AsOzz(job->mid_joint_correction) = mid_correction.xyzw;
   if (job->reached != nullptr) *job->reached = reached;
   return ZOZZ_RESULT_OK;
 }
@@ -111,11 +111,11 @@ ZozzResult zozzIKTwoBoneJobRun(const ZozzIKTwoBoneJob* job) {
 void zozzIKAimJobDefaults(ZozzIKAimJob* out) {
   if (out == nullptr) return;
   const ozz::animation::IKAimJob defaults;
-  m::Store3PtrU(defaults.target, out->target);
-  m::Store3PtrU(defaults.forward, out->forward);
-  m::Store3PtrU(defaults.offset, out->offset);
-  m::Store3PtrU(defaults.up, out->up);
-  m::Store3PtrU(defaults.pole_vector, out->pole_vector);
+  *zozz::AsOzz(&out->target) = defaults.target;
+  *zozz::AsOzz(&out->forward) = defaults.forward;
+  *zozz::AsOzz(&out->offset) = defaults.offset;
+  *zozz::AsOzz(&out->up) = defaults.up;
+  *zozz::AsOzz(&out->pole_vector) = defaults.pole_vector;
   out->twist_angle = defaults.twist_angle;
   out->weight = defaults.weight;
   out->joint = nullptr;
@@ -136,46 +136,57 @@ ZozzResult zozzIKAimJobRun(const ZozzIKAimJob* job) {
   if (!ozz_job.Validate()) return ZOZZ_RESULT_JOB_INVALID;
   if (!ozz_job.Run()) return ZOZZ_RESULT_JOB_INVALID;
 
-  m::StorePtrU(correction.xyzw, job->joint_correction);
+  *zozz::AsOzz(job->joint_correction) = correction.xyzw;
   if (job->reached != nullptr) *job->reached = reached;
   return ZOZZ_RESULT_OK;
 }
 
-ZozzResult zozzSoaPoseApplyLocalCorrection(ZozzSoaTransform* pose,
-                                           size_t blocks, int joint,
-                                           const float correction[4]) {
-  if (pose == nullptr || correction == nullptr) {
+ZozzResult zozzSoaPoseApplyLocalCorrections(
+    ZozzSoaTransform* pose, size_t blocks,
+    const ZozzJointCorrection* corrections, size_t count) {
+  if (count == 0) return ZOZZ_RESULT_OK;
+  if (pose == nullptr || corrections == nullptr) {
     return ZOZZ_RESULT_INVALID_ARGUMENT;
   }
   if (!zozz::IsAligned16(pose)) return ZOZZ_RESULT_INVALID_ARGUMENT;
-  if (joint < 0 || static_cast<size_t>(joint) / 4 >= blocks) {
-    return ZOZZ_RESULT_INVALID_ARGUMENT;
+  for (size_t i = 0; i < count; ++i) {
+    const int32_t joint = corrections[i].joint;
+    if (joint < 0 || static_cast<size_t>(joint) / 4 >= blocks) {
+      return ZOZZ_RESULT_INVALID_ARGUMENT;
+    }
   }
 
-  const int block = joint / 4;
-  const int lane = joint & 3;
-  m::SoaTransform& soa = zozz::AsOzz(pose)[block];
+  m::SoaTransform* soa = zozz::AsOzz(pose);
+  size_t i = 0;
+  while (i < count) {
+    const int32_t block = corrections[i].joint / 4;
 
-  // Transpose the block's rotation to one full quaternion per joint, replace
-  // this joint's lane, and transpose back. Transpose4x4 is a real 4x4
-  // transpose (not SoA/AoS-specific), so it is its own inverse: this is the
-  // same operation zozz_pose.cpp's SoaToAos/AosToSoa use in both directions.
-  const m::SimdFloat4 r_in[4] = {soa.rotation.x, soa.rotation.y,
-                                 soa.rotation.z, soa.rotation.w};
-  m::SimdFloat4 r_out[4];
-  m::Transpose4x4(r_in, r_out);
+    // Transpose the block's rotation to one full quaternion per joint, edit
+    // the lanes this run names, and transpose back. Transpose4x4 is a real
+    // 4x4 transpose (not SoA/AoS-specific), so it is its own inverse: the
+    // same operation zozz_pose.cpp's SoaToAos/AosToSoa use in both
+    // directions. Hoisting it over a run of same-block corrections is why a
+    // whole IK pass costs one call and, usually, one transpose pair.
+    const m::SimdFloat4 r_in[4] = {soa[block].rotation.x, soa[block].rotation.y,
+                                   soa[block].rotation.z,
+                                   soa[block].rotation.w};
+    m::SimdFloat4 r_out[4];
+    m::Transpose4x4(r_in, r_out);
 
-  const m::SimdQuaternion delta = {m::simd_float4::LoadPtrU(correction)};
-  const m::SimdQuaternion old_rotation = {r_out[lane]};
-  const m::SimdQuaternion new_rotation = delta * old_rotation;
-  r_out[lane] = new_rotation.xyzw;
+    for (; i < count && corrections[i].joint / 4 == block; ++i) {
+      const int32_t lane = corrections[i].joint & 3;
+      const m::SimdQuaternion delta = {*zozz::AsOzz(&corrections[i].rotation)};
+      const m::SimdQuaternion old_rotation = {r_out[lane]};
+      r_out[lane] = (delta * old_rotation).xyzw;
+    }
 
-  m::SimdFloat4 r_back[4];
-  m::Transpose4x4(r_out, r_back);
-  soa.rotation.x = r_back[0];
-  soa.rotation.y = r_back[1];
-  soa.rotation.z = r_back[2];
-  soa.rotation.w = r_back[3];
+    m::SimdFloat4 r_back[4];
+    m::Transpose4x4(r_out, r_back);
+    soa[block].rotation.x = r_back[0];
+    soa[block].rotation.y = r_back[1];
+    soa[block].rotation.z = r_back[2];
+    soa[block].rotation.w = r_back[3];
+  }
 
   return ZOZZ_RESULT_OK;
 }

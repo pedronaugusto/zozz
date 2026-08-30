@@ -24,19 +24,23 @@ extern "C" {
 //
 // Solves a three-joint chain (two bones) so its end reaches a target
 // position, writing the local-space rotation corrections for the chain's
-// first two joints. Fold each correction into a pose with
-// zozzSoaPoseApplyLocalCorrection before the next model-space update.
+// first two joints. Fold the corrections into a pose with
+// zozzSoaPoseApplyLocalCorrections before the next model-space update.
+//
+// Vectors and quaternions here are ZozzSimdFloat4, which is what ozz's own
+// job fields are. A caller working from model-space matrices already holds
+// them in that form, and a scalar caller writes {x, y, z, 0}.
 //===----------------------------------------------------------------------===//
 
 typedef struct ZozzIKTwoBoneJob {
-  /// Target position to reach, in model-space.
-  float target[3];
+  /// Target position to reach, in model-space. w is ignored.
+  ZozzSimdFloat4 target;
   /// Middle joint's rotation axis, in middle-joint local-space. Must be
   /// normalized: zozzIKTwoBoneJobDefaults sets it to the z axis, and
   /// zozzIKTwoBoneJobRun refuses anything else.
-  float mid_axis[3];
+  ZozzSimdFloat4 mid_axis;
   /// Pole vector, in model-space: controls which way the chain bends.
-  float pole_vector[3];
+  ZozzSimdFloat4 pole_vector;
   /// Rotates the chain around the start-to-target vector. Default 0.
   float twist_angle;
   /// Fraction of the chain's reach, measured back from full extension, over
@@ -59,10 +63,10 @@ typedef struct ZozzIKTwoBoneJob {
 
   /// Required. On success, the local-space correction to left-multiply onto
   /// start_joint's/mid_joint's current local rotation (xyzw, w LAST) is
-  /// written here. Points to caller-owned storage; left untouched on
-  /// failure.
-  float* start_joint_correction;
-  float* mid_joint_correction;
+  /// written here. Points to caller-owned, 16-byte aligned storage; left
+  /// untouched on failure.
+  ZozzSimdFloat4* start_joint_correction;
+  ZozzSimdFloat4* mid_joint_correction;
 
   /// Optional (NULL to ignore). On success, set to true if the target was
   /// reachable, false otherwise. Left untouched on failure.
@@ -88,20 +92,20 @@ ZOZZ_API ZozzResult zozzIKTwoBoneJobRun(const ZozzIKTwoBoneJob* job);
 //===----------------------------------------------------------------------===//
 
 typedef struct ZozzIKAimJob {
-  /// Target position to aim at, in model-space.
-  float target[3];
+  /// Target position to aim at, in model-space. w is ignored.
+  ZozzSimdFloat4 target;
   /// Joint's forward axis, in joint local-space, to aim at the target. Must
   /// be normalized: zozzIKAimJobDefaults sets it to the x axis, and
   /// zozzIKAimJobRun refuses anything else.
-  float forward[3];
+  ZozzSimdFloat4 forward;
   /// Offset, in joint local-space, of the point that aims at the target.
   /// Default zero.
-  float offset[3];
+  ZozzSimdFloat4 offset;
   /// Joint's up axis, in joint local-space, kept aligned with pole_vector.
   /// Default y axis.
-  float up[3];
+  ZozzSimdFloat4 up;
   /// Pole vector, in model-space: controls which way "up" points.
-  float pole_vector[3];
+  ZozzSimdFloat4 pole_vector;
   /// Rotates the joint around the target vector. Default 0.
   float twist_angle;
   /// Blends the correction: 0 leaves the pose untouched, 1 applies it in
@@ -113,8 +117,8 @@ typedef struct ZozzIKAimJob {
 
   /// Required. On success, the local-space correction to left-multiply onto
   /// joint's current local rotation (xyzw, w LAST) is written here. Points
-  /// to caller-owned storage; left untouched on failure.
-  float* joint_correction;
+  /// to caller-owned, 16-byte aligned storage; left untouched on failure.
+  ZozzSimdFloat4* joint_correction;
 
   /// Optional (NULL to ignore). On success, set to true if the target was
   /// reachable, false otherwise. Left untouched on failure.
@@ -135,15 +139,24 @@ ZOZZ_API ZozzResult zozzIKAimJobRun(const ZozzIKAimJob* job);
 // Folding a correction back into a pose
 //===----------------------------------------------------------------------===//
 
-/// Left-multiplies `correction` (a local-space rotation, xyzw, w LAST; borrowed
-/// for the call only) onto `joint`'s current local rotation in `pose`, in
-/// place: pose[joint].rotation = correction * pose[joint].rotation. `joint`'s
-/// translation and scale, and every other joint, are left untouched. Returns
-/// ZOZZ_RESULT_INVALID_ARGUMENT if `pose` or `correction` is NULL, if `pose`
-/// is not 16-byte aligned, or if `joint` is negative or outside `blocks`.
-ZOZZ_API ZozzResult zozzSoaPoseApplyLocalCorrection(ZozzSoaTransform* pose,
-                                                    size_t blocks, int joint,
-                                                    const float correction[4]);
+/// One joint's local-space rotation correction, as an IK job produces it.
+typedef struct ZozzJointCorrection {
+  /// Rotation to left-multiply onto the joint's current local rotation
+  /// (xyzw, w LAST) — an IK job's *_joint_correction, unchanged.
+  ZozzSimdFloat4 rotation;
+  /// Joint index within the pose.
+  int32_t joint;
+} ZozzJointCorrection;
+
+/// Left-multiplies each correction onto its joint's current local rotation in
+/// `pose`, in place: pose[joint].rotation = rotation * pose[joint].rotation.
+/// Translation and scale, and every joint not named, are left untouched. A
+/// whole IK pass is one call, and corrections landing in the same SoA block
+/// share one transpose. Every index is checked BEFORE anything is written, so
+/// on ZOZZ_RESULT_INVALID_ARGUMENT the pose is exactly as it was.
+ZOZZ_API ZozzResult zozzSoaPoseApplyLocalCorrections(
+    ZozzSoaTransform* pose, size_t blocks,
+    const ZozzJointCorrection* corrections, size_t count);
 
 #ifdef __cplusplus
 }  // extern "C"
