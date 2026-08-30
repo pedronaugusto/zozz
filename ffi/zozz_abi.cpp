@@ -307,4 +307,28 @@ void zozzAbiLayout(ZozzAbiLayout* out) {
   out->result_count = kResultCount;
 }
 
+void zozzBuildFeatures(ZozzBuildFeatures* out) {
+  if (out == nullptr) return;
+  out->features_size = static_cast<uint32_t>(sizeof(ZozzBuildFeatures));
+
+  // The macros build.zig defines alongside the sources each option adds. Read
+  // here, in the compiled library, so what is reported is what was built —
+  // a build script's own idea of the flags cannot be substituted for it.
+#ifdef ZOZZ_WITH_OPTIONS
+  out->options = true;
+#else
+  out->options = false;
+#endif
+#ifdef ZOZZ_WITH_GLTF
+  out->gltf = true;
+#else
+  out->gltf = false;
+#endif
+#ifdef NDEBUG
+  out->asserts = false;
+#else
+  out->asserts = true;
+#endif
+}
+
 }  // extern "C"
