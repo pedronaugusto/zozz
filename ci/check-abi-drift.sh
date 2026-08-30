@@ -76,19 +76,27 @@ expect() {
   # edit a line that was never wrong. newline= on both ends keeps the
   # mutated file byte-faithful; one file mutated here is a shell script,
   # which rewritten line endings alone would break.
+  #
+  # The three inputs travel in the ENVIRONMENT, not in argv, so that python3
+  # is invoked with no arguments at all. Given `python3 - <path>`, the Windows
+  # `py` launcher reads the shebang of the PATH argument rather than treating
+  # it as the program's argv[1]: mutating a file whose first line is
+  # `#!/usr/bin/env bash` made the launcher try to run that file as bash, and
+  # the helper produced nothing. It reported as TOOL FAILED for exactly one of
+  # the mutations below, which is the one that mutates tools/coverage.sh.
   local applied
-  applied=$(python3 - "$file" "$from" "$to" <<'PY'
-import pathlib, sys
-path, before, after = sys.argv[1], sys.argv[2], sys.argv[3]
-p = pathlib.Path(path)
+  applied=$(MUT_FILE="$file" MUT_FROM="$from" MUT_TO="$to" python3 <<'PY'
+import os, pathlib
+p = pathlib.Path(os.environ["MUT_FILE"])
+before, after = os.environ["MUT_FROM"], os.environ["MUT_TO"]
 # open() rather than Path.read_text/write_text: the newline keyword
 # reached those only in Python 3.13, and hosted runners are older.
-with open(p, newline="") as f:
+with open(p, encoding="utf-8", newline="") as f:
     s = f.read()
 if before not in s:
     print("ANCHOR_MISSING")
-    sys.exit(0)
-with open(p, "w", newline="") as f:
+    raise SystemExit(0)
+with open(p, "w", encoding="utf-8", newline="") as f:
     f.write(s.replace(before, after, 1))
 print("APPLIED")
 PY
