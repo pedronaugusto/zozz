@@ -58,6 +58,7 @@ pub const no_parent = skeleton_mod.no_parent;
 pub const max_joints = skeleton_mod.max_joints;
 
 pub const Animation = animation_mod.Animation;
+pub const TimeMode = animation_mod.TimeMode;
 
 /// Operations over a caller-owned SoA pose: `soaBlocks` to size the array,
 /// identity, the AoS conversions, and the per-joint weight packer. The pose

@@ -65,7 +65,7 @@ pub fn main() !void {
     try (zozz.SamplingJob{
         .animation = clip,
         .context = context,
-        .ratio = clip.ratioAt(1.0),
+        .ratio = clip.ratioAt(1.0, .clamp),
         .out = &pose,
     }).run();
 
