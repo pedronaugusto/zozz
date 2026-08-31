@@ -84,7 +84,10 @@ emit cxx_source_lines "$(cat ffi/*.cpp ffi/*.h | wc -l | tr -d ' ')" 'C++ source
 # count cannot overstate the proof.
 emit abi_drift_mutations "$(grep -cE '^(try|expect) ' ci/check-abi-drift.sh)" \
   'deliberate drifts `ci/check-abi-drift.sh` must refuse'
-emit ci_checks "$(grep -cE "^ *run ['\"]" ci/run.sh)" 'steps `ci/run.sh` runs'
+# From ci/run.sh itself, which names every step it would run and runs none.
+# Counting `run` lines instead was wrong by ten: the cross-compilation loop
+# is one line and seven steps, and `test $mode` is one line and three.
+emit ci_checks "$(bash ci/run.sh --list | grep -c .)" 'steps `ci/run.sh` runs'
 emit ci_cross_targets \
   "$(sed -n '/^for target in/,/^do$/p' ci/run.sh | grep -cE '^ +[a-z0-9_]+-')" \
   'further targets `ci/run.sh` cross-compiles'

@@ -33,6 +33,13 @@ ZIG="${ZIG:-zig}"
 QUICK=0
 [ "${1:-}" = "--quick" ] && QUICK=1
 
+# --list names every step this script would run, one per line, and runs none of
+# them. ci/measurements.sh counts those lines, so README's step count is the
+# number of steps rather than the number of `run` lines: a step inside a loop
+# is one line and several steps, and the two had already diverged.
+LIST=0
+[ "${1:-}" = "--list" ] && LIST=1
+
 if [ -t 1 ]; then
   RED=$'\033[31m'; GREEN=$'\033[32m'; DIM=$'\033[2m'; BOLD=$'\033[1m'; OFF=$'\033[0m'
 else
@@ -46,6 +53,7 @@ FAILED_NAMES=()
 # run <name> <command...>
 run() {
   local name="$1"; shift
+  if [ $LIST -eq 1 ]; then printf '%s\n' "$name"; return 0; fi
   printf '  %-46s' "$name"
   local start output status
   start=$(date +%s)
@@ -64,9 +72,10 @@ run() {
   fi
 }
 
-section() { printf '\n%s%s%s\n' "$BOLD" "$1" "$OFF"; }
+section() { [ $LIST -eq 1 ] || printf '\n%s%s%s\n' "$BOLD" "$1" "$OFF"; }
 
-printf '%szozz local CI%s  %s%s%s\n' "$BOLD" "$OFF" "$DIM" "$($ZIG version)" "$OFF"
+[ $LIST -eq 1 ] ||
+  printf '%szozz local CI%s  %s%s%s\n' "$BOLD" "$OFF" "$DIM" "$($ZIG version)" "$OFF"
 
 #-----------------------------------------------------------------------------
 section 'Hygiene'
@@ -123,7 +132,7 @@ ASSET_ARGS=()
 if [ -n "${ZOZZ_SKELETON:-}" ] && [ -n "${ZOZZ_ANIMATION:-}" ]; then
   ASSET_ARGS=(-Dskeleton_path="$ZOZZ_SKELETON" -Danimation_path="$ZOZZ_ANIMATION")
   printf '  %s(on-disk assets: %s)%s\n' "$DIM" "$(basename "$ZOZZ_SKELETON")" "$OFF"
-else
+elif [ $LIST -eq 0 ]; then
   printf '  %s(on-disk asset test will skip: set ZOZZ_SKELETON and ZOZZ_ANIMATION)%s\n' "$DIM" "$OFF"
 fi
 
@@ -152,11 +161,12 @@ if [ $QUICK -eq 0 ]; then
   # comptime-known, so a branch the current combination does not take is never
   # analysed: turning both on leaves the one-on-one-off arms as uncompiled as
   # leaving both off did. All three, then; the fourth is every other run here.
-  for combo in true:false false:true true:true; do
-    opt=${combo%%:*}; gltf=${combo##*:}
-    run "test -Doptions=$opt -Dgltf=$gltf" \
-      $ZIG build test -Doptions="$opt" -Dgltf="$gltf" -Dsanitize_c=false
-  done
+  run 'test -Doptions=true -Dgltf=false' \
+    $ZIG build test -Doptions=true -Dgltf=false -Dsanitize_c=false
+  run 'test -Doptions=false -Dgltf=true' \
+    $ZIG build test -Doptions=false -Dgltf=true -Dsanitize_c=false
+  run 'test -Doptions=true -Dgltf=true' \
+    $ZIG build test -Doptions=true -Dgltf=true -Dsanitize_c=false
 
   # Consuming zozz as a dependency is a different code path from building it —
   # artifact registration and installed-header spelling are invisible to the
@@ -208,6 +218,7 @@ run 'ReleaseFast + asserts on' $ZIG build -Doptimize=ReleaseFast -Denable_assert
 fi
 
 #-----------------------------------------------------------------------------
+[ $LIST -eq 0 ] || exit 0
 printf '\n'
 if [ $FAILED -eq 0 ]; then
   printf '%s%d passed, 0 failed%s\n' "$GREEN" "$PASSED" "$OFF"

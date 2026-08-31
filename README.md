@@ -373,7 +373,7 @@ NaN ratio that is refused.
 | **14565** | Zig source lines (`src/`) |
 | **9657** | C++ source lines (`ffi/`) |
 | **18** | deliberate drifts `ci/check-abi-drift.sh` must refuse |
-| **19** | steps `ci/run.sh` runs |
+| **29** | steps `ci/run.sh` runs |
 | **7** | further targets `ci/run.sh` cross-compiles |
 <!-- END GENERATED -->
 
@@ -394,9 +394,12 @@ without containing a number at all.
 ### Continuous integration
 
 CI runs the whole suite on **Linux, macOS and Windows**, in every optimize
-mode with the sanitizer both on and off, plus the standalone C test and the
-downstream-consumer build — and cross-compiles the further targets listed in
-`ci/run.sh`, runs the ABI drift mutation test, and verifies the vendored tree.
+mode — Debug twice, once with the C sanitizer on and once without it, because
+the malformed-input test needs it off — plus the standalone C test, both
+optional build halves in each of the three combinations that are not the
+default, the downstream-consumer build, and on Windows the MSVC ABI as well as
+the gnu one. It also cross-compiles the further targets listed in `ci/run.sh`,
+runs the ABI drift mutation test, and verifies the vendored tree.
 See [`.github/workflows/ci.yml`](.github/workflows/ci.yml).
 
 The same matrix runs locally, so a failure is reproducible on your machine
