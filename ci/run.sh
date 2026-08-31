@@ -14,6 +14,13 @@
 # Usage:
 #   ci/run.sh                 # full matrix
 #   ci/run.sh --quick         # native Debug only, for the inner loop
+#   ci/run.sh --list          # name every step and run none of them
+#   ci/run.sh --drift-target=<triple>
+#                             # full matrix, and prove the ABI guard fires on
+#                             # that ABI too. Out of the default because it
+#                             # rebuilds 18 times and this file is a pre-push
+#                             # hook; the hosted abi-mutations-msvc job runs it
+#                             # on every push, and a release should run it here.
 #
 # Optional, enables the on-disk asset test:
 #   ZOZZ_SKELETON=/path/to/skeleton.ozz ZOZZ_ANIMATION=/path/to/clip.ozz ci/run.sh
@@ -31,14 +38,23 @@ cd "$(dirname "$0")/.."
 ZIG="${ZIG:-zig}"
 
 QUICK=0
-[ "${1:-}" = "--quick" ] && QUICK=1
+DRIFT_TARGET=
 
 # --list names every step this script would run, one per line, and runs none of
 # them. ci/measurements.sh counts those lines, so README's step count is the
 # number of steps rather than the number of `run` lines: a step inside a loop
 # is one line and several steps, and the two had already diverged.
 LIST=0
-[ "${1:-}" = "--list" ] && LIST=1
+
+for arg in "$@"; do
+  case "$arg" in
+    --quick) QUICK=1 ;;
+    --list) LIST=1 ;;
+    --drift-target=*) DRIFT_TARGET=${arg#*=} ;;
+    *) printf 'ci/run.sh: unknown argument %s
+' "$arg" >&2; exit 2 ;;
+  esac
+done
 
 if [ -t 1 ]; then
   RED=$'\033[31m'; GREEN=$'\033[32m'; DIM=$'\033[2m'; BOLD=$'\033[1m'; OFF=$'\033[0m'
@@ -182,6 +198,14 @@ if [ $QUICK -eq 0 ]; then
   # for why a check that guards everything else needs one. It rebuilds once per
   # mutation, which is why it is out of the --quick loop.
   run 'abi drift (mutation proof)' ci/check-abi-drift.sh
+
+  # The same proof under a second ABI, opt-in. src/abi_check.zig compares
+  # src/c.zig against @cImport of the header as preprocessed FOR A TARGET, so
+  # the run above proves the guard fires on this host's ABI and says nothing
+  # about another: a C enum is `int` under MSVC and `unsigned int` under the
+  # Itanium ABI, and ZozzResult crosses in signatures and in structs.
+  [ -z "$DRIFT_TARGET" ] ||
+    run "abi drift ($DRIFT_TARGET)" ci/check-abi-drift.sh -Dtarget="$DRIFT_TARGET"
 fi
 
 #-----------------------------------------------------------------------------
