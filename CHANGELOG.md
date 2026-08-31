@@ -79,6 +79,13 @@ The `.ozz` archive format is unchanged, and the vendored ozz-animation is still
   there — measured pass-through at `-O0`, `-O2` and `-O3`, zero at `-Os` — so
   the same ozz answered differently in ReleaseSmall. Lane 0 is compared;
   zozz's own pass-through is pinned in `src/math_test.zig`.
+- The ABI drift mutation proof ran on one ABI. `src/abi_check.zig` compares
+  `src/c.zig` against `@cImport` of the header *as preprocessed for a target*,
+  so firing on the Itanium ABI proved nothing about MSVC's — where a C enum is
+  `int` rather than `unsigned int`, which `ZozzResult` and
+  `ZozzTrackInterpolation` cross in signatures and in struct fields.
+  `ci/check-abi-drift.sh` now takes `-Dtarget=<triple>`, CI runs it on both,
+  and all eighteen mutations are refused on each.
 - `ZOZZ_ALIGN16` is applied to types rather than members, which made the ABI
   oracle disagree with every non-MSVC object file over a difference no object
   file had. `ci/check-alignment.sh` holds it.

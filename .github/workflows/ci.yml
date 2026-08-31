@@ -179,6 +179,24 @@ jobs:
           version: ${{ env.ZIG_VERSION }}
       - run: ci/check-abi-drift.sh
 
+  # The same proof under the other ABI. src/abi_check.zig compares src/c.zig
+  # against `@cImport` of the header as preprocessed FOR A TARGET, so a guard
+  # proved to fire on the Itanium ABI is not proved to fire on MSVC's — where a
+  # C enum is `int` rather than `unsigned int`, and ZozzResult and
+  # ZozzTrackInterpolation cross in signatures and in struct fields. The job
+  # above proves the guard fires; this one proves it fires there. Windows-hosted
+  # because building for the MSVC ABI needs Microsoft's own headers.
+  abi-drift-msvc:
+    name: ABI drift (MSVC ABI)
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: mlugg/setup-zig@v2
+        with:
+          version: ${{ env.ZIG_VERSION }}
+      - run: ci/check-abi-drift.sh -Dtarget=x86_64-windows-msvc
+        shell: bash
+
   # Build options that change what the C++ compiles to, so a regression in one
   # configuration cannot hide behind the defaults.
   configurations:

@@ -399,8 +399,17 @@ the malformed-input test needs it off — plus the standalone C test, both
 optional build halves in each of the three combinations that are not the
 default, the downstream-consumer build, and on Windows the MSVC ABI as well as
 the gnu one. It also cross-compiles the further targets listed in `ci/run.sh`,
-runs the ABI drift mutation test, and verifies the vendored tree.
-See [`.github/workflows/ci.yml`](.github/workflows/ci.yml).
+verifies the vendored tree against upstream, and runs the ABI drift mutation
+test twice — once on the Itanium ABI and once on MSVC's, because
+`src/abi_check.zig` compares `src/c.zig` against the header *as preprocessed
+for a target*, and a C enum is `int` under one and `unsigned int` under the
+other. See [`.github/workflows/ci.yml`](.github/workflows/ci.yml).
+
+Locally, `ci/run.sh` runs the drift proof on this host's ABI only; the second
+arm is `ci/run.sh --drift-target=<triple>`, or `ci/check-abi-drift.sh
+-Dtarget=<triple>` on its own. It is opt-in because it rebuilds eighteen times
+and `ci/run.sh` is installable as a pre-push hook — CI runs it on every push,
+and a release should run both arms here.
 
 The same matrix runs locally, so a failure is reproducible on your machine
 before it is a red mark on a pull request:

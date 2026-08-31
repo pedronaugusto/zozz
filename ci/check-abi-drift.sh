@@ -24,7 +24,16 @@
 # The full `ci/run.sh` does run it, as does CI, and it is worth running by hand
 # whenever `abi_check.zig` is edited.
 #
-# Usage: ci/check-abi-drift.sh
+# Usage:
+#   ci/check-abi-drift.sh                            # the host's default ABI
+#   ci/check-abi-drift.sh -Dtarget=<triple>          # that ABI instead
+#
+# Any argument given is appended to every `zig build test` below. The one that
+# matters is `-Dtarget`. src/abi_check.zig compares src/c.zig against @cImport
+# of the header AS PREPROCESSED FOR A TARGET, so a guard proved to fire on one
+# ABI is not proved to fire on another: a C enum is `int` under MSVC and
+# `unsigned int` under the Itanium ABI, and ZozzResult and
+# ZozzTrackInterpolation cross this boundary in signatures and in structs.
 
 set -uo pipefail
 SELF=$(cd "$(dirname "$0")" && pwd)/$(basename "$0")
@@ -37,7 +46,13 @@ pass=0
 # test build; the coverage guard is a script, and rebuilding the world to ask
 # it a question it answers in a fraction of a second would be silly.
 ZIG=${ZIG:-zig}
-BUILD="$ZIG build test"
+
+# The arm every build in this run is proved on, carried in one place so the
+# clean-tree precheck, each mutation and the final summary cannot disagree
+# about which ABI the count belongs to.
+ARM="$*"
+ZIG_TEST="$ZIG build test${ARM:+ $ARM}"
+BUILD="$ZIG_TEST"
 fail=0
 backups=()
 
@@ -168,12 +183,12 @@ PY
 }
 
 # A clean tree first: a mutation is only evidence if the unmutated build passes.
-if ! $ZIG build test >/dev/null 2>&1; then
+if ! eval "$ZIG_TEST" >/dev/null 2>&1; then
   echo "the unmutated build already fails; fix that before reading this script's output"
   exit 1
 fi
 
-echo "drift the ABI cross-check must refuse:"
+echo "drift the ABI cross-check must refuse${ARM:+, on $ARM}:"
 
 # Two same-sized fields exchanged. `translation` and `scale` are both
 # float[3], so the offset SEQUENCE (0, 12, 28) is unchanged and every
@@ -330,9 +345,9 @@ expect 'stale line' \
 
 fi
 
-BUILD="$ZIG build test"
+BUILD="$ZIG_TEST"
 
-printf '\ncaught: %d   missed: %d\n' "$pass" "$fail"
+printf '\ncaught: %d   missed: %d   on %s\n' "$pass" "$fail" "${ARM:-the host default ABI}"
 
 # ci/measurements.sh publishes how many mutations this file holds by counting
 # its `try` and `expect` lines. A declaration inside a branch that did not run
