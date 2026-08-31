@@ -20,9 +20,9 @@
 # what is asserted is that the drift message is among the errors, not that it
 # is the only one.
 #
-# Not part of the default `ci/run.sh` — it rebuilds once per mutation. It runs
-# under the full matrix, and should be run by hand whenever `abi_check.zig` is
-# edited.
+# Out of `ci/run.sh --quick` — it rebuilds once per mutation and takes minutes.
+# The full `ci/run.sh` does run it, as does CI, and it is worth running by hand
+# whenever `abi_check.zig` is edited.
 #
 # Usage: ci/check-abi-drift.sh
 
@@ -48,8 +48,28 @@ restore() {
   done
   backups=()
 }
-# A killed run must not leave a mutated source behind.
-trap 'restore; exit 130' INT TERM
+# A killed run must not leave a mutated source behind. EXIT covers the paths a
+# signal handler does not -- an error exit, the shell dying with its parent --
+# and is what makes the sentence above true; INT/TERM keep the exit status.
+# SIGKILL cannot be trapped at all, so the sweep below is the other half.
+trap restore EXIT
+trap 'restore; exit 130' INT TERM HUP QUIT
+
+# A previous run that was killed outright left its .bak beside the file it had
+# mutated, and this run would then measure a mutated tree and save the mutation
+# as its own backup. Recover first, and say so: a silent recovery here is a
+# mutated source that looks committed.
+stale=$(find . -name '*.bak' -not -path './.zig-cache/*' -not -path './.git/*')
+if [ -n "$stale" ]; then
+  printf '%srecovering from a killed run:%s
+' "${BOLD:-}" "${OFF:-}" >&2
+  while read -r bak; do
+    [ -n "$bak" ] || continue
+    printf '  restoring %s
+' "${bak%.bak}" >&2
+    mv "$bak" "${bak%.bak}"
+  done <<< "$stale"
+fi
 
 # try <description> <file> <from> <to>
 #
