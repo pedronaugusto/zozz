@@ -69,8 +69,16 @@ The `.ozz` archive format is unchanged, and the vendored ozz-animation is still
 - **`-Doptions` and `-Dgltf` had rotted**: no gate ever compiled either, so
   neither built. `src/options_test.zig` did not compile on Windows at all.
   Both are now built and RUN by `ci/run.sh` and by CI on Linux, macOS, Windows
-  and the MSVC ABI; six behavioural tests that existed but had never executed
-  now do.
+  and the MSVC ABI, in each of the three combinations that are not the default
+  — both flags are comptime-known, so turning both on at once leaves the
+  one-on-one-off arms as uncompiled as leaving both off did, and one of them
+  was in fact uncompilable. Six behavioural tests that existed but had never
+  executed now do.
+- The differential maths test compared `RCPESTX` and `RSQRTESTX` on all four
+  lanes. ozz's SSE backend leaves the upper three to whatever the compiler put
+  there — measured pass-through at `-O0`, `-O2` and `-O3`, zero at `-Os` — so
+  the same ozz answered differently in ReleaseSmall. Lane 0 is compared;
+  zozz's own pass-through is pinned in `src/math_test.zig`.
 - `ZOZZ_ALIGN16` is applied to types rather than members, which made the ABI
   oracle disagree with every non-MSVC object file over a difference no object
   file had. `ci/check-alignment.sh` holds it.
