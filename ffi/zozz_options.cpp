@@ -395,6 +395,18 @@ ZozzResult zozzBoolOptionValue(const ZozzOption*, bool*) {
 ZozzResult zozzStringOptionValue(const ZozzOption*, const char**) {
   return ZOZZ_RESULT_UNSUPPORTED;
 }
+ZozzResult zozzIntOptionDefault(const ZozzOption*, int32_t*) {
+  return ZOZZ_RESULT_UNSUPPORTED;
+}
+ZozzResult zozzFloatOptionDefault(const ZozzOption*, float*) {
+  return ZOZZ_RESULT_UNSUPPORTED;
+}
+ZozzResult zozzBoolOptionDefault(const ZozzOption*, bool*) {
+  return ZOZZ_RESULT_UNSUPPORTED;
+}
+ZozzResult zozzStringOptionDefault(const ZozzOption*, const char**) {
+  return ZOZZ_RESULT_UNSUPPORTED;
+}
 const char* zozzOptionName(const ZozzOption*) { return ""; }
 const char* zozzOptionHelp(const ZozzOption*) { return ""; }
 bool zozzOptionRequired(const ZozzOption*) { return false; }
