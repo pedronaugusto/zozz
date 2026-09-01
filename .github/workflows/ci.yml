@@ -76,6 +76,13 @@ jobs:
           zig build test -Doptions=false -Dgltf=true  -Dsanitize_c=false
           zig build test -Doptions=true  -Dgltf=true  -Dsanitize_c=false
 
+      # ozz ships an SSE backend and a scalar reference one, and no NEON, so
+      # an x86-64 runner never compiles the kernels the macOS runner does.
+      # This forces them on every host. Two upstream undefined-behaviour sites
+      # live in that backend alone; see build.zig's -Dsimd_ref.
+      - name: Test — ozz scalar reference backend
+        run: zig build test -Dsimd_ref=true -Doptimize=Debug -Dsanitize_c=true
+
       # Zig's default ABI for Windows is gnu, so every step above exercises
       # that one and the MSVC branches in build.zig would never be built at
       # all. On a Windows runner the MSVC ABI is native, so the suite can run

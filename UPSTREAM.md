@@ -164,6 +164,25 @@ normalisation would be a local patch to upstream behaviour. Recorded because
 it looks exactly like a binding defect from the outside, and because it is
 BACKEND-DEPENDENT.
 
+**The reference backend's estimates and shifts are undefined behaviour by the
+letter of C++.** Two sites, both in
+`include/ozz/base/maths/internal/simd_math_ref-inl.h`, both deliberate and both
+invisible on x86-64 because the SSE backend lowers the same calls to
+instructions with no such rule. `OZZ_RCP_EST` (line `57`) seeds a
+Newton-Raphson reciprocal with `(0x3f800000 * 2) - uf.i` over the input float's
+bit pattern; a negative input leaves `uf.i` negative and the subtraction passes
+`INT_MAX`. `ShiftL` (line `1491`) left-shifts each `int` lane, and a lane
+holding a comparison mask is negative. The bit manipulation IS the routine in
+both, so there is nothing to fix at the site, and the tree stays pristine.
+Handled the way the entry above is: the vendored TUs, and `tests/mathref.cpp`
+which is a dispatcher into ozz's inline maths and adds no arithmetic of its
+own, are compiled with `-fno-sanitize=signed-integer-overflow` and
+`-fno-sanitize=shift-base` -- those two check classes, ozz's arithmetic only.
+zozz's own ffi and `tests/fixture.cpp` keep the full sanitizer. `RcpEst` and
+`RSqrtEst` are called from `blending_job.cc`, `sampling_job.cc` and both IK
+jobs, so this is the runtime and not only the test harness. Reproducible on any
+host with `-Dsimd_ref=true`.
+
 **ozz ships two SIMD backends: `ref` (scalar) and `sse`. There is no NEON
 one.** `include/ozz/base/maths/internal/` contains `simd_math_ref-inl.h` and
 `simd_math_sse-inl.h` only. An x86-64 build runs the SSE kernels; an
