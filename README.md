@@ -365,15 +365,15 @@ NaN ratio that is refused.
 | **21** | installed public headers |
 | **97** | ozz public names with a binding |
 | **418** | ozz public names in the bound areas |
-| **196** | Zig tests `zig build test` executes |
+| **197** | Zig tests `zig build test` executes |
 | **10** | tests it skips, each needing a build option or an on-disk asset |
 | **200** | assertions in the standalone C smoke test |
 | **41** | vendored ozz translation units `build.zig` compiles |
 | **20** | zozz C++ translation units (`ffi/*.cpp`) |
-| **14565** | Zig source lines (`src/`) |
-| **9657** | C++ source lines (`ffi/`) |
+| **14629** | Zig source lines (`src/`) |
+| **9669** | C++ source lines (`ffi/`) |
 | **18** | deliberate drifts `ci/check-abi-drift.sh` must refuse |
-| **29** | steps `ci/run.sh` runs |
+| **30** | steps `ci/run.sh` runs |
 | **7** | further targets `ci/run.sh` cross-compiles |
 <!-- END GENERATED -->
 

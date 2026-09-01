@@ -63,7 +63,21 @@ emit ozz_names_total "${coverage_line##* }" 'ozz public names in the bound areas
 
 # What the build reports, not what a grep for `test` finds: a test behind a
 # build option would be counted by the grep and never run.
-test_line=$(${ZIG} build test --summary all 2>&1 |
+#
+# The output is captured before it is parsed, rather than piped straight
+# into sed. Piped, a failing build sends its own diagnosis INTO the pipe,
+# `set -e` ends this script with nothing on any stream, and
+# ci/check-docs.sh reports "generator failed" followed by an empty stderr --
+# a build error rendered as a documentation error, naming nothing to act
+# on. That is how one Linux link failure reached CI as a failing docs job.
+if ! build_log=$(${ZIG} build test --summary all 2>&1); then
+  printf '%s\n' "$build_log" >&2
+  printf '\nci/measurements.sh: `%s build test` failed, output above.\n' "$ZIG" >&2
+  printf 'The test count is what the build reports, so no number here can\n' >&2
+  printf 'be recomputed until it passes.\n' >&2
+  exit 1
+fi
+test_line=$(printf '%s\n' "$build_log" |
   sed -n 's/.*run test zozz-tests \([0-9][0-9]*\) pass, \([0-9][0-9]*\) skip .*/\1 \2/p' | head -1)
 emit zig_tests_run "${test_line%% *}" 'Zig tests `zig build test` executes'
 emit zig_tests_skipped "${test_line##* }" \
