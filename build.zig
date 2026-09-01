@@ -230,6 +230,19 @@ pub fn build(b: *std.Build) void {
             "gltf",
             "Build the concrete glTF importer backend (zozz_gltf.h)",
         ) orelse false,
+        // ozz ships two SIMD backends and no NEON one, so an x86-64 host
+        // compiles the SSE kernels and never the scalar reference ones an
+        // Apple-Silicon or other non-x86 build runs. This forces the reference
+        // backend on any host, which is the only way to exercise that half
+        // without owning the hardware: two upstream undefined-behaviour sites
+        // live there and nowhere else, and both reached CI before they reached
+        // a local run. UPSTREAM.md § "Known upstream behaviour" has them.
+        .simd_ref = b.option(
+            bool,
+            "simd_ref",
+            "Compile ozz's scalar reference SIMD backend instead of this " ++
+                "target's (what a non-x86 host gets)",
+        ) orelse false,
     };
 
     // Every ABI- or behaviour-affecting option is mirrored into a Zig module
@@ -285,23 +298,60 @@ pub fn build(b: *std.Build) void {
     // checking) and no blanket -fno-sanitize=undefined (UBSan stays on in
     // Debug, controlled by the `sanitize_c` option, so that real undefined
     // behaviour surfaces instead of being suppressed).
-    const cxx_flags: []const []const u8 = if (target.result.abi == .msvc)
+    const base_cxx_flags: []const []const u8 = if (target.result.abi == .msvc)
         &.{"-std=c++17"}
     else
         &.{ "-std=c++17", "-fno-exceptions", "-fno-rtti" };
 
-    // The vendored TUs alone additionally drop UBSan's nonnull-attribute
-    // check. Upstream serialisation memcpy's a null source when an array is
-    // empty (`MemoryStream::Write`, src/base/io/stream.cc:160) — and an empty
-    // array is the NORMAL case: every short animation has empty
-    // `iframe_entries`, so the trap fires on well-formed input (CI run
-    // 32667186311, ubuntu Debug). The tree stays pristine
-    // (ci/verify-vendor.sh), so the site cannot be patched; the suppression
-    // is one check class, vendored code only — zozz's own ffi keeps the full
-    // sanitizer. UPSTREAM.md § "Known upstream behaviour" has the entry.
+    // -Dsimd_ref belongs to EVERY translation unit or none: ozz's SimdFloat4
+    // is a struct in the reference backend and __m128 in the SSE one, so a
+    // mixed build would hand one definition's objects to the other's.
+    const cxx_flags: []const []const u8 = if (options.simd_ref)
+        std.mem.concat(b.allocator, []const u8, &.{
+            base_cxx_flags,
+            &.{"-DOZZ_BUILD_SIMD_REF"},
+        }) catch @panic("OOM")
+    else
+        base_cxx_flags;
+
+    // Flags for a translation unit whose arithmetic is ozz's rather than
+    // zozz's: the vendored sources, and tests/mathref.cpp, which dispatches
+    // into ozz's inline maths and adds none of its own. Two UBSan check
+    // classes come off, each answering one upstream site that no local change
+    // can reach — the tree stays pristine (ci/verify-vendor.sh). Both are one
+    // check class rather than the sanitizer, and zozz's own ffi keeps all of
+    // it. UPSTREAM.md § "Known upstream behaviour" has an entry for each.
+    //
+    //   nonnull-attribute: upstream serialisation memcpy's a null source when
+    //   an array is empty (`MemoryStream::Write`, src/base/io/stream.cc:160),
+    //   and an empty array is the NORMAL case — every short animation has
+    //   empty `iframe_entries`, so the trap fires on well-formed input (CI
+    //   run 32667186311, ubuntu Debug).
+    //
+    //   signed-integer-overflow: `OZZ_RCP_EST`
+    //   (include/ozz/base/maths/internal/simd_math_ref-inl.h:57) seeds a
+    //   Newton-Raphson reciprocal with `(0x3f800000 * 2) - uf.i` over the
+    //   input float's bit pattern. A negative input leaves `uf.i` negative and
+    //   the subtraction passes INT_MAX — the bit trick IS the routine, so
+    //   there is nothing to fix at the site. It reaches the runtime as well as
+    //   the harness (blending_job.cc, sampling_job.cc and both IK jobs call
+    //   `RcpEst`), but only where ozz has no SSE backend, so the first
+    //   Apple-Silicon Debug run was the first to trap.
+    //
+    //   shift-base: `ShiftL`
+    //   (include/ozz/base/maths/internal/simd_math_ref-inl.h:1491) left-shifts
+    //   each `int` lane, and a lane holding a comparison mask is negative. The
+    //   SSE backend lowers the same call to `_mm_slli_epi32`, which has no
+    //   such rule, so this is the reference backend's alone. Found by
+    //   -Dsimd_ref, and it is what the Apple-Silicon run would have trapped on
+    //   next.
     const ozz_cxx_flags = std.mem.concat(b.allocator, []const u8, &.{
         cxx_flags,
-        &.{"-fno-sanitize=nonnull-attribute"},
+        &.{
+            "-fno-sanitize=nonnull-attribute",
+            "-fno-sanitize=signed-integer-overflow",
+            "-fno-sanitize=shift-base",
+        },
     }) catch @panic("OOM");
 
     lib.root_module.addCSourceFiles(.{
@@ -419,10 +469,14 @@ pub fn build(b: *std.Build) void {
         .flags = cxx_flags,
     });
     // ozz's own maths, reachable from a test so the hand port in src/math.zig
-    // has something other than itself to be compared against.
+    // has something other than itself to be compared against. Compiled with
+    // the vendored flags, not zozz's: every arithmetic instruction it executes
+    // comes from an ozz inline header, so it inherits ozz's sanitizer
+    // exemptions along with its arithmetic. tests/fixture.cpp above is zozz's
+    // own code and keeps the full sanitizer.
     fixture.root_module.addCSourceFile(.{
         .file = b.path("tests/mathref.cpp"),
-        .flags = cxx_flags,
+        .flags = ozz_cxx_flags,
     });
     fixture.root_module.sanitize_c = if (options.sanitize_c) .full else .off;
     fixture.root_module.linkLibrary(lib);

@@ -184,6 +184,13 @@ if [ $QUICK -eq 0 ]; then
   run 'test -Doptions=true -Dgltf=true' \
     $ZIG build test -Doptions=true -Dgltf=true -Dsanitize_c=false
 
+  # ozz ships an SSE backend and a scalar reference one, and no NEON, so an
+  # x86-64 host never compiles the kernels an Apple-Silicon build runs. This
+  # forces them here. Two upstream undefined-behaviour sites live in that
+  # backend alone, and both reached a hosted runner before a local one.
+  run 'test -Dsimd_ref (ozz scalar backend)' \
+    $ZIG build test -Dsimd_ref=true -Doptimize=Debug -Dsanitize_c=true
+
   # Consuming zozz as a dependency is a different code path from building it —
   # artifact registration and installed-header spelling are invisible to the
   # in-repo suite. See tests/consumer/build.zig.
