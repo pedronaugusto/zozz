@@ -440,6 +440,53 @@ fn sweepTheirs() usize {
 }
 
 //=============================================================================
+// Link coverage: every extern analysed above also has a definition
+//
+// `sweepOurs` proves an extern matches the header, not that the library
+// defines it: an analysed-but-unreferenced extern leaves only a debug-info
+// mention, and what a linker does with that is the object format's business —
+// ELF refuses it, COFF and Mach-O drop it. Four entry points had no definition
+// at all in the default configuration and only the Linux link said so
+// (`ffi/zozz_options.cpp`, the `!ZOZZ_WITH_OPTIONS` branch).
+//
+// Taking every address into a table with external linkage makes each one a
+// relocation, which no object format may drop and no optimiser may fold, so
+// the link is the check — on every target and in every configuration.
+//=============================================================================
+
+/// True for the extern declarations `sweepOurs` compares against the header,
+/// and false for the Zig helpers it skips.
+fn isBoundaryExtern(comptime name: []const u8) bool {
+    const Decl = @TypeOf(@field(c, name));
+    if (@typeInfo(Decl) != .@"fn") return false;
+    return @typeInfo(Decl).@"fn".calling_convention != .auto;
+}
+
+const entry_point_count = blk: {
+    @setEvalBranchQuota(1_000_000);
+    var n: usize = 0;
+    for (@typeInfo(c).@"struct".decls) |d| {
+        if (isBoundaryExtern(d.name)) n += 1;
+    }
+    break :blk n;
+};
+
+/// Exported rather than local: a symbol with external linkage cannot be
+/// discarded, so its initialiser's relocations reach the linker whatever the
+/// optimiser concludes about the reads below.
+export const zozz_abi_entry_points: [entry_point_count]*const anyopaque = blk: {
+    @setEvalBranchQuota(1_000_000);
+    var table: [entry_point_count]*const anyopaque = undefined;
+    var i: usize = 0;
+    for (@typeInfo(c).@"struct".decls) |d| {
+        if (!isBoundaryExtern(d.name)) continue;
+        table[i] = @ptrCast(&@field(c, d.name));
+        i += 1;
+    }
+    break :blk table;
+};
+
+//=============================================================================
 // The test
 //
 // The comparisons above are compile errors, so reaching this body at all means
@@ -460,4 +507,16 @@ test "ABI: src/c.zig agrees with ffi/zozz.h" {
     try std.testing.expect(ours.fields >= 20);
     try std.testing.expect(ours.enumerators >= 10);
     try std.testing.expectEqual(ours.functions, theirs);
+}
+
+test "ABI: every extern in src/c.zig has a definition in this build" {
+    @setEvalBranchQuota(1_000_000);
+
+    // Linking is the check; this asserts the table it lives in is neither
+    // empty nor smaller than the sweep that named its entries.
+    const swept = comptime sweepOurs();
+    try std.testing.expectEqual(swept.functions, zozz_abi_entry_points.len);
+    for (zozz_abi_entry_points) |address| {
+        try std.testing.expect(@intFromPtr(address) != 0);
+    }
 }
