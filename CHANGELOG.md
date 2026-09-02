@@ -8,7 +8,7 @@ diff.
 Versions follow [semantic versioning](https://semver.org). Before 1.0 the minor
 is the breaking one.
 
-## 0.4.0 — unreleased
+## 0.4.0
 
 The `.ozz` archive format is unchanged, and the vendored ozz-animation is still
 0.17.0. Everything below is this package's own surface.
