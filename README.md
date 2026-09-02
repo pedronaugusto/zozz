@@ -3,8 +3,7 @@
 [![CI](https://github.com/pedronaugusto/zozz/actions/workflows/ci.yml/badge.svg)](https://github.com/pedronaugusto/zozz/actions/workflows/ci.yml)
 
 Zig bindings for the [ozz-animation](https://github.com/guillaumeblanc/ozz-animation)
-runtime — skeletal animation sampling, in a package with no renderer, no engine
-and no asset system attached.
+runtime — skeletal animation sampling.
 
 - Vendored, pinned upstream ozz (0.17.0). No fork, no patches. See [UPSTREAM.md](UPSTREAM.md).
 - A C ABI (`ffi/zozz.h`) that exists because it must — ozz is C++ and Zig
