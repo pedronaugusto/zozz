@@ -140,6 +140,11 @@ run 'ZOZZ_ALIGN16 is applied to types' ci/check-alignment.sh
 # fails there and nowhere else, because every local runner invokes bash first.
 run 'every committed script is executable' ci/check-executable.sh
 
+# .gitignore says what does not belong in the history. Being tracked overrides
+# every rule in it, so a blanket `git add -A` can put a fetched package or a
+# build directory into a public clone forever with nothing to say so.
+run 'nothing this repository ignores is tracked' ci/check-ignored.sh
+
 #-----------------------------------------------------------------------------
 section 'Tests — native'
 #-----------------------------------------------------------------------------
