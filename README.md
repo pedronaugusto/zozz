@@ -372,7 +372,7 @@ NaN ratio that is refused.
 | **14629** | Zig source lines (`src/`) |
 | **9669** | C++ source lines (`ffi/`) |
 | **18** | deliberate drifts `ci/check-abi-drift.sh` must refuse |
-| **31** | steps `ci/run.sh` runs |
+| **32** | steps `ci/run.sh` runs |
 | **7** | further targets `ci/run.sh` cross-compiles |
 <!-- END GENERATED -->
 
