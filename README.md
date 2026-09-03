@@ -525,5 +525,7 @@ there are no globs, so nothing starts compiling by accident.
 
 ## Licence
 
-MIT, see [LICENSE](LICENSE). Vendored ozz-animation is MIT, copyright Guillaume
-Blanc and contributors.
+MIT, see [LICENSE](LICENSE), which covers this package's own code. Vendored
+ozz-animation is MIT, copyright Guillaume Blanc and contributors; its licence
+text ships with the package at `libs/ozz/LICENSE.md` and its authors at
+`libs/ozz/AUTHORS.md`.
