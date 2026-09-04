@@ -15,10 +15,30 @@ namespace {
 // Allocator seam
 //===----------------------------------------------------------------------===//
 
-/// Adapts a host ZozzAllocator onto ozz's abstract allocator interface.
+/// ozz's allocator as it was before zozz interposed, so a block allocated
+/// while no host is installed still reaches the allocator ozz shipped with —
+/// and so zozzSetAllocator(NULL) returns to that one rather than guessing at
+/// it.
+ozz::memory::Allocator*& SavedDefault() {
+  static ozz::memory::Allocator* saved = nullptr;
+  return saved;
+}
+
+/// Adapts a host ZozzAllocator onto ozz's abstract allocator interface, and
+/// occupies ozz's default-allocator slot for the whole process — forwarding to
+/// SavedDefault() while no host is installed — so `live_` counts every
+/// outstanding ozz block and not merely the host's. See Interpose().
 class HostAllocator : public ozz::memory::Allocator {
  public:
   void Install(const ZozzAllocator& host) { host_ = host; }
+
+  /// Sends subsequent allocations back to the allocator ozz shipped with.
+  void Clear() { host_ = ZozzAllocator{}; }
+
+  /// Whether a host allocator is installed. Not the same question as "is this
+  /// object ozz's default allocator", which is true from the first moment of
+  /// the process: only this says whether anything is behind it.
+  bool hosted() const { return host_.allocate != nullptr; }
 
   /// The struct Install last received, verbatim — what zozzGetAllocator
   /// hands back.
@@ -32,13 +52,15 @@ class HostAllocator : public ozz::memory::Allocator {
            host_.deallocate == other.deallocate && host_.user == other.user;
   }
 
-  /// Blocks handed out and not yet freed. Atomic because the seam permits
+  /// Blocks handed out and not yet freed, by whichever allocator this adapter
+  /// was forwarding to at the time. Atomic because the seam permits
   /// concurrent use of distinct handles: a plain counter would make the very
   /// contract this class documents unsound.
   size_t live() const { return live_.load(std::memory_order_acquire); }
 
   void* Allocate(size_t size, size_t alignment) override {
-    void* block = host_.allocate(host_.user, size, alignment);
+    void* block = hosted() ? host_.allocate(host_.user, size, alignment)
+                           : SavedDefault()->Allocate(size, alignment);
     if (block != nullptr) live_.fetch_add(1, std::memory_order_release);
     return block;
   }
@@ -48,7 +70,16 @@ class HostAllocator : public ozz::memory::Allocator {
     // down -- ozz frees NULL on paths that never allocated.
     if (block == nullptr) return;
     live_.fetch_sub(1, std::memory_order_release);
-    host_.deallocate(host_.user, block);
+    // Routed by what is installed NOW, not by what produced the block --
+    // sound only because zozzSetAllocator refuses to exchange one for the
+    // other while live() is non-zero. The two rules together are the
+    // invariant: every outstanding block was produced by the allocator this
+    // adapter currently forwards to.
+    if (hosted()) {
+      host_.deallocate(host_.user, block);
+    } else {
+      SavedDefault()->Deallocate(block);
+    }
   }
 
  private:
@@ -56,19 +87,38 @@ class HostAllocator : public ozz::memory::Allocator {
   std::atomic<size_t> live_{0};
 };
 
-// Function-local statics: constructed on first use, so there is no static
-// initialisation order dependency against ozz's own default allocator.
+// Function-local static, first constructed by the interposition below, which
+// runs during static initialisation: the adapter is in ozz's slot before any
+// handle can exist.
 HostAllocator& Host() {
   static HostAllocator instance;
   return instance;
 }
 
-/// ozz's allocator as it was before zozz first replaced it, so NULL can
-/// restore the original rather than guessing at it.
-ozz::memory::Allocator*& SavedDefault() {
-  static ozz::memory::Allocator* saved = nullptr;
-  return saved;
+/// Puts the adapter in ozz's default-allocator slot for the whole process, so
+/// live() counts every outstanding ozz block and not merely the host's. Were
+/// ozz left on its own allocator until the first zozzSetAllocator, the blocks
+/// it handed out would be invisible: the guard would read zero, allow the
+/// install, and their frees would land on an allocator that never made them.
+/// Static-init safe: ozz's slot is constant-initialised, nothing allocates.
+void Interpose() {
+  ozz::memory::Allocator* previous = ozz::memory::default_allocator();
+  // Only the first interposition records anything: running twice must still
+  // remember the allocator ozz shipped with, not this adapter. Recorded
+  // before the slot is taken, so the adapter can never forward through a null
+  // pointer.
+  if (SavedDefault() == nullptr && previous != &Host()) {
+    SavedDefault() = previous;
+  }
+  ozz::memory::SetDefaulAllocator(&Host());
 }
+
+/// Interposes during static initialisation — before main, and before any
+/// handle can exist. Nothing reads this object; its constructor is the point.
+struct Interposer {
+  Interposer() { Interpose(); }
+};
+const Interposer g_interposer;
 
 }  // namespace
 
@@ -116,19 +166,26 @@ const char* zozzResultName(ZozzResult result) {
 }
 
 ZozzResult zozzSetAllocator(const ZozzAllocator* alloc) {
+  // Idempotent, and repeated here rather than left to static initialisation
+  // alone: a C++ host may have pointed ozz at an allocator of its own in the
+  // meantime, and this entry point promises that what it accepts is what ozz
+  // allocates through.
+  Interpose();
+
   // Every path that changes where a free lands asks the same question first:
-  // is anything outstanding that this allocator would have to free? Only a
-  // reinstall of the identical allocator changes nothing, and it is the one
-  // case allowed to pass with blocks live.
-  const bool host_active = ozz::memory::default_allocator() == &Host();
-  const bool same = alloc != nullptr && host_active && Host().SameAs(*alloc);
-  if (!same && Host().live() != 0) return ZOZZ_RESULT_ALLOCATOR_IN_USE;
+  // is anything outstanding that this allocator would have to free? A call
+  // that leaves the effective allocator exactly where it was changes nothing,
+  // and it is the one case allowed to pass with blocks live: reinstalling the
+  // identical struct, or resetting to ozz's own while no host is installed.
+  const bool unchanged = alloc == nullptr
+                             ? !Host().hosted()
+                             : (Host().hosted() && Host().SameAs(*alloc));
+  if (!unchanged && Host().live() != 0) return ZOZZ_RESULT_ALLOCATOR_IN_USE;
 
   if (alloc == nullptr) {
-    if (SavedDefault() != nullptr) {
-      ozz::memory::SetDefaulAllocator(SavedDefault());
-      SavedDefault() = nullptr;
-    }
+    // The adapter keeps ozz's default-allocator slot; only what it forwards
+    // to changes, so blocks made from here on stay counted.
+    Host().Clear();
     return ZOZZ_RESULT_OK;
   }
 
@@ -137,12 +194,6 @@ ZozzResult zozzSetAllocator(const ZozzAllocator* alloc) {
   }
 
   Host().Install(*alloc);
-  ozz::memory::Allocator* previous = ozz::memory::SetDefaulAllocator(&Host());
-  // Only record the first swap: swapping twice must still restore the
-  // allocator ozz shipped with, not the installed host adapter.
-  if (SavedDefault() == nullptr && previous != &Host()) {
-    SavedDefault() = previous;
-  }
   return ZOZZ_RESULT_OK;
 }
 
@@ -151,11 +202,11 @@ ZozzResult zozzGetAllocator(ZozzAllocator* out, bool* installed) {
   *out = ZozzAllocator{};
   *installed = false;
 
-  // The installed adapter IS the currently active allocator only while it is
-  // the one ozz is actually pointed at: zozzSetAllocator(NULL) or never
-  // having called zozzSetAllocator at all both leave ozz pointed at its own
-  // default instead, in which case there is no ZozzAllocator to report.
-  if (ozz::memory::default_allocator() == &Host()) {
+  // Whether a host is installed, not whether the adapter is ozz's default
+  // allocator -- it always is. zozzSetAllocator(NULL), or never having called
+  // zozzSetAllocator at all, leaves the adapter forwarding to ozz's own
+  // allocator, in which case there is no ZozzAllocator to report.
+  if (Host().hosted()) {
     *out = Host().installed();
     *installed = true;
   }

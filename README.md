@@ -165,10 +165,21 @@ That header also records the allocator the block came from, which is what makes
 swapping one Zig allocator for another safe with blocks outstanding: each frees
 through its own producer rather than through whoever happens to be installed at
 destruction. Below the Zig layer the C seam cannot do that -- it holds one
-`ZozzAllocator` -- so `zozzSetAllocator` refuses a *different* allocator, and
-refuses NULL, while `zozzAllocatorLiveBlocks()` is non-zero, and reports
-`ZOZZ_RESULT_ALLOCATOR_IN_USE`. That counter doubles as a leak check for a host
-whose own allocator has none.
+`ZozzAllocator` -- so `zozzSetAllocator` refuses any call that would change
+where a free lands, and reports `ZOZZ_RESULT_ALLOCATOR_IN_USE`, for as long as
+`zozzAllocatorLiveBlocks()` is non-zero. A call that leaves the same allocator
+in place is not such a change: reinstalling the identical one, or resetting
+while none is installed, always succeeds. That counter doubles as a leak check
+for a host whose own allocator has none.
+
+The counter has to see *every* outstanding block for that refusal to mean
+anything, including the ones ozz's own allocator handed out before any host was
+installed -- ozz frees through whichever allocator is installed at destruction
+time, not through the one that made the block, so a load before `setAllocator`
+and a `deinit` after it would otherwise hand malloc'd memory to the Zig bridge.
+So zozz takes ozz's global allocator slot at start-up and forwards to ozz's own
+allocator until a host arrives, which is what makes the count total and the
+refusal honest.
 
 **Thread safety, and what it rests on.** Distinct handles may be used
 concurrently as long as the installed allocator is thread-safe, because every
@@ -364,13 +375,13 @@ NaN ratio that is refused.
 | **21** | installed public headers |
 | **97** | ozz public names with a binding |
 | **418** | ozz public names in the bound areas |
-| **197** | Zig tests `zig build test` executes |
+| **199** | Zig tests `zig build test` executes |
 | **10** | tests it skips, each needing a build option or an on-disk asset |
-| **200** | assertions in the standalone C smoke test |
+| **206** | assertions in the standalone C smoke test |
 | **41** | vendored ozz translation units `build.zig` compiles |
 | **20** | zozz C++ translation units (`ffi/*.cpp`) |
-| **14629** | Zig source lines (`src/`) |
-| **9669** | C++ source lines (`ffi/`) |
+| **14690** | Zig source lines (`src/`) |
+| **9728** | C++ source lines (`ffi/`) |
 | **18** | deliberate drifts `ci/check-abi-drift.sh` must refuse |
 | **32** | steps `ci/run.sh` runs |
 | **7** | further targets `ci/run.sh` cross-compiles |

@@ -238,6 +238,26 @@ static void test_allocator_getter_reports_the_installed_allocator(
   CHECK(got.user == installed_allocator->user);
 }
 
+/// Runs before the first install, which is the whole point: a block ozz's own
+/// allocator handed out is counted too, so the install that would have made
+/// its free land on a host that never produced it is refused.
+static void test_allocator_install_refused_while_ozz_own_blocks_are_live(
+    const ZozzAllocator* candidate) {
+  ZozzSamplingContext* context = NULL;
+  CHECK(zozzAllocatorLiveBlocks() == 0);
+  CHECK(zozzSamplingContextCreate(8, &context) == ZOZZ_RESULT_OK);
+  CHECK(zozzAllocatorLiveBlocks() > 0);
+
+  CHECK(zozzSetAllocator(candidate) == ZOZZ_RESULT_ALLOCATOR_IN_USE);
+  test_allocator_getter_reports_not_installed();
+
+  // NULL while nothing is installed leaves the same allocator in place, so it
+  // is not a swap and succeeds with the block above still live.
+  CHECK(zozzSetAllocator(NULL) == ZOZZ_RESULT_OK);
+  zozzSamplingContextDestroy(context);
+  CHECK(zozzAllocatorLiveBlocks() == 0);
+}
+
 static void test_log_level(void) {
   CHECK(zozzGetLogLevel() == ZOZZ_LOG_LEVEL_STANDARD);
 
@@ -874,6 +894,7 @@ int main(void) {
   test_allocator_rejects_incomplete();
   test_allocator_getter_reports_not_installed();
   test_log_level();
+  test_allocator_install_refused_while_ozz_own_blocks_are_live(&allocator);
 
   CHECK(zozzSetAllocator(&allocator) == ZOZZ_RESULT_OK);
   test_allocator_getter_reports_the_installed_allocator(&allocator);
