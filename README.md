@@ -381,7 +381,7 @@ NaN ratio that is refused.
 | **41** | vendored ozz translation units `build.zig` compiles |
 | **20** | zozz C++ translation units (`ffi/*.cpp`) |
 | **14690** | Zig source lines (`src/`) |
-| **9728** | C++ source lines (`ffi/`) |
+| **9730** | C++ source lines (`ffi/`) |
 | **18** | deliberate drifts `ci/check-abi-drift.sh` must refuse |
 | **32** | steps `ci/run.sh` runs |
 | **7** | further targets `ci/run.sh` cross-compiles |

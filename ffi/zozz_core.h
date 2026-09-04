@@ -111,11 +111,13 @@ ZOZZ_API const char* zozzResultName(ZozzResult result);
 // that never produced it, since ozz frees through whatever is installed then.
 //===----------------------------------------------------------------------===//
 
+//===----------------------------------------------------------------------===//
 // THREAD SAFETY, for the whole ABI. Distinct handles may be used concurrently
 // only when the installed allocator is thread-safe, since every entry point
 // that allocates reaches this one seam; ozz's own default is, a host one need
 // not be. Neither a handle nor the seam is synchronised: install from one
 // thread, before any other thread calls into zozz.
+//===----------------------------------------------------------------------===//
 
 typedef struct ZozzAllocator {
   /// Must return a block of at least `size` bytes aligned to `alignment`
@@ -129,10 +131,10 @@ typedef struct ZozzAllocator {
 
 /// Installs a process-wide allocator for subsequent ozz allocations; NULL
 /// sends them back to ozz's default (malloc/free). `alloc` is copied, `user`
-/// must outlive every handle it allocates, and a NULL function pointer
-/// returns ZOZZ_RESULT_INVALID_ARGUMENT. A swap while
-/// zozzAllocatorLiveBlocks() is non-zero returns ZOZZ_RESULT_ALLOCATOR_IN_USE
-/// untouched; reinstalling the same allocator is not a swap and succeeds.
+/// must outlive every handle it allocates, and a NULL function pointer returns
+/// ZOZZ_RESULT_INVALID_ARGUMENT. A swap while zozzAllocatorLiveBlocks() is
+/// non-zero returns ZOZZ_RESULT_ALLOCATOR_IN_USE, the allocator unchanged;
+/// reinstalling the same one is not a swap and succeeds.
 ZOZZ_API ZozzResult zozzSetAllocator(const ZozzAllocator* alloc);
 
 /// Reads back the allocator zozzSetAllocator most recently installed. If a
