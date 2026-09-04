@@ -87,8 +87,9 @@ typedef enum ZozzResult {
   /// -Dgltf): the library was compiled without the code it needs.
   ZOZZ_RESULT_UNSUPPORTED = 10,
   /// A different allocator was offered to zozzSetAllocator while blocks the
-  /// installed one produced are still live. Destroy what is outstanding
-  /// first: a block must be freed by the allocator that produced it.
+  /// one in use — a host's, or ozz's own — are still live. Destroy what is
+  /// outstanding first: a block must be freed by the allocator that produced
+  /// it.
   ZOZZ_RESULT_ALLOCATOR_IN_USE = 11,
 } ZozzResult;
 
@@ -103,12 +104,18 @@ ZOZZ_API const char* zozzResultName(ZozzResult result);
 // `deallocate` receives only the block pointer — no size, no alignment — so a
 // host needing those (Zig does) records them in a header, as memory.zig does.
 //
+// zozz occupies that global slot from process start, forwarding to ozz's own
+// allocator until a host is installed: that is what lets
+// zozzAllocatorLiveBlocks() count every outstanding block, and so what lets
+// zozzSetAllocator refuse an exchange that would free through an allocator
+// that never produced it, since ozz frees through whatever is installed then.
+//===----------------------------------------------------------------------===//
+
 // THREAD SAFETY, for the whole ABI. Distinct handles may be used concurrently
 // only when the installed allocator is thread-safe, since every entry point
 // that allocates reaches this one seam; ozz's own default is, a host one need
 // not be. Neither a handle nor the seam is synchronised: install from one
 // thread, before any other thread calls into zozz.
-//===----------------------------------------------------------------------===//
 
 typedef struct ZozzAllocator {
   /// Must return a block of at least `size` bytes aligned to `alignment`
@@ -120,12 +127,12 @@ typedef struct ZozzAllocator {
   void* user;
 } ZozzAllocator;
 
-/// Installs a process-wide allocator for all subsequent ozz allocations. NULL
-/// restores ozz's default (malloc/free). `alloc` is copied, but `user` must
-/// outlive every handle it allocates; a NULL function pointer returns
-/// ZOZZ_RESULT_INVALID_ARGUMENT. A swap while zozzAllocatorLiveBlocks() is
-/// non-zero returns ZOZZ_RESULT_ALLOCATOR_IN_USE, allocator untouched --
-/// reinstalling the identical struct is not a swap and always succeeds.
+/// Installs a process-wide allocator for subsequent ozz allocations; NULL
+/// sends them back to ozz's default (malloc/free). `alloc` is copied, `user`
+/// must outlive every handle it allocates, and a NULL function pointer
+/// returns ZOZZ_RESULT_INVALID_ARGUMENT. A swap while
+/// zozzAllocatorLiveBlocks() is non-zero returns ZOZZ_RESULT_ALLOCATOR_IN_USE
+/// untouched; reinstalling the same allocator is not a swap and succeeds.
 ZOZZ_API ZozzResult zozzSetAllocator(const ZozzAllocator* alloc);
 
 /// Reads back the allocator zozzSetAllocator most recently installed. If a
@@ -136,11 +143,12 @@ ZOZZ_API ZozzResult zozzSetAllocator(const ZozzAllocator* alloc);
 /// Returns ZOZZ_RESULT_INVALID_ARGUMENT if `out` or `installed` is NULL.
 ZOZZ_API ZozzResult zozzGetAllocator(ZozzAllocator* out, bool* installed);
 
-/// Blocks the installed host allocator handed out and has not yet been asked
-/// to free. Zero before the first install and zero again once every handle
-/// allocated through one is destroyed, which makes it both a shut-down leak
-/// check and what zozzSetAllocator consults before allowing a swap. ozz's own
-/// default allocator is not routed through this seam and is not counted.
+/// Blocks ozz has been handed and has not yet been asked to free: through the
+/// installed host allocator, or through ozz's own while none is installed.
+/// Both are counted, because both answer the question zozzSetAllocator asks
+/// before allowing a swap — a block outstanding across one would be freed by
+/// an allocator that never produced it. Zero again once every handle is
+/// destroyed, which also makes it a shut-down leak check.
 ZOZZ_API size_t zozzAllocatorLiveBlocks(void);
 
 //===----------------------------------------------------------------------===//

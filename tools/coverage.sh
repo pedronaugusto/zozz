@@ -75,11 +75,20 @@ exposed=$(
 # class-only API — free functions declared straight in a namespace, which is
 # most of what base/maths is. gtest_*.h headers are ozz's own test-assertion
 # helpers, shipped next to the maths headers but never part of the library.
+# `exposed` travels in the environment rather than through `awk -v`: the awk
+# macOS ships (one-true-awk) rejects a newline inside a -v assignment with
+# "newline in string" and exits, so every area reported zero public names on
+# that host while gawk accepted the same command.
+#
+# awk's stderr is not discarded either. A fatal awk error here reads
+# downstream as "this area declares no public names", which is a report of
+# full coverage of nothing — the one wrong answer this file must not give
+# quietly, and what disguised the -v failure above as an upstream reshuffle.
 ozz_methods() {
   dir=$OZZ; [ "$1" != "." ] && dir="$OZZ/$1"
   find "$dir" -maxdepth "${2:-99}" -name '*.h' -not -name 'gtest_*' 2>/dev/null -print0 |
-  xargs -0 awk -v exposed="$exposed" '
-    BEGIN { split(exposed, e, "\n"); for (i in e) is_exposed[e[i]] = 1 }
+  ZOZZ_EXPOSED="$exposed" xargs -0 awk '
+    BEGIN { split(ENVIRON["ZOZZ_EXPOSED"], e, "\n"); for (i in e) is_exposed[e[i]] = 1 }
     # A new file starts public: namespace scope has no access specifier, so
     # top-level declarations (most of base/maths) are public by default.
     # Reset per file rather than carrying state across the xargs batch.
@@ -189,7 +198,7 @@ ozz_methods() {
       }
       return type
     }
-  ' 2>/dev/null | sort -u
+  ' | sort -u
 }
 
 # Match a batch of upstream names against `bound` in one awk pass.
@@ -285,7 +294,10 @@ do
   if [ "$NAMES" -eq 1 ]; then
     printf '%s\n' "$unbound" | grep . | sed "s|^|$label	|"
   else
-    pct=$(( p == 0 ? 0 : b * 100 / p ))
+    # bash 3.2, the newest bash macOS ships, evaluates both arms of the
+    # arithmetic ternary, so `p == 0 ? 0 : b * 100 / p` aborts on a division
+    # by zero in the one case the guard exists for. Branch in the shell.
+    pct=0; [ "$p" -ne 0 ] && pct=$(( b * 100 / p ))
     colour=$Y; [ $pct -ge 70 ] && colour=$G
     printf '  %-34s %8d %8d %s%5d%%%s\n' "$label" "$b" "$p" "$colour" "$pct" "$O"
     if [ -n "$FILTER" ] && printf '%s' "$label" | grep -qi "$FILTER"; then
@@ -298,8 +310,9 @@ done
 
 [ "$NAMES" -eq 1 ] && exit 0
 
-printf '\n  %-34s %8d %8d %5d%%\n' "TOTAL" "$total_b" "$total_p" \
-  "$(( total_p == 0 ? 0 : total_b * 100 / total_p ))"
+total_pct=0
+[ "$total_p" -ne 0 ] && total_pct=$(( total_b * 100 / total_p ))
+printf '\n  %-34s %8d %8d %5d%%\n' "TOTAL" "$total_b" "$total_p" "$total_pct"
 printf '\n  %sentry points exported: %s%s\n' "$D" \
   "$(printf '%s\n' "$bound" | grep -c .)" "$O"
 printf '  %sname matching is naive; %s says what each unbound name really is%s\n' \

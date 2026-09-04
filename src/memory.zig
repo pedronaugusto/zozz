@@ -99,9 +99,9 @@ var installed: std.mem.Allocator = undefined;
 /// Routes every subsequent ozz allocation through `gpa`. Process-wide, and to
 /// be called at start-up. Swapping one Zig allocator for another is safe with
 /// blocks outstanding — each records its own — but `error.AllocatorInUse` if
-/// some other allocator installed through the C seam still has blocks live.
-/// `installed` is written only after the seam accepts the bridge, so a refused
-/// call leaves the previous one readable.
+/// any other allocator, ozz's own built-in one included, still has blocks
+/// live. `installed` is written only after the seam accepts the bridge, so a
+/// refused call leaves the previous one readable.
 pub fn setAllocator(gpa: std.mem.Allocator) err.Error!void {
     const bridge = c.Allocator{
         .allocate = allocate,
@@ -112,20 +112,21 @@ pub fn setAllocator(gpa: std.mem.Allocator) err.Error!void {
     installed = gpa;
 }
 
-/// Restores ozz's built-in malloc/free allocator.
-///
-/// Fails with `error.AllocatorInUse` while any block allocated through the
-/// installed allocator is still live: ozz's own `free` would be handed a block
-/// it never malloc'd. Destroy every handle first — `liveBlocks` says how many
-/// are outstanding.
+/// Restores ozz's built-in malloc/free allocator. `error.AllocatorInUse`
+/// while any block from the installed allocator is still live: ozz's own
+/// `free` would be handed a block it never malloc'd. Destroy every handle
+/// first — `liveBlocks` says how many are outstanding. A reset while none is
+/// installed changes nothing and always succeeds.
 pub fn resetAllocator() err.Error!void {
     try err.check(c.zozzSetAllocator(null));
 }
 
-/// Blocks the installed allocator has handed out and not yet freed. Zero
-/// before the first `setAllocator` and zero again once everything allocated
-/// through it is destroyed, which makes it a leak check for a host whose own
-/// allocator has none.
+/// Blocks ozz has been handed and has not yet freed — through the installed
+/// allocator, or through ozz's own built-in one while none is installed. Zero
+/// again once every handle is destroyed, which makes it a leak check for a
+/// host whose own allocator has none, and it is what refuses an allocator
+/// swap: every outstanding block must be freed by the allocator that produced
+/// it, and nothing below this layer records which one that was.
 pub fn liveBlocks() usize {
     return c.zozzAllocatorLiveBlocks();
 }
@@ -247,4 +248,26 @@ test "the seam refuses to change allocator while blocks it produced are live" {
     context.deinit();
     try std.testing.expectEqual(@as(usize, 0), liveBlocks());
     try resetAllocator();
+}
+
+test "the seam refuses to install an allocator while ozz's own blocks are live" {
+    // The reverse ordering of the test above, and the one that has no header
+    // to fall back on: the block below is ozz's own malloc'd memory, and
+    // `ozz::Delete` frees through whichever allocator is installed when the
+    // handle is destroyed, not through the one that produced the block. Were
+    // the install allowed here, `deinit` would hand a malloc'd pointer to the
+    // Zig bridge, which would read the bytes ahead of it as a header.
+    try resetAllocator();
+    try std.testing.expect((try getAllocator()) == null);
+
+    var context = try @import("sampling.zig").SamplingContext.init(8);
+    try std.testing.expect(liveBlocks() > 0);
+
+    try std.testing.expectError(error.AllocatorInUse, setAllocator(std.testing.allocator));
+    // Refused means untouched: still ozz's own allocator, which is what the
+    // handle needs.
+    try std.testing.expect((try getAllocator()) == null);
+
+    context.deinit();
+    try std.testing.expectEqual(@as(usize, 0), liveBlocks());
 }

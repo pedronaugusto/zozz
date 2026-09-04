@@ -8,6 +8,53 @@ diff.
 Versions follow [semantic versioning](https://semver.org). Before 1.0 the minor
 is the breaking one.
 
+## Unreleased
+
+### Fixed
+
+- **A host allocator could be installed while ozz's own blocks were still
+  outstanding**, and their frees then landed on the host.
+  `zozzAllocatorLiveBlocks()` counted only what an installed host had handed
+  out, so it read zero in the one ordering that matters -- load a skeleton,
+  then `setAllocator` -- and the guard it feeds allowed the install. ozz frees
+  through whichever allocator is installed at destruction time, not through the
+  one that produced the block, so destroying that skeleton handed malloc'd
+  memory to the Zig bridge, which read the bytes ahead of it as its own header
+  and freed a base pointer with a length and an alignment it invented. A
+  counter that sees one of the two allocators cannot answer the question the
+  guard asks, so zozz now occupies ozz's global allocator slot from the start
+  of the process and forwards to ozz's own allocator until a host is installed.
+  `zozzAllocatorLiveBlocks()` widened with it: it is every outstanding ozz
+  block now, not only the host's, and the sequence above is refused with
+  `ZOZZ_RESULT_ALLOCATOR_IN_USE` in both directions rather than one. A call
+  that leaves the same allocator in place is still not a change: reinstalling
+  the identical one, or resetting while none is installed, succeeds with blocks
+  live.
+- **`BlendingJob.run` dropped `rest_pose.len`.** `out.len` became the C
+  `blocks` parameter for both buffers, and the span ozz validates is built from
+  that same count, so `Validate()` could not see the discrepancy: a `rest_pose`
+  shorter than `out` was read past its end for every joint whose accumulated
+  weight fell below `threshold`. A short one is `error.InvalidArgument` now.
+  Every other buffer in that call already carried its own count across the
+  boundary; this was the one that did not.
+- **The coverage report measured nothing on macOS.** `tools/coverage.sh` handed
+  its newline-separated list of exposed types to `awk -v`, which the awk macOS
+  ships refuses with `newline in string`; that error went to a discarded
+  stderr, so every area came back holding zero public names and three gates
+  took it for fact — `ci/check-coverage.sh` reported full coverage of an empty
+  population, `ci/measurements.sh` had no `ozz_names_bound` to publish, and
+  `ci/check-abi-drift.sh` skipped the five mutations that prove the coverage
+  gate is not vacuous. The list travels in the environment now, awk's stderr is
+  no longer discarded, and the percentage stopped relying on the arithmetic
+  ternary short-circuiting: bash 3.2, the newest bash macOS ships, evaluates
+  both arms and divided by the zero the guard was written to avoid.
+- **UPSTREAM.md's archive-version table was ordered by locale.**
+  `tools/archive_versions.sh` ended in a bare `sort`, which folds `::` away and
+  puts `animation::QuaternionTrack` after `animation::offline::RawAnimation`
+  under `en_US.UTF-8` and before it under `C`. The committed table was correct
+  and read as stale on any host with a collating locale. The generator sorts in
+  byte order.
+
 ## 0.4.0
 
 The `.ozz` archive format is unchanged, and the vendored ozz-animation is still

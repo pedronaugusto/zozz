@@ -26,8 +26,9 @@ pub const Error = error{
     /// The entry point exists but its build option is off: the library was
     /// compiled without the code it needs.
     Unsupported,
-    /// A different allocator was offered while blocks the installed one
-    /// produced are still live. Destroy what is outstanding first.
+    /// A different allocator was offered while blocks the one in use — a
+    /// host's, or ozz's own — are still live. Destroy what is outstanding
+    /// first.
     AllocatorInUse,
 };
 

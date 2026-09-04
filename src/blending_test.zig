@@ -265,3 +265,32 @@ test "packJointWeights fills the lanes past the joint count with 1.0" {
         zozz.pose.packJointWeights(&nan, &one),
     );
 }
+
+test "a rest pose shorter than the output is refused, not read past its end" {
+    try zozz.setAllocator(std.testing.allocator);
+    defer zozz.resetAllocator() catch unreachable;
+
+    const n = 8; // two SoA blocks, so one block is a genuinely short rest pose.
+    const pose = try identityPose(n);
+    var out = try identityPose(n);
+
+    // A sub-range of a longer pose, which is how a caller reaches this: the
+    // slice is one block, `out` is two, and `out.len` is the count the C seam
+    // measures BOTH against. Nothing below this layer can tell the two
+    // lengths apart, so a joint falling back to the rest pose would read the
+    // block after the slice.
+    const short_rest = pose[0..1];
+    try std.testing.expectError(zozz.Error.InvalidArgument, (zozz.BlendingJob{
+        .layers = &.{zozz.blending.layer(1, &pose)},
+        .rest_pose = short_rest,
+        .out = &out,
+    }).run());
+
+    // Longer than the output is fine — ozz only ever reads `out.len` of it.
+    var one_block = try identityPose(4);
+    try (zozz.BlendingJob{
+        .layers = &.{zozz.blending.layer(1, &pose)},
+        .rest_pose = &pose,
+        .out = &one_block,
+    }).run();
+}
