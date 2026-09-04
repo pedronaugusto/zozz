@@ -8,7 +8,7 @@ diff.
 Versions follow [semantic versioning](https://semver.org). Before 1.0 the minor
 is the breaking one.
 
-## Unreleased
+## 0.5.0
 
 ### Fixed
 

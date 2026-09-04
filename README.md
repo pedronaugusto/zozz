@@ -369,7 +369,7 @@ NaN ratio that is refused.
 <!-- BEGIN GENERATED ci/measurements.sh --markdown -->
 | | |
 |---:|---|
-| **0.4.0** | version, the same in `build.zig.zon` and `ffi/zozz_core.h` |
+| **0.5.0** | version, the same in `build.zig.zon` and `ffi/zozz_core.h` |
 | **359** | C entry points (`ZOZZ_API` in `ffi/*.h`) |
 | **359** | Zig externs (`pub extern fn` in `src/c.zig`) |
 | **21** | installed public headers |
