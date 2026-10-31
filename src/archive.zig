@@ -365,67 +365,124 @@ pub const IArchive = struct {
     }
 };
 
-/// Writes `skeleton` alone to a new file at `path`.
-pub fn saveSkeletonToFile(skeleton: Skeleton, path: [*:0]const u8, failure: *err.Failure) err.Error!void {
-    try err.check(failure, .skeleton_save_file, c.zozzSkeletonSaveFile(err.live(skeleton.handle), path));
+/// Writes `skeleton` alone to `sub_path` in `dir`, as `saveToFile` writes.
+pub fn saveSkeletonToFile(skeleton: Skeleton, io: std.Io, dir: std.Io.Dir, sub_path: []const u8, failure: *err.Failure) err.Error!void {
+    return saveToFile(Skeleton, OArchive.saveSkeleton, skeleton, io, dir, sub_path, .skeleton_save_file, failure);
 }
 
-/// Writes `animation` alone to a new file at `path`.
-pub fn saveAnimationToFile(animation: Animation, path: [*:0]const u8, failure: *err.Failure) err.Error!void {
-    try err.check(failure, .animation_save_file, c.zozzAnimationSaveFile(err.live(animation.handle), path));
+/// Writes `animation` alone to `sub_path` in `dir`, as `saveToFile` writes.
+pub fn saveAnimationToFile(animation: Animation, io: std.Io, dir: std.Io.Dir, sub_path: []const u8, failure: *err.Failure) err.Error!void {
+    return saveToFile(Animation, OArchive.saveAnimation, animation, io, dir, sub_path, .animation_save_file, failure);
 }
 
-/// Writes `track` alone to a new file at `path`. One function per track
-/// value type, matching `saveSkeletonToFile` / `saveAnimationToFile`.
-pub fn saveFloatTrackToFile(track: FloatTrack, path: [*:0]const u8, failure: *err.Failure) err.Error!void {
-    try err.check(failure, .float_track_save_file, c.zozzFloatTrackSaveFile(err.live(track.handle), path));
+/// Writes `track` alone to `sub_path` in `dir`, as `saveToFile` writes.
+/// One function per track value type, matching `saveSkeletonToFile` /
+/// `saveAnimationToFile`.
+pub fn saveFloatTrackToFile(track: FloatTrack, io: std.Io, dir: std.Io.Dir, sub_path: []const u8, failure: *err.Failure) err.Error!void {
+    return saveToFile(FloatTrack, OArchive.saveFloatTrack, track, io, dir, sub_path, .float_track_save_file, failure);
 }
 
-pub fn saveFloat2TrackToFile(track: Float2Track, path: [*:0]const u8, failure: *err.Failure) err.Error!void {
-    try err.check(failure, .float2_track_save_file, c.zozzFloat2TrackSaveFile(err.live(track.handle), path));
+pub fn saveFloat2TrackToFile(track: Float2Track, io: std.Io, dir: std.Io.Dir, sub_path: []const u8, failure: *err.Failure) err.Error!void {
+    return saveToFile(Float2Track, OArchive.saveFloat2Track, track, io, dir, sub_path, .float2_track_save_file, failure);
 }
 
-pub fn saveFloat3TrackToFile(track: Float3Track, path: [*:0]const u8, failure: *err.Failure) err.Error!void {
-    try err.check(failure, .float3_track_save_file, c.zozzFloat3TrackSaveFile(err.live(track.handle), path));
+pub fn saveFloat3TrackToFile(track: Float3Track, io: std.Io, dir: std.Io.Dir, sub_path: []const u8, failure: *err.Failure) err.Error!void {
+    return saveToFile(Float3Track, OArchive.saveFloat3Track, track, io, dir, sub_path, .float3_track_save_file, failure);
 }
 
-pub fn saveFloat4TrackToFile(track: Float4Track, path: [*:0]const u8, failure: *err.Failure) err.Error!void {
-    try err.check(failure, .float4_track_save_file, c.zozzFloat4TrackSaveFile(err.live(track.handle), path));
+pub fn saveFloat4TrackToFile(track: Float4Track, io: std.Io, dir: std.Io.Dir, sub_path: []const u8, failure: *err.Failure) err.Error!void {
+    return saveToFile(Float4Track, OArchive.saveFloat4Track, track, io, dir, sub_path, .float4_track_save_file, failure);
 }
 
-pub fn saveQuaternionTrackToFile(track: QuaternionTrack, path: [*:0]const u8, failure: *err.Failure) err.Error!void {
-    try err.check(failure, .quaternion_track_save_file, c.zozzQuaternionTrackSaveFile(err.live(track.handle), path));
+pub fn saveQuaternionTrackToFile(track: QuaternionTrack, io: std.Io, dir: std.Io.Dir, sub_path: []const u8, failure: *err.Failure) err.Error!void {
+    return saveToFile(QuaternionTrack, OArchive.saveQuaternionTrack, track, io, dir, sub_path, .quaternion_track_save_file, failure);
 }
 
-/// Writes `raw` alone to a new file at `path` — the offline twin of
-/// `saveSkeletonToFile` and the functions above it, and what a cook stage
-/// uses to hand its output to the next one. The read side is
+/// Writes `raw` alone to `sub_path` in `dir`, as `saveToFile` writes —
+/// the offline twin of `saveSkeletonToFile` and the functions above it, and
+/// what a cook stage uses to hand its output to the next one. The read side is
 /// `RawSkeleton.initFromFile` and its equivalents, which own the file's
 /// lifetime the same way the runtime loaders do.
-pub fn saveRawSkeletonToFile(raw: RawSkeleton, path: [*:0]const u8, failure: *err.Failure) err.Error!void {
-    try err.check(failure, .raw_skeleton_save_file, c.zozzRawSkeletonSaveFile(err.live(raw.handle), path));
+pub fn saveRawSkeletonToFile(raw: RawSkeleton, io: std.Io, dir: std.Io.Dir, sub_path: []const u8, failure: *err.Failure) err.Error!void {
+    return saveToFile(RawSkeleton, OArchive.saveRawSkeleton, raw, io, dir, sub_path, .raw_skeleton_save_file, failure);
 }
 
-pub fn saveRawAnimationToFile(raw: RawAnimation, path: [*:0]const u8, failure: *err.Failure) err.Error!void {
-    try err.check(failure, .raw_animation_save_file, c.zozzRawAnimationSaveFile(err.live(raw.handle), path));
+pub fn saveRawAnimationToFile(raw: RawAnimation, io: std.Io, dir: std.Io.Dir, sub_path: []const u8, failure: *err.Failure) err.Error!void {
+    return saveToFile(RawAnimation, OArchive.saveRawAnimation, raw, io, dir, sub_path, .raw_animation_save_file, failure);
 }
 
-pub fn saveRawFloatTrackToFile(raw: RawFloatTrack, path: [*:0]const u8, failure: *err.Failure) err.Error!void {
-    try err.check(failure, .raw_float_track_save_file, c.zozzRawFloatTrackSaveFile(err.live(raw.handle), path));
+pub fn saveRawFloatTrackToFile(raw: RawFloatTrack, io: std.Io, dir: std.Io.Dir, sub_path: []const u8, failure: *err.Failure) err.Error!void {
+    return saveToFile(RawFloatTrack, OArchive.saveRawFloatTrack, raw, io, dir, sub_path, .raw_float_track_save_file, failure);
 }
 
-pub fn saveRawFloat2TrackToFile(raw: RawFloat2Track, path: [*:0]const u8, failure: *err.Failure) err.Error!void {
-    try err.check(failure, .raw_float2_track_save_file, c.zozzRawFloat2TrackSaveFile(err.live(raw.handle), path));
+pub fn saveRawFloat2TrackToFile(raw: RawFloat2Track, io: std.Io, dir: std.Io.Dir, sub_path: []const u8, failure: *err.Failure) err.Error!void {
+    return saveToFile(RawFloat2Track, OArchive.saveRawFloat2Track, raw, io, dir, sub_path, .raw_float2_track_save_file, failure);
 }
 
-pub fn saveRawFloat3TrackToFile(raw: RawFloat3Track, path: [*:0]const u8, failure: *err.Failure) err.Error!void {
-    try err.check(failure, .raw_float3_track_save_file, c.zozzRawFloat3TrackSaveFile(err.live(raw.handle), path));
+pub fn saveRawFloat3TrackToFile(raw: RawFloat3Track, io: std.Io, dir: std.Io.Dir, sub_path: []const u8, failure: *err.Failure) err.Error!void {
+    return saveToFile(RawFloat3Track, OArchive.saveRawFloat3Track, raw, io, dir, sub_path, .raw_float3_track_save_file, failure);
 }
 
-pub fn saveRawFloat4TrackToFile(raw: RawFloat4Track, path: [*:0]const u8, failure: *err.Failure) err.Error!void {
-    try err.check(failure, .raw_float4_track_save_file, c.zozzRawFloat4TrackSaveFile(err.live(raw.handle), path));
+pub fn saveRawFloat4TrackToFile(raw: RawFloat4Track, io: std.Io, dir: std.Io.Dir, sub_path: []const u8, failure: *err.Failure) err.Error!void {
+    return saveToFile(RawFloat4Track, OArchive.saveRawFloat4Track, raw, io, dir, sub_path, .raw_float4_track_save_file, failure);
 }
 
-pub fn saveRawQuaternionTrackToFile(raw: RawQuaternionTrack, path: [*:0]const u8, failure: *err.Failure) err.Error!void {
-    try err.check(failure, .raw_quaternion_track_save_file, c.zozzRawQuaternionTrackSaveFile(err.live(raw.handle), path));
+pub fn saveRawQuaternionTrackToFile(raw: RawQuaternionTrack, io: std.Io, dir: std.Io.Dir, sub_path: []const u8, failure: *err.Failure) err.Error!void {
+    return saveToFile(RawQuaternionTrack, OArchive.saveRawQuaternionTrack, raw, io, dir, sub_path, .raw_quaternion_track_save_file, failure);
 }
+
+/// Writes `object` alone, by `saveTo`, to `sub_path` in `dir` through
+/// `io`, in this target's byte order: written beside its destination and
+/// renamed over it once synced, so a refused save leaves the file old, or
+/// new and whole. The file's own failures name `call`; `saveTo`'s name
+/// its archive call; a write the file system refuses is `ReadFailed`, the
+/// error the C `io` result maps to. No C stdio sits under the Zig API.
+fn saveToFile(
+    comptime T: type,
+    comptime saveTo: fn (OArchive, T, *err.Failure) err.Error!void,
+    object: T,
+    io: std.Io,
+    dir: std.Io.Dir,
+    sub_path: []const u8,
+    call: err.Call,
+    failure: *err.Failure,
+) err.Error!void {
+    var atomic = dir.createFileAtomic(io, sub_path, .{ .replace = true }) catch |e| return switch (e) {
+        error.FileNotFound => err.refuse(failure, call, err.Error.FileNotFound),
+        else => err.refuse(failure, call, err.Error.ReadFailed),
+    };
+    // Deletes the file beside the destination unless `replace` renamed it.
+    defer atomic.deinit(io);
+    var buffer: [4096]u8 = undefined;
+    var sink: FileSink = .{ .file = atomic.file.writer(io, &buffer) };
+    const stream = sink.stream();
+    var out = try OArchive.init(&stream, nativeEndianness(), failure);
+    defer out.deinit();
+    try saveTo(out, object, failure);
+    sink.file.interface.flush() catch return err.refuse(failure, call, err.Error.ReadFailed);
+    atomic.file.sync(io) catch return err.refuse(failure, call, err.Error.ReadFailed);
+    atomic.replace(io) catch return err.refuse(failure, call, err.Error.ReadFailed);
+}
+
+/// A `Stream` that writes into a `std.Io` file writer; a short write is
+/// the archive's IO refusal.
+const FileSink = struct {
+    file: std.Io.File.Writer,
+
+    fn opened(user: ?*anyopaque) callconv(.c) c_int {
+        _ = user;
+        return 1;
+    }
+
+    fn write(user: ?*anyopaque, data: ?*const anyopaque, size: usize) callconv(.c) usize {
+        const sink: *FileSink = @ptrCast(@alignCast(user orelse return 0)); // aegis: no-danger: user is the sink this file handed the archive stream, which hands it back unchanged
+        if (size == 0) return 0;
+        const bytes: [*]const u8 = @ptrCast(data orelse return 0); // aegis: no-danger: the archive writes size bytes of its own buffer, read here only up to size
+        sink.file.interface.writeAll(bytes[0..size]) catch return 0;
+        return size;
+    }
+
+    fn stream(sink: *FileSink) Stream {
+        return .{ .opened = &opened, .write = &write, .read = null, .seek = null, .tell = null, .user = sink };
+    }
+};

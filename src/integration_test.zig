@@ -379,18 +379,10 @@ test "the full pipeline runs against .ozz files on disk" {
     try zozz.setAllocator(gpa, &failure);
     defer zozz.resetAllocator(&failure) catch |e| std.debug.panic("zozz: {s}", .{@errorName(e)});
 
-    var skeleton_buf: [std.Io.Dir.max_path_bytes]u8 = undefined;
-    var animation_buf: [std.Io.Dir.max_path_bytes]u8 = undefined;
-
-    const skeleton = try zozz.Skeleton.initFromFile(
-        try std.fmt.bufPrintZ(&skeleton_buf, "{s}", .{skeleton_path}),
-        &failure,
-    );
+    const cwd = std.Io.Dir.cwd();
+    const skeleton = try zozz.Skeleton.initFromFile(gpa, std.testing.io, cwd, skeleton_path, .fromRaw(1 << 30), &failure);
     defer skeleton.deinit();
-    const clip = try zozz.Animation.initFromFile(
-        try std.fmt.bufPrintZ(&animation_buf, "{s}", .{animation_path}),
-        &failure,
-    );
+    const clip = try zozz.Animation.initFromFile(gpa, std.testing.io, cwd, animation_path, .fromRaw(1 << 30), &failure);
     defer clip.deinit();
 
     try expectPipelineWorks(gpa, skeleton, clip);

@@ -5,6 +5,7 @@ const gantry = @import("gantry");
 pub const layers: []const gantry.rules.Layer = &.{
     .{ .name = "C boundary", .patterns = &.{ "src/c.zig", "src/math.zig" } },
     .{ .name = "errors", .patterns = &.{"src/error.zig"} },
+    .{ .name = "files", .patterns = &.{"src/file.zig"} },
     .{ .name = "runtime objects and jobs", .patterns = &.{
         "src/animation.zig", "src/skeleton.zig", "src/track.zig",    "src/pose.zig",
         "src/encode.zig",    "src/options.zig",  "src/blending.zig", "src/ik.zig",

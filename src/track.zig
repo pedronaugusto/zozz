@@ -9,16 +9,16 @@
 const std = @import("std");
 const c = @import("c.zig");
 const err = @import("error.zig");
+const file = @import("file.zig");
 
 pub const FloatTrack = struct {
     handle: ?*c.FloatTrack,
 
-    /// Loads a track from a `.ozz` file on disk.
-    pub fn initFromFile(path: [*:0]const u8, failure: *err.Failure) err.Error!FloatTrack {
-        var handle: *c.FloatTrack = undefined;
-        var refusal: c.Refusal = .{};
-        try err.checkLoad(failure, .float_track_load_file, c.zozzFloatTrackLoadFile(path, &handle, &refusal), refusal);
-        return .{ .handle = handle };
+    /// Loads a track from a `.ozz` file; read as `Skeleton.initFromFile` reads.
+    pub fn initFromFile(gpa: std.mem.Allocator, io: std.Io, dir: std.Io.Dir, sub_path: []const u8, limit: file.Limit, failure: *err.Failure) err.Error!FloatTrack {
+        const image = try file.readImage(gpa, io, dir, sub_path, limit, .float_track_load_file, failure);
+        defer gpa.free(image);
+        return initFromMemory(.init(image), failure);
     }
 
     /// Loads a track from a memory image of a `.ozz` file. The bytes are read
@@ -108,7 +108,6 @@ fn decodeSteps(step_bits: []const u8, num_keys: u32, out: []c.TrackInterpolation
 fn VectorOps(comptime Handle: type, comptime n: usize) type {
     return struct {
         call: []const u8,
-        loadFile: fn ([*:0]const u8, **Handle, ?*c.Refusal) callconv(.c) c.Result,
         loadMemory: fn ([*]const u8, usize, **Handle, ?*c.Refusal) callconv(.c) c.Result,
         destroy: fn (?*Handle) callconv(.c) void,
         name: fn (?*const Handle) callconv(.c) [*:0]const u8,
@@ -126,12 +125,11 @@ fn VectorTrack(comptime Handle: type, comptime n: usize, comptime ops: VectorOps
 
         const Self = @This();
 
-        /// Loads a track from a `.ozz` file on disk.
-        pub fn initFromFile(path: [*:0]const u8, failure: *err.Failure) err.Error!Self {
-            var handle: *Handle = undefined;
-            var refusal: c.Refusal = .{};
-            try err.checkLoad(failure, @field(err.Call, ops.call ++ "_load_file"), ops.loadFile(path, &handle, &refusal), refusal);
-            return .{ .handle = handle };
+        /// Loads a track from a `.ozz` file; read as `Skeleton.initFromFile` reads.
+        pub fn initFromFile(gpa: std.mem.Allocator, io: std.Io, dir: std.Io.Dir, sub_path: []const u8, limit: file.Limit, failure: *err.Failure) err.Error!Self {
+            const image = try file.readImage(gpa, io, dir, sub_path, limit, @field(err.Call, ops.call ++ "_load_file"), failure);
+            defer gpa.free(image);
+            return initFromMemory(.init(image), failure);
         }
 
         /// Loads a track from a memory image of a `.ozz` file. The bytes are
@@ -204,7 +202,6 @@ fn VectorTrack(comptime Handle: type, comptime n: usize, comptime ops: VectorOps
 
 pub const Float2Track = VectorTrack(c.Float2Track, 2, .{
     .call = "float2_track",
-    .loadFile = c.zozzFloat2TrackLoadFile,
     .loadMemory = c.zozzFloat2TrackLoadMemory,
     .destroy = c.zozzFloat2TrackDestroy,
     .name = c.zozzFloat2TrackName,
@@ -217,7 +214,6 @@ pub const Float2Track = VectorTrack(c.Float2Track, 2, .{
 
 pub const Float3Track = VectorTrack(c.Float3Track, 3, .{
     .call = "float3_track",
-    .loadFile = c.zozzFloat3TrackLoadFile,
     .loadMemory = c.zozzFloat3TrackLoadMemory,
     .destroy = c.zozzFloat3TrackDestroy,
     .name = c.zozzFloat3TrackName,
@@ -230,7 +226,6 @@ pub const Float3Track = VectorTrack(c.Float3Track, 3, .{
 
 pub const Float4Track = VectorTrack(c.Float4Track, 4, .{
     .call = "float4_track",
-    .loadFile = c.zozzFloat4TrackLoadFile,
     .loadMemory = c.zozzFloat4TrackLoadMemory,
     .destroy = c.zozzFloat4TrackDestroy,
     .name = c.zozzFloat4TrackName,
@@ -245,7 +240,6 @@ pub const Float4Track = VectorTrack(c.Float4Track, 4, .{
 /// matching `Transform.rotation` and every other quaternion in this package.
 pub const QuaternionTrack = VectorTrack(c.QuaternionTrack, 4, .{
     .call = "quaternion_track",
-    .loadFile = c.zozzQuaternionTrackLoadFile,
     .loadMemory = c.zozzQuaternionTrackLoadMemory,
     .destroy = c.zozzQuaternionTrackDestroy,
     .name = c.zozzQuaternionTrackName,

@@ -12,7 +12,7 @@ const zozz = @import("zozz");
 /// A real pipeline exports `.ozz` files from a DCC tool. This authors the
 /// same two objects with the offline builders and writes them, so the example
 /// needs no assets and still loads the way an application does.
-fn authorAssets() !void {
+fn authorAssets(io: std.Io) !void {
     var failure: zozz.Failure = .{};
     var raw_skeleton = try zozz.RawSkeleton.init(&failure);
     defer raw_skeleton.deinit();
@@ -23,7 +23,7 @@ fn authorAssets() !void {
 
     var skeleton = try raw_skeleton.build(&failure);
     defer skeleton.deinit();
-    try zozz.saveSkeletonToFile(skeleton, "skeleton.ozz", &failure);
+    try zozz.saveSkeletonToFile(skeleton, io, std.Io.Dir.cwd(), "skeleton.ozz", &failure);
 
     // Every track is fully keyed, the child's included: a raw animation never
     // sees a skeleton, so a track with no keys bakes IDENTITY rather than the
@@ -41,10 +41,11 @@ fn authorAssets() !void {
     // 0 builds no iframes: a clip this short has few keys to walk on a seek.
     var clip = try raw_clip.build(0, &failure);
     defer clip.deinit();
-    try zozz.saveAnimationToFile(clip, "walk.ozz", &failure);
+    try zozz.saveAnimationToFile(clip, io, std.Io.Dir.cwd(), "walk.ozz", &failure);
 }
 
-pub fn main() !void {
+pub fn main(init: std.process.Init) !void {
+    const io = init.io;
     var gpa_state: std.heap.SafeAllocator = .init(std.heap.page_allocator, .{});
     defer std.debug.assert(gpa_state.deinit() == 0);
     const gpa = gpa_state.allocator();
@@ -53,7 +54,7 @@ pub fn main() !void {
     // two files below are this example's own and the paths in the Usage block
     // can stay plain. Authored before the allocator seam is installed: these
     // objects are gone again by the time the Usage block starts.
-    try authorAssets();
+    try authorAssets(io);
 
     const time_seconds: f32 = 0.5;
 
@@ -69,10 +70,12 @@ pub fn main() !void {
     // A handle is destroyed through a pointer, so it is a `var`: `deinit`
     // nulls it, which makes a second destroy a no-op and a use after it a
     // checked panic rather than a read of freed memory.
-    var skeleton = try zozz.Skeleton.initFromFile("skeleton.ozz", &failure);
+    // A file is read through `io`, and one over the limit given is refused
+    // before ozz parses a byte of it.
+    var skeleton = try zozz.Skeleton.initFromFile(gpa, io, std.Io.Dir.cwd(), "skeleton.ozz", .fromRaw(64 << 20), &failure);
     defer skeleton.deinit();
 
-    var clip = try zozz.Animation.initFromFile("walk.ozz", &failure);
+    var clip = try zozz.Animation.initFromFile(gpa, io, std.Io.Dir.cwd(), "walk.ozz", .fromRaw(64 << 20), &failure);
     defer clip.deinit();
 
     // The caller owns the pose. It can be a stack array, an arena slice, or a

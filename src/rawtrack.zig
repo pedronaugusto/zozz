@@ -16,6 +16,7 @@
 const std = @import("std");
 const c = @import("c.zig");
 const err = @import("error.zig");
+const file = @import("file.zig");
 const track = @import("track.zig");
 
 pub const Interpolation = c.TrackInterpolation;
@@ -76,12 +77,12 @@ pub const RawFloatTrack = struct {
 
     /// Loads a raw track from a `.ozz` archive written by
     /// `archive.saveRawFloatTrackToFile` or `OArchive.saveRawFloatTrack` —
-    /// the cook-stage cache the runtime `FloatTrack` is built from.
-    pub fn initFromFile(path: [*:0]const u8, failure: *err.Failure) err.Error!RawFloatTrack {
-        var handle: *c.RawFloatTrack = undefined;
-        var refusal: c.Refusal = .{};
-        try err.checkLoad(failure, .raw_float_track_load_file, c.zozzRawFloatTrackLoadFile(path, &handle, &refusal), refusal);
-        return .{ .handle = handle };
+    /// the cook-stage cache the runtime `FloatTrack` is built from. The file
+    /// is read as `Skeleton.initFromFile` reads it.
+    pub fn initFromFile(gpa: std.mem.Allocator, io: std.Io, dir: std.Io.Dir, sub_path: []const u8, limit: file.Limit, failure: *err.Failure) err.Error!RawFloatTrack {
+        const image = try file.readImage(gpa, io, dir, sub_path, limit, .raw_float_track_load_file, failure);
+        defer gpa.free(image);
+        return initFromMemory(.init(image), failure);
     }
 
     /// The same, from a memory image. The bytes are read during the call
@@ -171,11 +172,10 @@ pub const RawFloat2Track = struct {
     }
 
     /// See `RawFloatTrack.initFromFile`.
-    pub fn initFromFile(path: [*:0]const u8, failure: *err.Failure) err.Error!RawFloat2Track {
-        var handle: *c.RawFloat2Track = undefined;
-        var refusal: c.Refusal = .{};
-        try err.checkLoad(failure, .raw_float2_track_load_file, c.zozzRawFloat2TrackLoadFile(path, &handle, &refusal), refusal);
-        return .{ .handle = handle };
+    pub fn initFromFile(gpa: std.mem.Allocator, io: std.Io, dir: std.Io.Dir, sub_path: []const u8, limit: file.Limit, failure: *err.Failure) err.Error!RawFloat2Track {
+        const image = try file.readImage(gpa, io, dir, sub_path, limit, .raw_float2_track_load_file, failure);
+        defer gpa.free(image);
+        return initFromMemory(.init(image), failure);
     }
 
     /// See `RawFloatTrack.initFromMemory`.
@@ -254,11 +254,10 @@ pub const RawFloat3Track = struct {
     }
 
     /// See `RawFloatTrack.initFromFile`.
-    pub fn initFromFile(path: [*:0]const u8, failure: *err.Failure) err.Error!RawFloat3Track {
-        var handle: *c.RawFloat3Track = undefined;
-        var refusal: c.Refusal = .{};
-        try err.checkLoad(failure, .raw_float3_track_load_file, c.zozzRawFloat3TrackLoadFile(path, &handle, &refusal), refusal);
-        return .{ .handle = handle };
+    pub fn initFromFile(gpa: std.mem.Allocator, io: std.Io, dir: std.Io.Dir, sub_path: []const u8, limit: file.Limit, failure: *err.Failure) err.Error!RawFloat3Track {
+        const image = try file.readImage(gpa, io, dir, sub_path, limit, .raw_float3_track_load_file, failure);
+        defer gpa.free(image);
+        return initFromMemory(.init(image), failure);
     }
 
     /// See `RawFloatTrack.initFromMemory`.
@@ -337,11 +336,10 @@ pub const RawFloat4Track = struct {
     }
 
     /// See `RawFloatTrack.initFromFile`.
-    pub fn initFromFile(path: [*:0]const u8, failure: *err.Failure) err.Error!RawFloat4Track {
-        var handle: *c.RawFloat4Track = undefined;
-        var refusal: c.Refusal = .{};
-        try err.checkLoad(failure, .raw_float4_track_load_file, c.zozzRawFloat4TrackLoadFile(path, &handle, &refusal), refusal);
-        return .{ .handle = handle };
+    pub fn initFromFile(gpa: std.mem.Allocator, io: std.Io, dir: std.Io.Dir, sub_path: []const u8, limit: file.Limit, failure: *err.Failure) err.Error!RawFloat4Track {
+        const image = try file.readImage(gpa, io, dir, sub_path, limit, .raw_float4_track_load_file, failure);
+        defer gpa.free(image);
+        return initFromMemory(.init(image), failure);
     }
 
     /// See `RawFloatTrack.initFromMemory`.
@@ -421,11 +419,10 @@ pub const RawQuaternionTrack = struct {
     }
 
     /// See `RawFloatTrack.initFromFile`.
-    pub fn initFromFile(path: [*:0]const u8, failure: *err.Failure) err.Error!RawQuaternionTrack {
-        var handle: *c.RawQuaternionTrack = undefined;
-        var refusal: c.Refusal = .{};
-        try err.checkLoad(failure, .raw_quaternion_track_load_file, c.zozzRawQuaternionTrackLoadFile(path, &handle, &refusal), refusal);
-        return .{ .handle = handle };
+    pub fn initFromFile(gpa: std.mem.Allocator, io: std.Io, dir: std.Io.Dir, sub_path: []const u8, limit: file.Limit, failure: *err.Failure) err.Error!RawQuaternionTrack {
+        const image = try file.readImage(gpa, io, dir, sub_path, limit, .raw_quaternion_track_load_file, failure);
+        defer gpa.free(image);
+        return initFromMemory(.init(image), failure);
     }
 
     /// See `RawFloatTrack.initFromMemory`.

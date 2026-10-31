@@ -25,6 +25,8 @@ const Context = struct {
     /// Where a loader's case is written to be loaded from a file.
     file: ?CaseFile = null,
 
+    /// The directory the Zig API loads the case from, as `case_file`, and
+    /// the same file's path for the C ABI's file loaders.
     const CaseFile = struct { dir: std.Io.Dir, path: [:0]const u8 };
 
     /// The case's bytes, ending at a guard page. Free with `guarded`.
@@ -54,7 +56,7 @@ const Guarded = struct {
         g.files = std.testing.tmpDir(.{});
         errdefer g.files.cleanup();
         // Relative to the test's working directory, as `tmpDir` makes it.
-        g.path = try std.mem.printSentinel(&g.path_buffer, ".zig-cache/tmp/{s}/case.ozz", .{g.files.sub_path}, 0);
+        g.path = try std.mem.printSentinel(&g.path_buffer, ".zig-cache/tmp/{s}/" ++ case_file, .{g.files.sub_path}, 0);
         var failure: zozz.Failure = .{};
         try zozz.setAllocator(g.quarantine.allocator(), &failure);
         // Most cases are refused: each refusal is asserted by its frame.
@@ -77,6 +79,9 @@ const Guarded = struct {
         };
     }
 };
+
+/// The name a loader's case is written under in `Context.file`.
+const case_file = "case.ozz";
 
 const loader_cases: shakedown.CheckOptions = .{ .cases = 512 };
 
@@ -150,9 +155,10 @@ const Writer = struct {
     }
 };
 
-/// One loader's property: the bytes loaded from memory, from a file, and
-/// through a host's stream by `load`, each object handed to `run`, which
-/// drives what a host drives on it and frees it.
+/// One loader's property: the bytes loaded from memory, from a file through
+/// the Zig API and through the C ABI's file loader, and through a host's
+/// stream by `load`, each object handed to `run`, which drives what a host
+/// drives on it and frees it.
 fn Loads(comptime T: type, comptime load: fn (zozz.IArchive, *zozz.Failure) zozz.Error!T, comptime run: fn (T, Allocator) anyerror!void) type {
     return struct {
         fn property(ctx: *const Context, case: *shakedown.Case) !void {
@@ -164,11 +170,22 @@ fn Loads(comptime T: type, comptime load: fn (zozz.IArchive, *zozz.Failure) zozz
             } else |_| try expectNamed(&failure);
 
             const file = ctx.file.?;
-            try file.dir.writeFile(std.testing.io, .{ .sub_path = "case.ozz", .data = bytes });
+            try file.dir.writeFile(std.testing.io, .{ .sub_path = case_file, .data = bytes });
             failure = .{};
-            if (T.initFromFile(file.path, &failure)) |object| {
+            if (T.initFromFile(ctx.guarded, std.testing.io, file.dir, case_file, .fromRaw(1 << 20), &failure)) |object| {
                 try run(object, ctx.guarded);
             } else |_| try expectNamed(&failure);
+
+            // A C host's file load, through `ozz::io::File`.
+            const Handle = @typeInfo(@typeInfo(@FieldType(T, "handle")).optional.child).pointer.child;
+            const handle_name = @typeName(Handle);
+            const loadFile = @field(zozz.c, "zozz" ++ handle_name[(std.mem.findScalarLast(u8, handle_name, '.') orelse 0) + 1 ..] ++ "LoadFile");
+            var handle: *Handle = undefined;
+            var refusal: zozz.c.Refusal = .{};
+            const result = loadFile(file.path, &handle, &refusal);
+            if (result == .ok) {
+                try run(.{ .handle = handle }, ctx.guarded);
+            } else if (refusal.what != null and result != .bad_format and result != .io) return error.RecordBesideOtherResult;
 
             var reader: Reader = .{ .bytes = bytes };
             const host = reader.stream();

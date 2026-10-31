@@ -4,6 +4,7 @@ const std = @import("std");
 const aegis = @import("aegis");
 const c = @import("c.zig");
 const err = @import("error.zig");
+const file = @import("file.zig");
 const math = @import("math.zig");
 
 /// The parent index a root joint reports. Re-exported from `c.zig`, where
@@ -20,15 +21,13 @@ pub const max_joints = c.max_joints;
 pub const Skeleton = struct {
     handle: ?*c.Skeleton,
 
-    /// Loads a skeleton from a `.ozz` file on disk.
-    ///
-    /// `path` is passed straight to the C runtime's `fopen`, so it must be a
-    /// native path in the platform's encoding.
-    pub fn initFromFile(path: [*:0]const u8, failure: *err.Failure) err.Error!Skeleton {
-        var handle: *c.Skeleton = undefined;
-        var refusal: c.Refusal = .{};
-        try err.checkLoad(failure, .skeleton_load_file, c.zozzSkeletonLoadFile(path, &handle, &refusal), refusal);
-        return .{ .handle = handle };
+    /// Loads a skeleton from a `.ozz` file: the file at `sub_path` in `dir`,
+    /// read whole through `io`, at most `limit` bytes, and parsed as
+    /// `initFromMemory` parses. `file.readImage` names its refusals.
+    pub fn initFromFile(gpa: std.mem.Allocator, io: std.Io, dir: std.Io.Dir, sub_path: []const u8, limit: file.Limit, failure: *err.Failure) err.Error!Skeleton {
+        const image = try file.readImage(gpa, io, dir, sub_path, limit, .skeleton_load_file, failure);
+        defer gpa.free(image);
+        return initFromMemory(.init(image), failure);
     }
 
     /// Loads a skeleton from a memory image of a `.ozz` file. The bytes are

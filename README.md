@@ -28,10 +28,12 @@ defer zozz.resetAllocator(&failure) catch |e| std.debug.panic("zozz: {s}", .{@er
 // A handle is destroyed through a pointer, so it is a `var`: `deinit`
 // nulls it, which makes a second destroy a no-op and a use after it a
 // checked panic rather than a read of freed memory.
-var skeleton = try zozz.Skeleton.initFromFile("skeleton.ozz", &failure);
+// A file is read through `io`, and one over the limit given is refused
+// before ozz parses a byte of it.
+var skeleton = try zozz.Skeleton.initFromFile(gpa, io, std.Io.Dir.cwd(), "skeleton.ozz", .fromRaw(64 << 20), &failure);
 defer skeleton.deinit();
 
-var clip = try zozz.Animation.initFromFile("walk.ozz", &failure);
+var clip = try zozz.Animation.initFromFile(gpa, io, std.Io.Dir.cwd(), "walk.ozz", .fromRaw(64 << 20), &failure);
 defer clip.deinit();
 
 // The caller owns the pose. It can be a stack array, an arena slice, or a

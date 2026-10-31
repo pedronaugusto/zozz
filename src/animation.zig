@@ -3,6 +3,7 @@
 const std = @import("std");
 const c = @import("c.zig");
 const err = @import("error.zig");
+const file = @import("file.zig");
 
 /// How a time outside a clip's [0, duration] maps onto it. `ratioAt` takes
 /// one; there is no default, because a clip carries no loop flag.
@@ -16,11 +17,11 @@ pub const TimeMode = enum {
 pub const Animation = struct {
     handle: ?*c.Animation,
 
-    pub fn initFromFile(path: [*:0]const u8, failure: *err.Failure) err.Error!Animation {
-        var handle: *c.Animation = undefined;
-        var refusal: c.Refusal = .{};
-        try err.checkLoad(failure, .animation_load_file, c.zozzAnimationLoadFile(path, &handle, &refusal), refusal);
-        return .{ .handle = handle };
+    /// Loads a clip from a `.ozz` file; read as `Skeleton.initFromFile` reads.
+    pub fn initFromFile(gpa: std.mem.Allocator, io: std.Io, dir: std.Io.Dir, sub_path: []const u8, limit: file.Limit, failure: *err.Failure) err.Error!Animation {
+        const image = try file.readImage(gpa, io, dir, sub_path, limit, .animation_load_file, failure);
+        defer gpa.free(image);
+        return initFromMemory(.init(image), failure);
     }
 
     /// The bytes are read during the call only and need not outlive it.

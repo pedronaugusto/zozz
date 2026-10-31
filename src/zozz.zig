@@ -11,6 +11,7 @@ const aegis = @import("aegis");
 pub const c = @import("c.zig");
 
 const error_mod = @import("error.zig");
+const file_mod = @import("file.zig");
 const math_mod = @import("math.zig");
 const memory_mod = @import("memory.zig");
 const skeleton_mod = @import("skeleton.zig");
@@ -41,6 +42,7 @@ pub const Frame = error_mod.Frame;
 pub const Refusal = error_mod.Refusal;
 pub const Call = error_mod.Call;
 pub const Bytes = error_mod.Bytes;
+pub const FileLimit = file_mod.Limit;
 pub const resultName = error_mod.name;
 
 pub const Transform = math_mod.Transform;
@@ -287,6 +289,7 @@ test {
     _ = @import("integration_test.zig");
     _ = @import("testing/fuzz.zig");
     _ = @import("testing/quiet.zig");
+    _ = @import("testing/files.zig");
     _ = @import("offline.zig");
     _ = @import("optimizer.zig");
     _ = @import("rawtrack.zig");
@@ -458,10 +461,12 @@ test "loaders reject malformed input instead of parsing it" {
     failure.reset();
 
     // Empty and absent inputs.
+    var tmp = std.testing.tmpDir(.{});
+    defer tmp.cleanup();
     try std.testing.expectError(Error.InvalidArgument, Skeleton.initFromMemory(.init(""), &failure));
     try std.testing.expectError(
         Error.FileNotFound,
-        Skeleton.initFromFile("/nonexistent/zozz/skeleton.ozz", &failure),
+        Skeleton.initFromFile(std.testing.allocator, std.testing.io, tmp.dir, "skeleton.ozz", .fromRaw(1 << 20), &failure),
     );
     try std.testing.expectEqualSlices(Frame, &.{
         .{ .call = .skeleton_load_memory, .result = .invalid_argument },

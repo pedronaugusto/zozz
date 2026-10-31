@@ -34,6 +34,17 @@ could not express, so a port has the reason and not only the diff.
   non-finite, or dividing the clip more ways than a `uint32_t` counts is
   `INVALID_ARGUMENT`. The old shape always built none, so every seek walked
   the keys from the start or from where the last sample left off.
+- Every file loader and saver of the Zig API goes through `std.Io`:
+  `initFromFile(gpa, io, dir, sub_path, limit, failure)` reads the file whole,
+  at most `limit` bytes (a `zozz.FileLimit`), into a block from `gpa` and
+  parses it as `initFromMemory` does; `save<Type>ToFile(object, io, dir,
+  sub_path, failure)` writes beside the destination and renames over it once
+  synced. A file over `limit` is `BadFormat` with a record naming
+  `File.length`, and a refusal for the content names the `*_load_memory`
+  call. The old shape opened `path` with C stdio inside ozz: a second read
+  path no `Io` reached, so no fault injection covered it, a cancel could not
+  stop it, and a host had no bound on what it read. The C ABI's
+  `*LoadFile` and `*SaveFile` stay, for C hosts.
 - Every loader of bytes takes `zozz.Bytes` (aegis's untrusted-input type):
   every `initFromMemory` and `decodeGV4`/`decodeGV4Stream`; wrap a
   slice with `.init(bytes)`. `IArchive.init` takes a `zozz.InputStream`.

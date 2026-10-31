@@ -891,28 +891,18 @@ test "an empty raw skeleton has no tree to write and is refused" {
 test "the offline types round-trip through a file, and through its bytes" {
     var failure: zozz.Failure = .{};
     const gpa = std.testing.allocator;
+    const io = std.testing.io;
     var tmp = std.testing.tmpDir(.{});
     defer tmp.cleanup();
-
-    // A path relative to the process cwd, which is what the C side's fopen
-    // resolves against too: std.testing.tmpDir puts its directory under
-    // .zig-cache/tmp of that same cwd, so both halves of the round trip name
-    // one file without either needing an absolute path.
-    const path = try gpa.printSentinel(
-        ".zig-cache/tmp/{s}/clip.ozz",
-        .{tmp.sub_path},
-        0,
-    );
-    defer gpa.free(path);
 
     var raw = try zozz.RawAnimation.init(1, 2.0, "on_disk", &failure);
     defer raw.deinit();
     try raw.pushTranslation(0, 0.0, .{ 7, 8, 9 }, &failure);
     try raw.pushTranslation(0, 2.0, .{ 1, 0, 0 }, &failure);
-    try zozz.saveRawAnimationToFile(raw, path, &failure);
+    try zozz.saveRawAnimationToFile(raw, io, tmp.dir, "clip.ozz", &failure);
 
     {
-        var loaded = try zozz.RawAnimation.initFromFile(path, &failure);
+        var loaded = try zozz.RawAnimation.initFromFile(gpa, io, tmp.dir, "clip.ozz", .fromRaw(1 << 20), &failure);
         defer loaded.deinit();
         try std.testing.expectEqualStrings("on_disk", loaded.name());
         try std.testing.expectEqual(@as(f32, 2.0), loaded.duration());
@@ -925,31 +915,26 @@ test "the offline types round-trip through a file, and through its bytes" {
         );
     }
 
-    // The memory loader must read the same bytes to the same clip: the file
-    // path and the memory image are two doors onto one parser, and a
-    // consumer that mmaps its assets uses the second.
-    const bytes = try tmp.dir.readFileAlloc(std.testing.io, "clip.ozz", gpa, .limited(1 << 20));
+    // The memory loader reads the same bytes to the same clip: a file load
+    // reads the image and parses it as this one does, and a consumer that
+    // maps its assets calls this one directly.
+    const bytes = try tmp.dir.readFileAlloc(io, "clip.ozz", gpa, .limited(1 << 20));
     defer gpa.free(bytes);
     var from_memory = try zozz.RawAnimation.initFromMemory(.init(bytes), &failure);
     defer from_memory.deinit();
     try std.testing.expectEqualStrings("on_disk", from_memory.name());
     try std.testing.expectEqual(@as(u32, 2), from_memory.numTranslations(0));
 
-    // A file that is not an archive at all, and one that is the wrong type.
-    try tmp.dir.writeFile(std.testing.io, .{ .sub_path = "junk.ozz", .data = "not an ozz archive" });
-    const junk = try gpa.printSentinel(
-        ".zig-cache/tmp/{s}/junk.ozz",
-        .{tmp.sub_path},
-        0,
-    );
-    defer gpa.free(junk);
-    try std.testing.expectError(error.BadFormat, zozz.RawAnimation.initFromFile(junk, &failure));
-    try std.testing.expectEqualSlices(zozz.Frame, &.{.{ .call = .raw_animation_load_file, .result = .bad_format }}, failure.frames());
+    // A file that is not an archive at all, and one that is the wrong type:
+    // the content is refused by the memory parse a file load hands it to.
+    try tmp.dir.writeFile(io, .{ .sub_path = "junk.ozz", .data = "not an ozz archive" });
+    try std.testing.expectError(error.BadFormat, zozz.RawAnimation.initFromFile(gpa, io, tmp.dir, "junk.ozz", .fromRaw(1 << 20), &failure));
+    try std.testing.expectEqualSlices(zozz.Frame, &.{.{ .call = .raw_animation_load_memory, .result = .bad_format }}, failure.frames());
     failure.reset();
-    try std.testing.expectError(error.BadFormat, zozz.RawSkeleton.initFromFile(path, &failure));
-    try std.testing.expectEqualSlices(zozz.Frame, &.{.{ .call = .raw_skeleton_load_file, .result = .bad_format }}, failure.frames());
+    try std.testing.expectError(error.BadFormat, zozz.RawSkeleton.initFromFile(gpa, io, tmp.dir, "clip.ozz", .fromRaw(1 << 20), &failure));
+    try std.testing.expectEqualSlices(zozz.Frame, &.{.{ .call = .raw_skeleton_load_memory, .result = .bad_format }}, failure.frames());
     failure.reset();
-    try std.testing.expectError(error.FileNotFound, zozz.RawAnimation.initFromFile("no_such_file.ozz", &failure));
+    try std.testing.expectError(error.FileNotFound, zozz.RawAnimation.initFromFile(gpa, io, tmp.dir, "no_such_file.ozz", .fromRaw(1 << 20), &failure));
     try std.testing.expectEqualSlices(zozz.Frame, &.{.{ .call = .raw_animation_load_file, .result = .file_not_found }}, failure.frames());
 }
 

@@ -16,6 +16,7 @@ const std = @import("std");
 const aegis = @import("aegis");
 const c = @import("c.zig");
 const err = @import("error.zig");
+const file = @import("file.zig");
 const math = @import("math.zig");
 const skeleton_mod = @import("skeleton.zig");
 const animation_mod = @import("animation.zig");
@@ -114,16 +115,15 @@ pub const RawSkeleton = struct {
     }
 
     /// Loads a raw skeleton from a `.ozz` archive written by
-    /// `archive.saveRawSkeletonToFile` or `OArchive.saveRawSkeleton`.
-    ///
-    /// Joints come back in DEPTH-FIRST order, not the order they were
-    /// authored in — the same reindexing `build` performs. Names, parents
-    /// and rest transforms all survive. Pinned by test.
-    pub fn initFromFile(path: [*:0]const u8, failure: *err.Failure) err.Error!RawSkeleton {
-        var handle: *c.RawSkeleton = undefined;
-        var refusal: c.Refusal = .{};
-        try err.checkLoad(failure, .raw_skeleton_load_file, c.zozzRawSkeletonLoadFile(path, &handle, &refusal), refusal);
-        return .{ .handle = handle };
+    /// `archive.saveRawSkeletonToFile` or `OArchive.saveRawSkeleton`, read as
+    /// `Skeleton.initFromFile` reads. Joints come back in DEPTH-FIRST order,
+    /// not the order they were authored in — the same reindexing `build`
+    /// performs. Names, parents and rest transforms all survive. Pinned by
+    /// test.
+    pub fn initFromFile(gpa: std.mem.Allocator, io: std.Io, dir: std.Io.Dir, sub_path: []const u8, limit: file.Limit, failure: *err.Failure) err.Error!RawSkeleton {
+        const image = try file.readImage(gpa, io, dir, sub_path, limit, .raw_skeleton_load_file, failure);
+        defer gpa.free(image);
+        return initFromMemory(.init(image), failure);
     }
 
     /// The same, from a memory image. The bytes are read during the call only
@@ -203,12 +203,12 @@ pub const RawAnimation = struct {
     }
 
     /// Loads a raw animation from a `.ozz` archive written by
-    /// `archive.saveRawAnimationToFile` or `OArchive.saveRawAnimation`.
-    pub fn initFromFile(path: [*:0]const u8, failure: *err.Failure) err.Error!RawAnimation {
-        var handle: *c.RawAnimation = undefined;
-        var refusal: c.Refusal = .{};
-        try err.checkLoad(failure, .raw_animation_load_file, c.zozzRawAnimationLoadFile(path, &handle, &refusal), refusal);
-        return .{ .handle = handle };
+    /// `archive.saveRawAnimationToFile` or `OArchive.saveRawAnimation`, read
+    /// as `Skeleton.initFromFile` reads.
+    pub fn initFromFile(gpa: std.mem.Allocator, io: std.Io, dir: std.Io.Dir, sub_path: []const u8, limit: file.Limit, failure: *err.Failure) err.Error!RawAnimation {
+        const image = try file.readImage(gpa, io, dir, sub_path, limit, .raw_animation_load_file, failure);
+        defer gpa.free(image);
+        return initFromMemory(.init(image), failure);
     }
 
     /// The same, from a memory image. The bytes are read during the call only

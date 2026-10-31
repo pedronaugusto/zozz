@@ -280,6 +280,17 @@ the end and back, as `ozz::io::File::Size` does, since every count is checked
 against the bytes left; and a `zozzIArchive` that refused stays refused, its
 stream left inside the refused object.
 
+A file load in the Zig API is a read and then a memory load: `src/file.zig`
+reads the file whole through the `std.Io` the caller gives, at most the
+caller's limit, and the loader parses those bytes as `initFromMemory` does. So
+there is one parse path, the fault-injecting `Io` of the tests reaches every
+file call, and no C stdio sits under the Zig API. A refusal of the file itself
+(missing, unreadable, or over the limit, with a `File.length` record) names
+the `*_load_file` call; a refusal of its content names `*_load_memory`. A save
+writes through the same `Io`, beside its destination, and renames over it once
+synced. The C ABI's `*LoadFile` and `*SaveFile` stay for C hosts, opening
+`path` through `ozz::io::File`.
+
 NaN ratios are refused, and every entry point taking SoA memory or a matrix
 buffer checks the 16-byte boundary and returns
 `ZOZZ_RESULT_INVALID_ARGUMENT`, rather than letting ozz fault on an aligned

@@ -117,6 +117,17 @@ typedef struct ZozzRefusal {
 } ZozzRefusal;
 
 //===----------------------------------------------------------------------===//
+// File entry points
+//
+// Every *LoadFile and *SaveFile is a C host's: it opens `path` through
+// ozz::io::File, the C runtime's fopen underneath, so `path` is a native path
+// in the platform's encoding and the file's I/O runs outside any I/O seam the
+// host gives. The Zig API calls none of them: its loaders read the file
+// through the std.Io they are given and hand ozz the bytes as a memory load,
+// and its savers write through that std.Io.
+//===----------------------------------------------------------------------===//
+
+//===----------------------------------------------------------------------===//
 // Allocator seam
 //
 // ozz routes every runtime allocation through one global allocator, and zozz
