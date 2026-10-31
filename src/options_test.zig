@@ -57,6 +57,21 @@ fn silencingStdout(comptime Result: type, comptime func: anytype, args: anytype)
     return @call(.auto, func, args);
 }
 
+/// A handle made while ozz is silenced, as any call or thread can make one.
+fn openWhileSilenced() c_int {
+    return crt.open(crt.null_device, write_only);
+}
+
+test "the runner's protocol survives a handle made while ozz is silenced" {
+    // Known red on Windows, preflight-complete 92438516: preflight 0.18.5
+    // leaves the CRT's fd 1 on the runner's protocol pipe, so the redirect
+    // closes it, this handle takes its place and the runner's next result
+    // write fails. The re-pin to a preflight that fixes it drops this skip.
+    if (@import("builtin").target.os.tag == .windows) return error.SkipZigTest;
+    const handle = silencingStdout(c_int, openWhileSilenced, .{});
+    if (handle >= 0) _ = crt.close(handle);
+}
+
 test "options: register int/float/bool/string, parse a command line, read values" {
     var failure: zozz.Failure = .{};
     if (!zozz.options.options) return error.SkipZigTest;
