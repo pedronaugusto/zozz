@@ -16,6 +16,7 @@
 const std = @import("std");
 const zozz = @import("zozz.zig");
 const err = @import("error.zig");
+const quiet = @import("testing/quiet.zig");
 const test_options = @import("test_options");
 
 //=============================================================================
@@ -396,6 +397,8 @@ test "the full pipeline runs against .ozz files on disk" {
 }
 
 test "a truncated archive is refused rather than trusted" {
+    const log: quiet.SilentLog = .begin();
+    defer log.end();
     var failure: zozz.Failure = .{};
     // A VALID archive cut short: the tag passes, then reads run past the end.
     // ozz ignores short reads under NDEBUG, so a bogus length is trusted.
@@ -795,6 +798,8 @@ fn expectRecord(frame: zozz.Frame, call: err.Call, result: zozz.c.Result, what: 
 /// frame carrying the record named. An object that loads is not freed: the
 /// test has failed, and the leak report says so a second time.
 fn expectLoadRefused(comptime T: type, bytes: []const u8, call: err.Call, e: err.Error, what: []const u8, value: u64, limit: u64) !void {
+    const log: quiet.SilentLog = .begin();
+    defer log.end();
     var failure: zozz.Failure = .{};
     if (T.initFromMemory(.init(bytes), &failure)) |_| {
         return error.TestUnexpectedResult;

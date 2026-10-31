@@ -2,6 +2,7 @@
 
 const std = @import("std");
 const zozz = @import("zozz.zig");
+const quiet = @import("testing/quiet.zig");
 
 //=============================================================================
 // Silencing ozz's Parser
@@ -43,6 +44,8 @@ const write_only: c_int = 1;
 const stdout_fd: c_int = 1;
 
 fn silencingStdout(comptime Result: type, comptime func: anytype, args: anytype) Result {
+    const expecting: quiet.Expecting = .begin();
+    defer expecting.end();
     const devnull = crt.open(crt.null_device, write_only);
     if (devnull < 0) return @call(.auto, func, args);
     defer _ = crt.close(devnull);
@@ -190,6 +193,9 @@ test "options: register/unregister failures are errors, not crashes" {
     defer parser.deinit();
     var opt = try zozz.BoolOption.init("flag", null, false, false, &failure);
     defer opt.deinit();
+    // ozz names a refused registration on std::cerr.
+    const expecting: quiet.Expecting = .begin();
+    defer expecting.end();
 
     // Not registered anywhere yet.
     try std.testing.expectError(zozz.Error.InvalidArgument, parser.unregister(opt, &failure));

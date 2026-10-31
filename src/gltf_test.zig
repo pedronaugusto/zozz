@@ -6,6 +6,7 @@
 
 const std = @import("std");
 const zozz = @import("zozz.zig");
+const quiet = @import("testing/quiet.zig");
 
 const fixture_path = "tests/data/two_joint.gltf";
 
@@ -68,6 +69,8 @@ fn hostInterface() zozz.ImporterInterface {
 test "gltf: import a skeleton and an animation from a fixture file" {
     var failure: zozz.Failure = .{};
     if (!zozz.options.gltf) return error.SkipZigTest;
+    const log: quiet.SilentLog = .begin();
+    defer log.end();
 
     var importer = try zozz.Importer.initFromGltf(fixture_path, &failure);
     defer importer.deinit();
@@ -195,6 +198,8 @@ test "gltf: the CLI driver is always unsupported (jsoncpp is not vendored)" {
     const argv = [_][*:0]const u8{"prog"};
 
     if (zozz.options.gltf) {
+        const log: quiet.SilentLog = .begin();
+        defer log.end();
         var importer = try zozz.Importer.initFromGltf(fixture_path, &failure);
         defer importer.deinit();
         try std.testing.expectError(zozz.Error.Unsupported, importer.run(&argv, &failure));

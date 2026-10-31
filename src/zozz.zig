@@ -286,6 +286,7 @@ test {
     // Only reachable in a test build, where the fixture library is linked.
     _ = @import("integration_test.zig");
     _ = @import("testing/fuzz.zig");
+    _ = @import("testing/quiet.zig");
     _ = @import("offline.zig");
     _ = @import("optimizer.zig");
     _ = @import("rawtrack.zig");

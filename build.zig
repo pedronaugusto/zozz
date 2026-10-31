@@ -644,6 +644,7 @@ fn fixtureLibrary(b: *std.Build, p: *std.Build, target: std.Build.ResolvedTarget
     fixture.root_module.addCSourceFile(.{ .file = p.path("tests/fixture.cpp"), .flags = cxxFlags(b, target, options, false) });
     fixture.root_module.addCSourceFile(.{ .file = p.path("tests/allocation.cpp"), .flags = cxxFlags(b, target, options, false) });
     fixture.root_module.addCSourceFile(.{ .file = p.path("tests/reload.cpp"), .flags = cxxFlags(b, target, options, false) });
+    fixture.root_module.addCSourceFile(.{ .file = p.path("tests/quiet.cpp"), .flags = cxxFlags(b, target, options, false) });
     fixture.root_module.addCSourceFile(.{ .file = p.path("tests/mathref.cpp"), .flags = cxxFlags(b, target, options, true) });
     fixture.root_module.sanitize_c = if (options.sanitize_c) .full else .off;
     fixture.root_module.linkLibrary(lib);

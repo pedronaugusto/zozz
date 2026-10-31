@@ -9,6 +9,7 @@
 const std = @import("std");
 const shakedown = @import("shakedown");
 const zozz = @import("../zozz.zig");
+const quiet = @import("quiet.zig");
 
 extern fn zozzFixtureSkeleton(out_data: *?*anyopaque, out_size: *usize) zozz.c.Result;
 extern fn zozzFixtureAnimation(out_data: *?*anyopaque, out_size: *usize) zozz.c.Result;
@@ -37,10 +38,12 @@ const Context = struct {
 };
 
 /// One test's quarantine, which zozz and its properties both allocate from,
-/// and the scratch directory each case is written to for a file load.
+/// the scratch directory each case is written to for a file load, and ozz's
+/// log silenced.
 /// Begun in place: the allocator zozz holds points into it.
 const Guarded = struct {
     quarantine: shakedown.alloc.Quarantine,
+    log: quiet.SilentLog,
     files: std.testing.TmpDir,
     path_buffer: [64]u8,
     path: [:0]const u8,
@@ -54,9 +57,12 @@ const Guarded = struct {
         g.path = try std.mem.printSentinel(&g.path_buffer, ".zig-cache/tmp/{s}/case.ozz", .{g.files.sub_path}, 0);
         var failure: zozz.Failure = .{};
         try zozz.setAllocator(g.quarantine.allocator(), &failure);
+        // Most cases are refused: each refusal is asserted by its frame.
+        g.log = .begin();
     }
 
     fn end(g: *Guarded) void {
+        g.log.end();
         var failure: zozz.Failure = .{};
         zozz.resetAllocator(&failure) catch |e| std.debug.panic("zozz: {s}", .{@errorName(e)});
         g.files.cleanup();
