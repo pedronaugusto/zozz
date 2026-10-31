@@ -90,6 +90,10 @@ could not express, so a port has the reason and not only the diff.
   block ozz allocated for it, on a seek to its last iframe: ozz's group-varint
   decoder loads four bytes per value and only a name after the entries
   covered them (`libs/patches/ozz-gv4-padding.patch`).
+- Saving or loading an animation of no tracks, which ozz builds from a raw
+  animation of none, accessed a member through a null pointer: a channel of
+  no keys holds an empty span and its keys were read from the first key's
+  address (`libs/patches/ozz-key-arrays-of-none.patch`).
 - `decodeGV4` and `decodeGV4Stream` read past the bytes they were given:
   they checked only the minimum size, then let ozz's decoder read the length
   a group's first byte claims plus the three bytes it loads past every group,

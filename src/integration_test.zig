@@ -534,6 +534,35 @@ test "an animation written through the archive and read back compares equal to t
     }
 }
 
+test "an animation of no tracks, as ozz builds one from a raw archive, saves and loads back" {
+    var failure: zozz.Failure = .{};
+    const gpa = std.testing.allocator;
+    try zozz.setAllocator(gpa, &failure);
+    defer zozz.resetAllocator(&failure) catch |e| std.debug.panic("zozz: {s}", .{@errorName(e)});
+    // `RawAnimation.init` refuses no tracks; ozz's builder takes them.
+    var source: archives.Writer = try .init(gpa, "ozz-raw_animation", 3);
+    defer source.deinit();
+    try source.int(f32, 1);
+    try source.int(u32, 0);
+    try source.int(u32, 0);
+    var raw = try zozz.RawAnimation.initFromMemory(.init(source.bytes.items), &failure);
+    defer raw.deinit();
+    var empty = try raw.build(0, &failure);
+    defer empty.deinit();
+
+    var buffer: WriteBuffer = .{ .gpa = gpa };
+    defer buffer.deinit();
+    const bridge = buffer.stream();
+    var archive = try zozz.OArchive.init(&bridge, zozz.nativeEndianness(), &failure);
+    try archive.saveAnimation(empty, &failure);
+    archive.deinit();
+
+    var loaded = try zozz.Animation.initFromMemory(.init(buffer.list.items), &failure);
+    defer loaded.deinit();
+    try std.testing.expectEqual(@as(u32, 0), loaded.numTracks());
+    try std.testing.expectEqual(@as(f32, 1.0), loaded.duration());
+}
+
 //=============================================================================
 // The refusal record
 //=============================================================================

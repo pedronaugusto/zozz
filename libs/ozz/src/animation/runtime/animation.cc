@@ -229,12 +229,14 @@ template <>
 struct Extern<animation::internal::Float3Key> {
   static void Save(OArchive& _archive,
                    const animation::internal::Float3Key* _keys, size_t _count) {
+    if (_count == 0) return;  // An empty span holds null: name no member.
     _archive << ozz::io::MakeArray(_keys->values,
                                    OZZ_ARRAY_SIZE(_keys->values) * _count);
   }
   static void Load(IArchive& _archive, animation::internal::Float3Key* _keys,
                    size_t _count, uint32_t _version) {
     (void)_version;
+    if (_count == 0) return;  // An empty span holds null: name no member.
     _archive >> ozz::io::MakeArray(_keys->values,
                                    OZZ_ARRAY_SIZE(_keys->values) * _count);
   }
@@ -245,6 +247,7 @@ struct Extern<animation::internal::QuaternionKey> {
   static void Save(OArchive& _archive,
                    const animation::internal::QuaternionKey* _keys,
                    size_t _count) {
+    if (_count == 0) return;  // An empty span holds null: name no member.
     _archive << ozz::io::MakeArray(_keys->values,
                                    OZZ_ARRAY_SIZE(_keys->values) * _count);
   }
@@ -252,6 +255,7 @@ struct Extern<animation::internal::QuaternionKey> {
                    animation::internal::QuaternionKey* _keys, size_t _count,
                    uint32_t _version) {
     (void)_version;
+    if (_count == 0) return;  // An empty span holds null: name no member.
     _archive >> ozz::io::MakeArray(_keys->values,
                                    OZZ_ARRAY_SIZE(_keys->values) * _count);
   }

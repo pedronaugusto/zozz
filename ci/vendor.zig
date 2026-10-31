@@ -24,6 +24,7 @@ const patches = [_][]const u8{
     "ozz-checked-allocation.patch",
     "ozz-archive-invariants.patch",
     "ozz-gv4-padding.patch",
+    "ozz-key-arrays-of-none.patch",
 };
 /// Where a patch's file paths start.
 const patch_root = "libs/ozz/";
