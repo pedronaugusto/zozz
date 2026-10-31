@@ -85,6 +85,13 @@ bool Animation::Allocate(const AllocateParams& _params) {
           ? sizeof(uint8_t)
           : sizeof(uint16_t);
   const size_t sizeof_previous = sizeof(uint16_t);
+  // DecodeGV4 loads 4 bytes for every value, so it reads up to 3 bytes past
+  // the last entry, which the name used to cover only when there was one.
+  const size_t kGV4Overread = 3;
+  const bool has_iframes = _params.translation_iframes.entries +
+                               _params.rotation_iframes.entries +
+                               _params.scale_iframes.entries !=
+                           0;
   const size_t buffer_size =
       (_params.name_len > 0 ? _params.name_len + 1 : 0) +
       _params.timepoints * sizeof(float) +
@@ -99,7 +106,8 @@ bool Animation::Allocate(const AllocateParams& _params) {
       _params.rotation_iframes.entries * sizeof(byte) +
       _params.rotation_iframes.offsets * sizeof(uint32_t) +
       _params.scale_iframes.entries * sizeof(byte) +
-      _params.scale_iframes.offsets * sizeof(uint32_t);
+      _params.scale_iframes.offsets * sizeof(uint32_t) +
+      (has_iframes ? kGV4Overread : 0);
 
   // Allocate whole buffer
   auto* allocator = memory::default_allocator();
@@ -154,6 +162,9 @@ bool Animation::Allocate(const AllocateParams& _params) {
   name_ = _params.name_len > 0
               ? fill_span<char>(buffer, _params.name_len + 1).data()
               : nullptr;
+  if (has_iframes) {
+    fill_span<byte>(buffer, kGV4Overread);
+  }
 
   assert(buffer.empty() && "Whole buffer should be consumed");
   return true;

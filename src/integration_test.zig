@@ -1032,15 +1032,22 @@ fn sampleClip(loaded: zozz.Animation, a: std.mem.Allocator) !void {
 /// Two tracks keyed every quarter second over four, built with an iframe
 /// every half second, as the archive ozz saves.
 fn iframeClip(gpa: std.mem.Allocator) ![]u8 {
+    return iframeClipOf(gpa, 17);
+}
+
+/// `iframeClip` with `keys` translation keys per track, evenly over four
+/// seconds.
+fn iframeClipOf(gpa: std.mem.Allocator, keys: usize) ![]u8 {
     var failure: zozz.Failure = .{};
     try zozz.setAllocator(gpa, &failure);
     defer zozz.resetAllocator(&failure) catch |e| std.debug.panic("zozz: {s}", .{@errorName(e)});
     var raw = try zozz.RawAnimation.init(2, 4.0, null, &failure);
     defer raw.deinit();
-    for (0..17) |k| {
+    for (0..keys) |k| {
         for (0..2) |track| {
             const value: f32 = @floatFromInt((k * 7 + track * 3) % 11);
-            try raw.pushTranslation(@intCast(track), @as(f32, @floatFromInt(k)) * 0.25, .{ value, 0, 0 }, &failure);
+            const time = @as(f32, @floatFromInt(k)) * 4.0 / @as(f32, @floatFromInt(keys - 1));
+            try raw.pushTranslation(@intCast(track), time, .{ value, 0, 0 }, &failure);
         }
     }
     var clip = try raw.build(0.5, &failure);
@@ -1289,4 +1296,22 @@ test "the archives the tests above break load clean, and their jobs run under th
     const blob = try FixtureBlob.init(zozzFixtureAnimation);
     defer blob.deinit();
     try expectRunsClean(zozz.Animation, blob.bytes, sampleClip);
+}
+
+test "an unnamed clip whose iframe entries end its block samples without reading past them" {
+    const gpa = std.testing.allocator;
+    // ozz allocates one block for an animation's arrays, the archive's arrays
+    // byte for byte without the three intervals, the iframe entries last when
+    // the clip has no name; the bridge's header keeps a block a multiple of 8
+    // flush with the guard page. The first such clip from 17 keys up: one SoA
+    // group per iframe, each key index one byte, which DecodeGV4 loads as 4.
+    var keys: usize = 17;
+    const clip = while (keys < 17 + 8) : (keys += 1) {
+        const bytes = try iframeClipOf(gpa, keys);
+        const layout = try archives.AnimationLayout.parse(bytes);
+        if ((bytes.len - layout.timepoints.at - 3 * 4) % 8 == 0) break bytes;
+        gpa.free(bytes);
+    } else return error.TestUnexpectedResult;
+    defer gpa.free(clip);
+    try expectRunsClean(zozz.Animation, clip, sampleClip);
 }

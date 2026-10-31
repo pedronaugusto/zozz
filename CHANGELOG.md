@@ -86,6 +86,10 @@ could not express, so a port has the reason and not only the diff.
   `BadFormat` now, its record naming the field (`Skeleton.joint_parents`,
   `Track.ratios`, `Animation.translations`...) and where it broke
   (`libs/patches/ozz-archive-invariants.patch`).
+- Sampling an unnamed clip with iframes read up to three bytes past the
+  block ozz allocated for it, on a seek to its last iframe: ozz's group-varint
+  decoder loads four bytes per value and only a name after the entries
+  covered them (`libs/patches/ozz-gv4-padding.patch`).
 - A caller's `u32` or `usize` past what the C boundary's `int` carries
   (`SamplingContext.init(1 << 31)`, a joint, track or vertex count) was
   `@intCast`, a panic in a safe build and undefined in ReleaseFast; it is
