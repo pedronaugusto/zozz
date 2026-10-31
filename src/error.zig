@@ -539,8 +539,9 @@ test "every frame a checked C call pushes names that call" {
             }
         }
     }
-    // A scan that finds nothing passes every check above: 197 calls today.
-    try std.testing.expect(checked > 180);
+    // A scan that finds nothing passes every check above, and a floor lets
+    // calls vanish under it: the count is the API's, changed on purpose.
+    try std.testing.expectEqual(@as(usize, 197), checked);
     try std.testing.expect(loads > 0);
 }
 
