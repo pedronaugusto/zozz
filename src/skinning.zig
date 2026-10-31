@@ -1,7 +1,6 @@
 //! Matrix-palette skinning: transforming vertex positions, and optionally
 //! normals and tangents, by a per-vertex weighted blend of joint matrices.
 
-const std = @import("std");
 const c = @import("c.zig");
 const err = @import("error.zig");
 const math = @import("math.zig");

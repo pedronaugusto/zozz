@@ -1,0 +1,15 @@
+# expect: zozz ABI drift:
+--- a/src/c.zig
++++ b/src/c.zig
+@@ -75,9 +75,9 @@
+ //=============================================================================
+ 
+ pub const Transform = extern struct {
++    scale: [3]f32,
++    rotation: [4]f32,
+     translation: [3]f32,
+-    rotation: [4]f32,
+-    scale: [3]f32,
+ };
+ 
+ pub const Float4x4 = extern struct {

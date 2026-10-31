@@ -5,7 +5,6 @@
 //! re-timing (`.extractTimePoints`) live on `RawAnimation` itself, in
 //! `offline.zig` — see there.
 
-const std = @import("std");
 const c = @import("c.zig");
 const err = @import("error.zig");
 const math = @import("math.zig");

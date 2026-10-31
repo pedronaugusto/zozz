@@ -1,6 +1,5 @@
 //! Sampling a clip into a pose, and flattening a pose to model space.
 
-const std = @import("std");
 const c = @import("c.zig");
 const err = @import("error.zig");
 const math = @import("math.zig");

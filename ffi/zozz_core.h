@@ -57,7 +57,7 @@ ZOZZ_API uint32_t zozzOzzVersion(void);
 //===----------------------------------------------------------------------===//
 
 // Every enumerator carries its type's name (ZOZZ_RESULT_<WHAT>, not
-// ZOZZ_<WHAT>) so abi_check.zig's cross-check can derive it from `ZOZZ_` +
+// ZOZZ_<WHAT>) so abi_test.zig's cross-check can derive it from `ZOZZ_` +
 // TYPE + `_` + FIELD — a C enum reaches Zig with no other record of its
 // members. No enumerator may be negative, here or later: clang/gcc vs. MSVC
 // disagree on the underlying type otherwise. A negative sentinel goes in a
@@ -213,7 +213,7 @@ typedef struct ZozzTransform {
 // in an included header, a later MEMBER carrying `_Alignas(16)` reads back as
 // align 8. mingw's corecrt.h does exactly that around <stdint.h>, so on
 // x86_64-windows-gnu a member-aligned type reads as align 8 through @cImport
-// while the compiled library lays it out at 16, and ../src/abi_check.zig fires
+// while the compiled library lays it out at 16, and ../src/abi_test.zig fires
 // on a difference no object file has. Alignment on the TYPE survives the
 // leaked pack on all four targets [measured 2026-08-30: windows-gnu,
 // windows-msvc, linux-gnu, macos]. It is also the truer statement.

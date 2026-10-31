@@ -302,7 +302,7 @@ test {
     // Test-only: this one @cImport-s the C header. Reached from a test block
     // and nowhere else, so a normal build never analyses it and the shipped
     // module stays translate-c-free.
-    _ = @import("abi_check.zig");
+    _ = @import("abi_test.zig");
 }
 
 /// The type each `ZozzAbiLayout` field group describes. A field whose name
@@ -340,7 +340,7 @@ fn abiLayoutExpected(comptime field: []const u8) u32 {
 }
 
 test "the C library agrees with the extern declarations in c.zig" {
-    // What abi_check.zig cannot see, and why both checks exist: abi_check.zig
+    // What abi_test.zig cannot see, and why both checks exist: abi_test.zig
     // compares c.zig against ffi/zozz.h -- two SOURCE files -- saying nothing
     // about the library actually linked, a binary compiled at some other time,
     // possibly from a different header. This test asks the compiled translation
@@ -391,7 +391,7 @@ test "version reporting is wired up" {
     // LIBRARY reports through zozzVersion() — to the same fact, instead of to
     // a literal here that a release bump would leave behind.
     var buf: [32]u8 = undefined;
-    const reported = try std.fmt.bufPrint(&buf, "{f}", .{version()});
+    const reported = try std.mem.print(&buf, "{f}", .{version()});
     try std.testing.expectEqualStrings(options.version, reported);
 
     // The vendored ozz, pinned in UPSTREAM.md. Asserting the minor alone let a

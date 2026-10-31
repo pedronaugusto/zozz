@@ -1,17 +1,15 @@
 //! Hand-written declarations mirroring `ffi/zozz.h`, written by hand rather
 //! than produced by `@cImport` so the package stays translate-c-free. Two
-//! checks close the resulting drift risk, on different axes: `abi_check.zig`
+//! checks close the resulting drift risk, on different axes: `abi_test.zig`
 //! compares this file against the real header at comptime (every type,
 //! signature, enumerator, constant, via reflection, in a test only); and
 //! `zozzAbiLayout` (asserted at the bottom of `zozz.zig`) compares this file
 //! against the COMPILED LIBRARY instead, since header and library can disagree
-//! when built with different macros. Names are load-bearing: `abi_check.zig`
+//! when built with different macros. Names are load-bearing: `abi_test.zig`
 //! pairs the two sides by computing the C spelling from the Zig one — type
 //! `Foo` -> `ZozzFoo`; function `zozzFoo` -> itself; constant `foo_bar` ->
 //! `ZOZZ_FOO_BAR`; enum `Foo` field `bar` -> `ZOZZ_FOO_BAR`. A declaration that
 //! breaks the convention fails the build.
-
-const std = @import("std");
 
 //=============================================================================
 // Results
@@ -203,7 +201,7 @@ pub const BuildFeatures = extern struct {
 /// The parent index a root joint reports, and the one to pass to
 /// `zozzRawSkeletonAddJoint` for a root. Mirrors `ZOZZ_NO_PARENT`. It lives
 /// here, not beside the skeleton wrapper, because this is the file
-/// `abi_check.zig` sweeps — a constant declared anywhere else is a second,
+/// `abi_test.zig` sweeps — a constant declared anywhere else is a second,
 /// uncompared literal. `i16` because that is what
 /// `zozzSkeletonJointParent` returns.
 pub const no_parent: i16 = -1;
@@ -325,40 +323,72 @@ pub const RawQuaternionTrack = opaque {};
 // Entry points
 //=============================================================================
 
+// aegis: boundary: ffi/zozz.h's function; src/abi_test.zig holds this signature to the header at compile time
 pub extern fn zozzVersion() u32;
+// aegis: boundary: ffi/zozz.h's function; src/abi_test.zig holds this signature to the header at compile time
 pub extern fn zozzOzzVersion() u32;
+// aegis: boundary: ffi/zozz.h's function; src/abi_test.zig holds this signature to the header at compile time
 pub extern fn zozzResultName(result: Result) [*:0]const u8;
+// aegis: boundary: ffi/zozz.h's function; src/abi_test.zig holds this signature to the header at compile time
 pub extern fn zozzSetAllocator(alloc: ?*const Allocator) Result;
+// aegis: boundary: ffi/zozz.h's function; src/abi_test.zig holds this signature to the header at compile time
 pub extern fn zozzGetAllocator(out: *Allocator, installed: *bool) Result;
+// aegis: boundary: ffi/zozz.h's function; src/abi_test.zig holds this signature to the header at compile time
 pub extern fn zozzAllocatorLiveBlocks() usize;
+// aegis: boundary: ffi/zozz.h's function; src/abi_test.zig holds this signature to the header at compile time
 pub extern fn zozzAbiLayout(out: *AbiLayout) void;
+// aegis: boundary: ffi/zozz.h's function; src/abi_test.zig holds this signature to the header at compile time
 pub extern fn zozzBuildFeatures(out: *BuildFeatures) void;
 
+// aegis: boundary: ffi/zozz.h's function; src/abi_test.zig holds this signature to the header at compile time
 pub extern fn zozzSetLogLevel(level: LogLevel) Result;
+// aegis: boundary: ffi/zozz.h's function; src/abi_test.zig holds this signature to the header at compile time
 pub extern fn zozzGetLogLevel() LogLevel;
 
+// aegis: boundary: ffi/zozz.h's function; src/abi_test.zig holds this signature to the header at compile time
 pub extern fn zozzSkeletonLoadFile(path: [*:0]const u8, out: **Skeleton) Result;
+// aegis: boundary: ffi/zozz.h's function; src/abi_test.zig holds this signature to the header at compile time
 pub extern fn zozzSkeletonLoadMemory(data: [*]const u8, size: usize, out: **Skeleton) Result;
+// aegis: boundary: ffi/zozz.h's function; src/abi_test.zig holds this signature to the header at compile time
 pub extern fn zozzSkeletonDestroy(skeleton: ?*Skeleton) void;
+// aegis: boundary: ffi/zozz.h's function; src/abi_test.zig holds this signature to the header at compile time
 pub extern fn zozzSkeletonNumJoints(skeleton: ?*const Skeleton) c_int;
+// aegis: boundary: ffi/zozz.h's function; src/abi_test.zig holds this signature to the header at compile time
 pub extern fn zozzSkeletonNumSoaJoints(skeleton: ?*const Skeleton) c_int;
+// aegis: boundary: ffi/zozz.h's function; src/abi_test.zig holds this signature to the header at compile time
 pub extern fn zozzSkeletonJointName(skeleton: ?*const Skeleton, joint: c_int) ?[*:0]const u8;
+// aegis: boundary: ffi/zozz.h's function; src/abi_test.zig holds this signature to the header at compile time
 pub extern fn zozzSkeletonJointParent(skeleton: ?*const Skeleton, joint: c_int) i16;
+// aegis: boundary: ffi/zozz.h's function; src/abi_test.zig holds this signature to the header at compile time
 pub extern fn zozzSkeletonJointParents(skeleton: ?*const Skeleton, out_count: *usize) ?[*]const i16;
+// aegis: boundary: ffi/zozz.h's function; src/abi_test.zig holds this signature to the header at compile time
 pub extern fn zozzSkeletonJointNames(skeleton: ?*const Skeleton, out_count: *usize) ?[*]const [*:0]const u8;
+// aegis: boundary: ffi/zozz.h's function; src/abi_test.zig holds this signature to the header at compile time
 pub extern fn zozzSkeletonJointRestPoses(skeleton: ?*const Skeleton, out_count: *usize) ?[*]const SoaTransform;
+// aegis: boundary: ffi/zozz.h's function; src/abi_test.zig holds this signature to the header at compile time
 pub extern fn zozzSkeletonRestPose(skeleton: ?*const Skeleton, out: [*]Transform, count: usize) Result;
+// aegis: boundary: ffi/zozz.h's function; src/abi_test.zig holds this signature to the header at compile time
 pub extern fn zozzSkeletonRestPoseSoa(skeleton: ?*const Skeleton, out: [*]SoaTransform, blocks: usize) Result;
 
+// aegis: boundary: ffi/zozz.h's function; src/abi_test.zig holds this signature to the header at compile time
 pub extern fn zozzAnimationLoadFile(path: [*:0]const u8, out: **Animation) Result;
+// aegis: boundary: ffi/zozz.h's function; src/abi_test.zig holds this signature to the header at compile time
 pub extern fn zozzAnimationLoadMemory(data: [*]const u8, size: usize, out: **Animation) Result;
+// aegis: boundary: ffi/zozz.h's function; src/abi_test.zig holds this signature to the header at compile time
 pub extern fn zozzAnimationDestroy(animation: ?*Animation) void;
+// aegis: boundary: ffi/zozz.h's function; src/abi_test.zig holds this signature to the header at compile time
 pub extern fn zozzAnimationDuration(animation: ?*const Animation) f32;
+// aegis: boundary: ffi/zozz.h's function; src/abi_test.zig holds this signature to the header at compile time
 pub extern fn zozzAnimationNumTracks(animation: ?*const Animation) c_int;
+// aegis: boundary: ffi/zozz.h's function; src/abi_test.zig holds this signature to the header at compile time
 pub extern fn zozzAnimationName(animation: ?*const Animation) [*:0]const u8;
+// aegis: boundary: ffi/zozz.h's function; src/abi_test.zig holds this signature to the header at compile time
 pub extern fn zozzAnimationNumSoaTracks(animation: ?*const Animation) c_int;
+// aegis: boundary: ffi/zozz.h's function; src/abi_test.zig holds this signature to the header at compile time
 pub extern fn zozzAnimationSize(animation: ?*const Animation) usize;
+// aegis: boundary: ffi/zozz.h's function; src/abi_test.zig holds this signature to the header at compile time
 pub extern fn zozzAnimationNumTimepoints(animation: ?*const Animation) c_int;
+// aegis: boundary: ffi/zozz.h's function; src/abi_test.zig holds this signature to the header at compile time
 pub extern fn zozzAnimationTimepoints(animation: ?*const Animation, out: [*]f32, count: usize) Result;
 
 /// Non-exhaustive: a host can pass any integer, and the C side rejects one it
@@ -373,63 +403,113 @@ pub const KeyframesCtrl = extern struct {
     iframe_interval: f32,
 };
 
+// aegis: boundary: ffi/zozz.h's function; src/abi_test.zig holds this signature to the header at compile time
 pub extern fn zozzAnimationKeyframesCtrl(animation: ?*const Animation, channel: KeyframeChannel, out: ?*KeyframesCtrl) Result;
+// aegis: boundary: ffi/zozz.h's function; src/abi_test.zig holds this signature to the header at compile time
 pub extern fn zozzAnimationKeyframeRatios(animation: ?*const Animation, channel: KeyframeChannel, out: [*]u8, count: usize) Result;
+// aegis: boundary: ffi/zozz.h's function; src/abi_test.zig holds this signature to the header at compile time
 pub extern fn zozzAnimationKeyframePreviouses(animation: ?*const Animation, channel: KeyframeChannel, out: [*]u16, count: usize) Result;
+// aegis: boundary: ffi/zozz.h's function; src/abi_test.zig holds this signature to the header at compile time
 pub extern fn zozzAnimationKeyframeIframeEntries(animation: ?*const Animation, channel: KeyframeChannel, out: [*]u8, count: usize) Result;
+// aegis: boundary: ffi/zozz.h's function; src/abi_test.zig holds this signature to the header at compile time
 pub extern fn zozzAnimationKeyframeIframeDesc(animation: ?*const Animation, channel: KeyframeChannel, out: [*]u32, count: usize) Result;
 
+// aegis: boundary: ffi/zozz.h's function; src/abi_test.zig holds this signature to the header at compile time
 pub extern fn zozzSoaBlocks(num_joints: c_int) usize;
+// aegis: boundary: ffi/zozz.h's function; src/abi_test.zig holds this signature to the header at compile time
 pub extern fn zozzSoaPoseSetIdentity(pose: [*]SoaTransform, blocks: usize) Result;
+// aegis: boundary: ffi/zozz.h's function; src/abi_test.zig holds this signature to the header at compile time
 pub extern fn zozzSoaPoseToLocalTransforms(pose: [*]const SoaTransform, blocks: usize, out: [*]Transform, num_joints: usize) Result;
+// aegis: boundary: ffi/zozz.h's function; src/abi_test.zig holds this signature to the header at compile time
 pub extern fn zozzSoaPoseFromLocalTransforms(in: [*]const Transform, num_joints: usize, pose: [*]SoaTransform, blocks: usize) Result;
+// aegis: boundary: ffi/zozz.h's function; src/abi_test.zig holds this signature to the header at compile time
 pub extern fn zozzSoaWeightsPack(in: [*]const f32, num_joints: usize, out: [*]SimdFloat4, blocks: usize) Result;
 
+// aegis: boundary: ffi/zozz.h's function; src/abi_test.zig holds this signature to the header at compile time
 pub extern fn zozzRawSkeletonCreate(out: **RawSkeleton) Result;
+// aegis: boundary: ffi/zozz.h's function; src/abi_test.zig holds this signature to the header at compile time
 pub extern fn zozzRawSkeletonDestroy(raw: ?*RawSkeleton) void;
+// aegis: boundary: ffi/zozz.h's function; src/abi_test.zig holds this signature to the header at compile time
 pub extern fn zozzRawSkeletonAddJoint(raw: *RawSkeleton, parent: i32, name: [*:0]const u8, rest: *const Transform, out_index: ?*i32) Result;
+// aegis: boundary: ffi/zozz.h's function; src/abi_test.zig holds this signature to the header at compile time
 pub extern fn zozzRawSkeletonNumJoints(raw: ?*const RawSkeleton) c_int;
+// aegis: boundary: ffi/zozz.h's function; src/abi_test.zig holds this signature to the header at compile time
 pub extern fn zozzRawSkeletonJointName(raw: ?*const RawSkeleton, joint: i32) ?[*:0]const u8;
+// aegis: boundary: ffi/zozz.h's function; src/abi_test.zig holds this signature to the header at compile time
 pub extern fn zozzRawSkeletonJointParent(raw: ?*const RawSkeleton, joint: i32) i32;
+// aegis: boundary: ffi/zozz.h's function; src/abi_test.zig holds this signature to the header at compile time
 pub extern fn zozzRawSkeletonJointRest(raw: ?*const RawSkeleton, joint: i32, out: *Transform) Result;
+// aegis: boundary: ffi/zozz.h's function; src/abi_test.zig holds this signature to the header at compile time
 pub extern fn zozzRawSkeletonIterateJointsBreadthFirst(raw: ?*const RawSkeleton, visitor: JointVisitor, user: ?*anyopaque) Result;
+// aegis: boundary: ffi/zozz.h's function; src/abi_test.zig holds this signature to the header at compile time
 pub extern fn zozzRawSkeletonValidate(raw: ?*const RawSkeleton) bool;
+// aegis: boundary: ffi/zozz.h's function; src/abi_test.zig holds this signature to the header at compile time
 pub extern fn zozzSkeletonBuild(raw: *const RawSkeleton, out: **Skeleton) Result;
 
+// aegis: boundary: ffi/zozz.h's function; src/abi_test.zig holds this signature to the header at compile time
 pub extern fn zozzRawAnimationCreate(num_tracks: c_int, duration: f32, name: ?[*:0]const u8, out: **RawAnimation) Result;
+// aegis: boundary: ffi/zozz.h's function; src/abi_test.zig holds this signature to the header at compile time
 pub extern fn zozzRawAnimationDestroy(raw: ?*RawAnimation) void;
+// aegis: boundary: ffi/zozz.h's function; src/abi_test.zig holds this signature to the header at compile time
 pub extern fn zozzRawAnimationNumTracks(raw: ?*const RawAnimation) c_int;
+// aegis: boundary: ffi/zozz.h's function; src/abi_test.zig holds this signature to the header at compile time
 pub extern fn zozzRawAnimationDuration(raw: ?*const RawAnimation) f32;
+// aegis: boundary: ffi/zozz.h's function; src/abi_test.zig holds this signature to the header at compile time
 pub extern fn zozzRawAnimationPushTranslation(raw: *RawAnimation, track: c_int, time: f32, value: *const [3]f32) Result;
+// aegis: boundary: ffi/zozz.h's function; src/abi_test.zig holds this signature to the header at compile time
 pub extern fn zozzRawAnimationPushRotation(raw: *RawAnimation, track: c_int, time: f32, value: *const [4]f32) Result;
+// aegis: boundary: ffi/zozz.h's function; src/abi_test.zig holds this signature to the header at compile time
 pub extern fn zozzRawAnimationPushScale(raw: *RawAnimation, track: c_int, time: f32, value: *const [3]f32) Result;
+// aegis: boundary: ffi/zozz.h's function; src/abi_test.zig holds this signature to the header at compile time
 pub extern fn zozzRawAnimationValidate(raw: ?*const RawAnimation) bool;
+// aegis: boundary: ffi/zozz.h's function; src/abi_test.zig holds this signature to the header at compile time
 pub extern fn zozzRawAnimationSize(raw: ?*const RawAnimation) usize;
+// aegis: boundary: ffi/zozz.h's function; src/abi_test.zig holds this signature to the header at compile time
 pub extern fn zozzRawAnimationName(raw: ?*const RawAnimation) ?[*:0]const u8;
+// aegis: boundary: ffi/zozz.h's function; src/abi_test.zig holds this signature to the header at compile time
 pub extern fn zozzRawAnimationSetName(raw: ?*RawAnimation, name: ?[*:0]const u8) Result;
+// aegis: boundary: ffi/zozz.h's function; src/abi_test.zig holds this signature to the header at compile time
 pub extern fn zozzRawAnimationSetDuration(raw: ?*RawAnimation, duration: f32) Result;
+// aegis: boundary: ffi/zozz.h's function; src/abi_test.zig holds this signature to the header at compile time
 pub extern fn zozzRawAnimationNumTranslations(raw: ?*const RawAnimation, track: c_int) c_int;
+// aegis: boundary: ffi/zozz.h's function; src/abi_test.zig holds this signature to the header at compile time
 pub extern fn zozzRawAnimationNumRotations(raw: ?*const RawAnimation, track: c_int) c_int;
+// aegis: boundary: ffi/zozz.h's function; src/abi_test.zig holds this signature to the header at compile time
 pub extern fn zozzRawAnimationNumScales(raw: ?*const RawAnimation, track: c_int) c_int;
+// aegis: boundary: ffi/zozz.h's function; src/abi_test.zig holds this signature to the header at compile time
 pub extern fn zozzRawAnimationTranslations(raw: ?*const RawAnimation, track: c_int, out: [*]RawTranslationKey, count: usize) Result;
+// aegis: boundary: ffi/zozz.h's function; src/abi_test.zig holds this signature to the header at compile time
 pub extern fn zozzRawAnimationRotations(raw: ?*const RawAnimation, track: c_int, out: [*]RawRotationKey, count: usize) Result;
+// aegis: boundary: ffi/zozz.h's function; src/abi_test.zig holds this signature to the header at compile time
 pub extern fn zozzRawAnimationScales(raw: ?*const RawAnimation, track: c_int, out: [*]RawScaleKey, count: usize) Result;
+// aegis: boundary: ffi/zozz.h's function; src/abi_test.zig holds this signature to the header at compile time
 pub extern fn zozzRawAnimationClearTranslations(raw: ?*RawAnimation, track: c_int) Result;
+// aegis: boundary: ffi/zozz.h's function; src/abi_test.zig holds this signature to the header at compile time
 pub extern fn zozzRawAnimationClearRotations(raw: ?*RawAnimation, track: c_int) Result;
+// aegis: boundary: ffi/zozz.h's function; src/abi_test.zig holds this signature to the header at compile time
 pub extern fn zozzRawAnimationClearScales(raw: ?*RawAnimation, track: c_int) Result;
+// aegis: boundary: ffi/zozz.h's function; src/abi_test.zig holds this signature to the header at compile time
 pub extern fn zozzRawAnimationClearTrack(raw: ?*RawAnimation, track: c_int) Result;
+// aegis: boundary: ffi/zozz.h's function; src/abi_test.zig holds this signature to the header at compile time
 pub extern fn zozzAnimationBuild(raw: *const RawAnimation, out: **Animation) Result;
 
 //=============================================================================
 // Animation optimizer (ffi/zozz_optimizer.h)
 //=============================================================================
 
+// aegis: boundary: ffi/zozz.h's function; src/abi_test.zig holds this signature to the header at compile time
 pub extern fn zozzAnimationOptimizerCreate(out: **AnimationOptimizer) Result;
+// aegis: boundary: ffi/zozz.h's function; src/abi_test.zig holds this signature to the header at compile time
 pub extern fn zozzAnimationOptimizerDestroy(optimizer: ?*AnimationOptimizer) void;
+// aegis: boundary: ffi/zozz.h's function; src/abi_test.zig holds this signature to the header at compile time
 pub extern fn zozzAnimationOptimizerSetSetting(optimizer: *AnimationOptimizer, setting: *const OptimizerSetting) Result;
+// aegis: boundary: ffi/zozz.h's function; src/abi_test.zig holds this signature to the header at compile time
 pub extern fn zozzAnimationOptimizerGetSetting(optimizer: ?*const AnimationOptimizer, out: *OptimizerSetting) Result;
+// aegis: boundary: ffi/zozz.h's function; src/abi_test.zig holds this signature to the header at compile time
 pub extern fn zozzAnimationOptimizerSetJointOverride(optimizer: *AnimationOptimizer, joint: i32, setting: *const OptimizerSetting) Result;
+// aegis: boundary: ffi/zozz.h's function; src/abi_test.zig holds this signature to the header at compile time
 pub extern fn zozzAnimationOptimizerClearJointOverride(optimizer: *AnimationOptimizer, joint: i32) Result;
+// aegis: boundary: ffi/zozz.h's function; src/abi_test.zig holds this signature to the header at compile time
 pub extern fn zozzAnimationOptimizerRun(
     optimizer: *const AnimationOptimizer,
     input: *const RawAnimation,
@@ -441,8 +521,11 @@ pub extern fn zozzAnimationOptimizerRun(
 // Raw-animation sampling and re-timing utilities (ffi/zozz_optimizer.h)
 //=============================================================================
 
+// aegis: boundary: ffi/zozz.h's function; src/abi_test.zig holds this signature to the header at compile time
 pub extern fn zozzRawAnimationSampleTrack(raw: *const RawAnimation, track: i32, time: f32, out: *Transform) Result;
+// aegis: boundary: ffi/zozz.h's function; src/abi_test.zig holds this signature to the header at compile time
 pub extern fn zozzRawAnimationSample(raw: *const RawAnimation, time: f32, out: [*]Transform, count: usize) Result;
+// aegis: boundary: ffi/zozz.h's function; src/abi_test.zig holds this signature to the header at compile time
 pub extern fn zozzRawAnimationExtractTimePoints(
     raw: *const RawAnimation,
     out: ?[*]f32,
@@ -455,6 +538,7 @@ pub const ModelSpaceSample = extern struct {
     transform: Float4x4,
 };
 
+// aegis: boundary: ffi/zozz.h's function; src/abi_test.zig holds this signature to the header at compile time
 pub extern fn zozzRawAnimationSampleTrackModelSpace(
     raw: *const RawAnimation,
     skeleton: *const Skeleton,
@@ -464,16 +548,22 @@ pub extern fn zozzRawAnimationSampleTrackModelSpace(
     out_count: *usize,
 ) Result;
 
+// aegis: boundary: ffi/zozz.h's function; src/abi_test.zig holds this signature to the header at compile time
 pub extern fn zozzFixedRateSamplingTimeCreate(duration: f32, frequency: f32, out: **FixedRateSamplingTime) Result;
+// aegis: boundary: ffi/zozz.h's function; src/abi_test.zig holds this signature to the header at compile time
 pub extern fn zozzFixedRateSamplingTimeDestroy(self: ?*FixedRateSamplingTime) void;
+// aegis: boundary: ffi/zozz.h's function; src/abi_test.zig holds this signature to the header at compile time
 pub extern fn zozzFixedRateSamplingTimeNumKeys(self: ?*const FixedRateSamplingTime) usize;
+// aegis: boundary: ffi/zozz.h's function; src/abi_test.zig holds this signature to the header at compile time
 pub extern fn zozzFixedRateSamplingTimeAt(self: *const FixedRateSamplingTime, key: usize, out: *f32) Result;
 
 //=============================================================================
 // Additive animation builder (ffi/zozz_optimizer.h)
 //=============================================================================
 
+// aegis: boundary: ffi/zozz.h's function; src/abi_test.zig holds this signature to the header at compile time
 pub extern fn zozzAdditiveAnimationBuilderRun(input: *const RawAnimation, output: *RawAnimation) Result;
+// aegis: boundary: ffi/zozz.h's function; src/abi_test.zig holds this signature to the header at compile time
 pub extern fn zozzAdditiveAnimationBuilderRunWithReference(
     input: *const RawAnimation,
     reference_pose: ?[*]const Transform,
@@ -485,14 +575,23 @@ pub extern fn zozzAdditiveAnimationBuilderRunWithReference(
 // Motion extractor (ffi/zozz_optimizer.h)
 //=============================================================================
 
+// aegis: boundary: ffi/zozz.h's function; src/abi_test.zig holds this signature to the header at compile time
 pub extern fn zozzMotionExtractorCreate(out: **MotionExtractor) Result;
+// aegis: boundary: ffi/zozz.h's function; src/abi_test.zig holds this signature to the header at compile time
 pub extern fn zozzMotionExtractorDestroy(extractor: ?*MotionExtractor) void;
+// aegis: boundary: ffi/zozz.h's function; src/abi_test.zig holds this signature to the header at compile time
 pub extern fn zozzMotionExtractorSetRootJoint(extractor: *MotionExtractor, joint: i32) Result;
+// aegis: boundary: ffi/zozz.h's function; src/abi_test.zig holds this signature to the header at compile time
 pub extern fn zozzMotionExtractorGetRootJoint(extractor: ?*const MotionExtractor) i32;
+// aegis: boundary: ffi/zozz.h's function; src/abi_test.zig holds this signature to the header at compile time
 pub extern fn zozzMotionExtractorSetPositionSettings(extractor: *MotionExtractor, settings: *const MotionSettings) Result;
+// aegis: boundary: ffi/zozz.h's function; src/abi_test.zig holds this signature to the header at compile time
 pub extern fn zozzMotionExtractorGetPositionSettings(extractor: ?*const MotionExtractor, out: *MotionSettings) Result;
+// aegis: boundary: ffi/zozz.h's function; src/abi_test.zig holds this signature to the header at compile time
 pub extern fn zozzMotionExtractorSetRotationSettings(extractor: *MotionExtractor, settings: *const MotionSettings) Result;
+// aegis: boundary: ffi/zozz.h's function; src/abi_test.zig holds this signature to the header at compile time
 pub extern fn zozzMotionExtractorGetRotationSettings(extractor: ?*const MotionExtractor, out: *MotionSettings) Result;
+// aegis: boundary: ffi/zozz.h's function; src/abi_test.zig holds this signature to the header at compile time
 pub extern fn zozzMotionExtractorRun(
     extractor: *const MotionExtractor,
     input: *const RawAnimation,
@@ -506,73 +605,135 @@ pub extern fn zozzMotionExtractorRun(
 // Raw tracks, TrackBuilder, TrackOptimizer (ffi/zozz_rawtrack.h)
 //=============================================================================
 
+// aegis: boundary: ffi/zozz.h's function; src/abi_test.zig holds this signature to the header at compile time
 pub extern fn zozzRawFloatTrackCreate(out: **RawFloatTrack) Result;
+// aegis: boundary: ffi/zozz.h's function; src/abi_test.zig holds this signature to the header at compile time
 pub extern fn zozzRawFloatTrackDestroy(raw: ?*RawFloatTrack) void;
+// aegis: boundary: ffi/zozz.h's function; src/abi_test.zig holds this signature to the header at compile time
 pub extern fn zozzRawFloatTrackNumKeyframes(raw: ?*const RawFloatTrack) c_int;
+// aegis: boundary: ffi/zozz.h's function; src/abi_test.zig holds this signature to the header at compile time
 pub extern fn zozzRawFloatTrackPushKeyframe(raw: *RawFloatTrack, interpolation: TrackInterpolation, ratio: f32, value: f32) Result;
+// aegis: boundary: ffi/zozz.h's function; src/abi_test.zig holds this signature to the header at compile time
 pub extern fn zozzFloatTrackBuild(raw: *const RawFloatTrack, out: **FloatTrack) Result;
+// aegis: boundary: ffi/zozz.h's function; src/abi_test.zig holds this signature to the header at compile time
 pub extern fn zozzRawFloatTrackOptimize(input: *const RawFloatTrack, tolerance: f32, output: *RawFloatTrack) Result;
+// aegis: boundary: ffi/zozz.h's function; src/abi_test.zig holds this signature to the header at compile time
 pub extern fn zozzRawFloatTrackValidate(raw: ?*const RawFloatTrack) bool;
+// aegis: boundary: ffi/zozz.h's function; src/abi_test.zig holds this signature to the header at compile time
 pub extern fn zozzRawFloatTrackName(raw: ?*const RawFloatTrack) ?[*:0]const u8;
+// aegis: boundary: ffi/zozz.h's function; src/abi_test.zig holds this signature to the header at compile time
 pub extern fn zozzRawFloatTrackSetName(raw: ?*RawFloatTrack, name: ?[*:0]const u8) Result;
+// aegis: boundary: ffi/zozz.h's function; src/abi_test.zig holds this signature to the header at compile time
 pub extern fn zozzRawFloatTrackKeyframes(raw: ?*const RawFloatTrack, out: [*]RawFloatKeyframe, count: usize) Result;
+// aegis: boundary: ffi/zozz.h's function; src/abi_test.zig holds this signature to the header at compile time
 pub extern fn zozzRawFloatTrackClear(raw: ?*RawFloatTrack) Result;
 
+// aegis: boundary: ffi/zozz.h's function; src/abi_test.zig holds this signature to the header at compile time
 pub extern fn zozzRawFloat2TrackCreate(out: **RawFloat2Track) Result;
+// aegis: boundary: ffi/zozz.h's function; src/abi_test.zig holds this signature to the header at compile time
 pub extern fn zozzRawFloat2TrackDestroy(raw: ?*RawFloat2Track) void;
+// aegis: boundary: ffi/zozz.h's function; src/abi_test.zig holds this signature to the header at compile time
 pub extern fn zozzRawFloat2TrackNumKeyframes(raw: ?*const RawFloat2Track) c_int;
+// aegis: boundary: ffi/zozz.h's function; src/abi_test.zig holds this signature to the header at compile time
 pub extern fn zozzRawFloat2TrackPushKeyframe(raw: *RawFloat2Track, interpolation: TrackInterpolation, ratio: f32, value: *const [2]f32) Result;
+// aegis: boundary: ffi/zozz.h's function; src/abi_test.zig holds this signature to the header at compile time
 pub extern fn zozzFloat2TrackBuild(raw: *const RawFloat2Track, out: **Float2Track) Result;
+// aegis: boundary: ffi/zozz.h's function; src/abi_test.zig holds this signature to the header at compile time
 pub extern fn zozzRawFloat2TrackOptimize(input: *const RawFloat2Track, tolerance: f32, output: *RawFloat2Track) Result;
+// aegis: boundary: ffi/zozz.h's function; src/abi_test.zig holds this signature to the header at compile time
 pub extern fn zozzRawFloat2TrackValidate(raw: ?*const RawFloat2Track) bool;
+// aegis: boundary: ffi/zozz.h's function; src/abi_test.zig holds this signature to the header at compile time
 pub extern fn zozzRawFloat2TrackName(raw: ?*const RawFloat2Track) ?[*:0]const u8;
+// aegis: boundary: ffi/zozz.h's function; src/abi_test.zig holds this signature to the header at compile time
 pub extern fn zozzRawFloat2TrackSetName(raw: ?*RawFloat2Track, name: ?[*:0]const u8) Result;
+// aegis: boundary: ffi/zozz.h's function; src/abi_test.zig holds this signature to the header at compile time
 pub extern fn zozzRawFloat2TrackKeyframes(raw: ?*const RawFloat2Track, out: [*]RawFloat2Keyframe, count: usize) Result;
+// aegis: boundary: ffi/zozz.h's function; src/abi_test.zig holds this signature to the header at compile time
 pub extern fn zozzRawFloat2TrackClear(raw: ?*RawFloat2Track) Result;
 
+// aegis: boundary: ffi/zozz.h's function; src/abi_test.zig holds this signature to the header at compile time
 pub extern fn zozzRawFloat3TrackCreate(out: **RawFloat3Track) Result;
+// aegis: boundary: ffi/zozz.h's function; src/abi_test.zig holds this signature to the header at compile time
 pub extern fn zozzRawFloat3TrackDestroy(raw: ?*RawFloat3Track) void;
+// aegis: boundary: ffi/zozz.h's function; src/abi_test.zig holds this signature to the header at compile time
 pub extern fn zozzRawFloat3TrackNumKeyframes(raw: ?*const RawFloat3Track) c_int;
+// aegis: boundary: ffi/zozz.h's function; src/abi_test.zig holds this signature to the header at compile time
 pub extern fn zozzRawFloat3TrackPushKeyframe(raw: *RawFloat3Track, interpolation: TrackInterpolation, ratio: f32, value: *const [3]f32) Result;
+// aegis: boundary: ffi/zozz.h's function; src/abi_test.zig holds this signature to the header at compile time
 pub extern fn zozzFloat3TrackBuild(raw: *const RawFloat3Track, out: **Float3Track) Result;
+// aegis: boundary: ffi/zozz.h's function; src/abi_test.zig holds this signature to the header at compile time
 pub extern fn zozzRawFloat3TrackOptimize(input: *const RawFloat3Track, tolerance: f32, output: *RawFloat3Track) Result;
+// aegis: boundary: ffi/zozz.h's function; src/abi_test.zig holds this signature to the header at compile time
 pub extern fn zozzRawFloat3TrackValidate(raw: ?*const RawFloat3Track) bool;
+// aegis: boundary: ffi/zozz.h's function; src/abi_test.zig holds this signature to the header at compile time
 pub extern fn zozzRawFloat3TrackName(raw: ?*const RawFloat3Track) ?[*:0]const u8;
+// aegis: boundary: ffi/zozz.h's function; src/abi_test.zig holds this signature to the header at compile time
 pub extern fn zozzRawFloat3TrackSetName(raw: ?*RawFloat3Track, name: ?[*:0]const u8) Result;
+// aegis: boundary: ffi/zozz.h's function; src/abi_test.zig holds this signature to the header at compile time
 pub extern fn zozzRawFloat3TrackKeyframes(raw: ?*const RawFloat3Track, out: [*]RawFloat3Keyframe, count: usize) Result;
+// aegis: boundary: ffi/zozz.h's function; src/abi_test.zig holds this signature to the header at compile time
 pub extern fn zozzRawFloat3TrackClear(raw: ?*RawFloat3Track) Result;
 
+// aegis: boundary: ffi/zozz.h's function; src/abi_test.zig holds this signature to the header at compile time
 pub extern fn zozzRawFloat4TrackCreate(out: **RawFloat4Track) Result;
+// aegis: boundary: ffi/zozz.h's function; src/abi_test.zig holds this signature to the header at compile time
 pub extern fn zozzRawFloat4TrackDestroy(raw: ?*RawFloat4Track) void;
+// aegis: boundary: ffi/zozz.h's function; src/abi_test.zig holds this signature to the header at compile time
 pub extern fn zozzRawFloat4TrackNumKeyframes(raw: ?*const RawFloat4Track) c_int;
+// aegis: boundary: ffi/zozz.h's function; src/abi_test.zig holds this signature to the header at compile time
 pub extern fn zozzRawFloat4TrackPushKeyframe(raw: *RawFloat4Track, interpolation: TrackInterpolation, ratio: f32, value: *const [4]f32) Result;
+// aegis: boundary: ffi/zozz.h's function; src/abi_test.zig holds this signature to the header at compile time
 pub extern fn zozzFloat4TrackBuild(raw: *const RawFloat4Track, out: **Float4Track) Result;
+// aegis: boundary: ffi/zozz.h's function; src/abi_test.zig holds this signature to the header at compile time
 pub extern fn zozzRawFloat4TrackOptimize(input: *const RawFloat4Track, tolerance: f32, output: *RawFloat4Track) Result;
+// aegis: boundary: ffi/zozz.h's function; src/abi_test.zig holds this signature to the header at compile time
 pub extern fn zozzRawFloat4TrackValidate(raw: ?*const RawFloat4Track) bool;
+// aegis: boundary: ffi/zozz.h's function; src/abi_test.zig holds this signature to the header at compile time
 pub extern fn zozzRawFloat4TrackName(raw: ?*const RawFloat4Track) ?[*:0]const u8;
+// aegis: boundary: ffi/zozz.h's function; src/abi_test.zig holds this signature to the header at compile time
 pub extern fn zozzRawFloat4TrackSetName(raw: ?*RawFloat4Track, name: ?[*:0]const u8) Result;
+// aegis: boundary: ffi/zozz.h's function; src/abi_test.zig holds this signature to the header at compile time
 pub extern fn zozzRawFloat4TrackKeyframes(raw: ?*const RawFloat4Track, out: [*]RawFloat4Keyframe, count: usize) Result;
+// aegis: boundary: ffi/zozz.h's function; src/abi_test.zig holds this signature to the header at compile time
 pub extern fn zozzRawFloat4TrackClear(raw: ?*RawFloat4Track) Result;
 
+// aegis: boundary: ffi/zozz.h's function; src/abi_test.zig holds this signature to the header at compile time
 pub extern fn zozzRawQuaternionTrackCreate(out: **RawQuaternionTrack) Result;
+// aegis: boundary: ffi/zozz.h's function; src/abi_test.zig holds this signature to the header at compile time
 pub extern fn zozzRawQuaternionTrackDestroy(raw: ?*RawQuaternionTrack) void;
+// aegis: boundary: ffi/zozz.h's function; src/abi_test.zig holds this signature to the header at compile time
 pub extern fn zozzRawQuaternionTrackNumKeyframes(raw: ?*const RawQuaternionTrack) c_int;
+// aegis: boundary: ffi/zozz.h's function; src/abi_test.zig holds this signature to the header at compile time
 pub extern fn zozzRawQuaternionTrackPushKeyframe(raw: *RawQuaternionTrack, interpolation: TrackInterpolation, ratio: f32, value: *const [4]f32) Result;
+// aegis: boundary: ffi/zozz.h's function; src/abi_test.zig holds this signature to the header at compile time
 pub extern fn zozzQuaternionTrackBuild(raw: *const RawQuaternionTrack, out: **QuaternionTrack) Result;
+// aegis: boundary: ffi/zozz.h's function; src/abi_test.zig holds this signature to the header at compile time
 pub extern fn zozzRawQuaternionTrackOptimize(input: *const RawQuaternionTrack, tolerance: f32, output: *RawQuaternionTrack) Result;
+// aegis: boundary: ffi/zozz.h's function; src/abi_test.zig holds this signature to the header at compile time
 pub extern fn zozzRawQuaternionTrackValidate(raw: ?*const RawQuaternionTrack) bool;
+// aegis: boundary: ffi/zozz.h's function; src/abi_test.zig holds this signature to the header at compile time
 pub extern fn zozzRawQuaternionTrackName(raw: ?*const RawQuaternionTrack) ?[*:0]const u8;
+// aegis: boundary: ffi/zozz.h's function; src/abi_test.zig holds this signature to the header at compile time
 pub extern fn zozzRawQuaternionTrackSetName(raw: ?*RawQuaternionTrack, name: ?[*:0]const u8) Result;
+// aegis: boundary: ffi/zozz.h's function; src/abi_test.zig holds this signature to the header at compile time
 pub extern fn zozzRawQuaternionTrackKeyframes(raw: ?*const RawQuaternionTrack, out: [*]RawQuaternionKeyframe, count: usize) Result;
+// aegis: boundary: ffi/zozz.h's function; src/abi_test.zig holds this signature to the header at compile time
 pub extern fn zozzRawQuaternionTrackClear(raw: ?*RawQuaternionTrack) Result;
 
+// aegis: boundary: ffi/zozz.h's function; src/abi_test.zig holds this signature to the header at compile time
 pub extern fn zozzSamplingContextCreate(max_tracks: c_int, out: **SamplingContext) Result;
+// aegis: boundary: ffi/zozz.h's function; src/abi_test.zig holds this signature to the header at compile time
 pub extern fn zozzSamplingContextDestroy(context: ?*SamplingContext) void;
+// aegis: boundary: ffi/zozz.h's function; src/abi_test.zig holds this signature to the header at compile time
 pub extern fn zozzSamplingContextResize(context: ?*SamplingContext, max_tracks: c_int) Result;
+// aegis: boundary: ffi/zozz.h's function; src/abi_test.zig holds this signature to the header at compile time
 pub extern fn zozzSamplingContextInvalidate(context: ?*SamplingContext) void;
+// aegis: boundary: ffi/zozz.h's function; src/abi_test.zig holds this signature to the header at compile time
 pub extern fn zozzSamplingContextMaxTracks(context: ?*const SamplingContext) c_int;
+// aegis: boundary: ffi/zozz.h's function; src/abi_test.zig holds this signature to the header at compile time
 pub extern fn zozzSample(animation: *const Animation, context: *SamplingContext, ratio: f32, out: [*]SoaTransform, blocks: usize) Result;
 
+// aegis: boundary: ffi/zozz.h's function; src/abi_test.zig holds this signature to the header at compile time
 pub extern fn zozzLocalToModel(
     skeleton: *const Skeleton,
     locals: [*]const SoaTransform,
@@ -585,57 +746,103 @@ pub extern fn zozzLocalToModel(
     count: usize,
 ) Result;
 
+// aegis: boundary: ffi/zozz.h's function; src/abi_test.zig holds this signature to the header at compile time
 pub extern fn zozzFloatTrackLoadFile(path: [*:0]const u8, out: **FloatTrack) Result;
+// aegis: boundary: ffi/zozz.h's function; src/abi_test.zig holds this signature to the header at compile time
 pub extern fn zozzFloatTrackLoadMemory(data: [*]const u8, size: usize, out: **FloatTrack) Result;
+// aegis: boundary: ffi/zozz.h's function; src/abi_test.zig holds this signature to the header at compile time
 pub extern fn zozzFloatTrackDestroy(track: ?*FloatTrack) void;
+// aegis: boundary: ffi/zozz.h's function; src/abi_test.zig holds this signature to the header at compile time
 pub extern fn zozzFloatTrackName(track: ?*const FloatTrack) [*:0]const u8;
+// aegis: boundary: ffi/zozz.h's function; src/abi_test.zig holds this signature to the header at compile time
 pub extern fn zozzFloatTrackSample(track: *const FloatTrack, ratio: f32, out: *f32) Result;
+// aegis: boundary: ffi/zozz.h's function; src/abi_test.zig holds this signature to the header at compile time
 pub extern fn zozzFloatTrackNumKeyframes(track: ?*const FloatTrack) c_int;
+// aegis: boundary: ffi/zozz.h's function; src/abi_test.zig holds this signature to the header at compile time
 pub extern fn zozzFloatTrackRatios(track: ?*const FloatTrack, out_count: *usize) ?[*]const f32;
+// aegis: boundary: ffi/zozz.h's function; src/abi_test.zig holds this signature to the header at compile time
 pub extern fn zozzFloatTrackValues(track: ?*const FloatTrack, out_count: *usize) ?[*]const f32;
+// aegis: boundary: ffi/zozz.h's function; src/abi_test.zig holds this signature to the header at compile time
 pub extern fn zozzFloatTrackSteps(track: ?*const FloatTrack, out_count: *usize) ?[*]const u8;
 
+// aegis: boundary: ffi/zozz.h's function; src/abi_test.zig holds this signature to the header at compile time
 pub extern fn zozzFloat2TrackLoadFile(path: [*:0]const u8, out: **Float2Track) Result;
+// aegis: boundary: ffi/zozz.h's function; src/abi_test.zig holds this signature to the header at compile time
 pub extern fn zozzFloat2TrackLoadMemory(data: [*]const u8, size: usize, out: **Float2Track) Result;
+// aegis: boundary: ffi/zozz.h's function; src/abi_test.zig holds this signature to the header at compile time
 pub extern fn zozzFloat2TrackDestroy(track: ?*Float2Track) void;
+// aegis: boundary: ffi/zozz.h's function; src/abi_test.zig holds this signature to the header at compile time
 pub extern fn zozzFloat2TrackName(track: ?*const Float2Track) [*:0]const u8;
+// aegis: boundary: ffi/zozz.h's function; src/abi_test.zig holds this signature to the header at compile time
 pub extern fn zozzFloat2TrackSample(track: *const Float2Track, ratio: f32, out: *[2]f32) Result;
+// aegis: boundary: ffi/zozz.h's function; src/abi_test.zig holds this signature to the header at compile time
 pub extern fn zozzFloat2TrackNumKeyframes(track: ?*const Float2Track) c_int;
+// aegis: boundary: ffi/zozz.h's function; src/abi_test.zig holds this signature to the header at compile time
 pub extern fn zozzFloat2TrackRatios(track: ?*const Float2Track, out_count: *usize) ?[*]const f32;
+// aegis: boundary: ffi/zozz.h's function; src/abi_test.zig holds this signature to the header at compile time
 pub extern fn zozzFloat2TrackValues(track: ?*const Float2Track, out_count: *usize) ?[*]const [2]f32;
+// aegis: boundary: ffi/zozz.h's function; src/abi_test.zig holds this signature to the header at compile time
 pub extern fn zozzFloat2TrackSteps(track: ?*const Float2Track, out_count: *usize) ?[*]const u8;
 
+// aegis: boundary: ffi/zozz.h's function; src/abi_test.zig holds this signature to the header at compile time
 pub extern fn zozzFloat3TrackLoadFile(path: [*:0]const u8, out: **Float3Track) Result;
+// aegis: boundary: ffi/zozz.h's function; src/abi_test.zig holds this signature to the header at compile time
 pub extern fn zozzFloat3TrackLoadMemory(data: [*]const u8, size: usize, out: **Float3Track) Result;
+// aegis: boundary: ffi/zozz.h's function; src/abi_test.zig holds this signature to the header at compile time
 pub extern fn zozzFloat3TrackDestroy(track: ?*Float3Track) void;
+// aegis: boundary: ffi/zozz.h's function; src/abi_test.zig holds this signature to the header at compile time
 pub extern fn zozzFloat3TrackName(track: ?*const Float3Track) [*:0]const u8;
+// aegis: boundary: ffi/zozz.h's function; src/abi_test.zig holds this signature to the header at compile time
 pub extern fn zozzFloat3TrackSample(track: *const Float3Track, ratio: f32, out: *[3]f32) Result;
+// aegis: boundary: ffi/zozz.h's function; src/abi_test.zig holds this signature to the header at compile time
 pub extern fn zozzFloat3TrackNumKeyframes(track: ?*const Float3Track) c_int;
+// aegis: boundary: ffi/zozz.h's function; src/abi_test.zig holds this signature to the header at compile time
 pub extern fn zozzFloat3TrackRatios(track: ?*const Float3Track, out_count: *usize) ?[*]const f32;
+// aegis: boundary: ffi/zozz.h's function; src/abi_test.zig holds this signature to the header at compile time
 pub extern fn zozzFloat3TrackValues(track: ?*const Float3Track, out_count: *usize) ?[*]const [3]f32;
+// aegis: boundary: ffi/zozz.h's function; src/abi_test.zig holds this signature to the header at compile time
 pub extern fn zozzFloat3TrackSteps(track: ?*const Float3Track, out_count: *usize) ?[*]const u8;
 
+// aegis: boundary: ffi/zozz.h's function; src/abi_test.zig holds this signature to the header at compile time
 pub extern fn zozzFloat4TrackLoadFile(path: [*:0]const u8, out: **Float4Track) Result;
+// aegis: boundary: ffi/zozz.h's function; src/abi_test.zig holds this signature to the header at compile time
 pub extern fn zozzFloat4TrackLoadMemory(data: [*]const u8, size: usize, out: **Float4Track) Result;
+// aegis: boundary: ffi/zozz.h's function; src/abi_test.zig holds this signature to the header at compile time
 pub extern fn zozzFloat4TrackDestroy(track: ?*Float4Track) void;
+// aegis: boundary: ffi/zozz.h's function; src/abi_test.zig holds this signature to the header at compile time
 pub extern fn zozzFloat4TrackName(track: ?*const Float4Track) [*:0]const u8;
+// aegis: boundary: ffi/zozz.h's function; src/abi_test.zig holds this signature to the header at compile time
 pub extern fn zozzFloat4TrackSample(track: *const Float4Track, ratio: f32, out: *[4]f32) Result;
+// aegis: boundary: ffi/zozz.h's function; src/abi_test.zig holds this signature to the header at compile time
 pub extern fn zozzFloat4TrackNumKeyframes(track: ?*const Float4Track) c_int;
+// aegis: boundary: ffi/zozz.h's function; src/abi_test.zig holds this signature to the header at compile time
 pub extern fn zozzFloat4TrackRatios(track: ?*const Float4Track, out_count: *usize) ?[*]const f32;
+// aegis: boundary: ffi/zozz.h's function; src/abi_test.zig holds this signature to the header at compile time
 pub extern fn zozzFloat4TrackValues(track: ?*const Float4Track, out_count: *usize) ?[*]const [4]f32;
+// aegis: boundary: ffi/zozz.h's function; src/abi_test.zig holds this signature to the header at compile time
 pub extern fn zozzFloat4TrackSteps(track: ?*const Float4Track, out_count: *usize) ?[*]const u8;
 
+// aegis: boundary: ffi/zozz.h's function; src/abi_test.zig holds this signature to the header at compile time
 pub extern fn zozzQuaternionTrackLoadFile(path: [*:0]const u8, out: **QuaternionTrack) Result;
+// aegis: boundary: ffi/zozz.h's function; src/abi_test.zig holds this signature to the header at compile time
 pub extern fn zozzQuaternionTrackLoadMemory(data: [*]const u8, size: usize, out: **QuaternionTrack) Result;
+// aegis: boundary: ffi/zozz.h's function; src/abi_test.zig holds this signature to the header at compile time
 pub extern fn zozzQuaternionTrackDestroy(track: ?*QuaternionTrack) void;
+// aegis: boundary: ffi/zozz.h's function; src/abi_test.zig holds this signature to the header at compile time
 pub extern fn zozzQuaternionTrackName(track: ?*const QuaternionTrack) [*:0]const u8;
+// aegis: boundary: ffi/zozz.h's function; src/abi_test.zig holds this signature to the header at compile time
 pub extern fn zozzQuaternionTrackSample(track: *const QuaternionTrack, ratio: f32, out: *[4]f32) Result;
+// aegis: boundary: ffi/zozz.h's function; src/abi_test.zig holds this signature to the header at compile time
 pub extern fn zozzQuaternionTrackNumKeyframes(track: ?*const QuaternionTrack) c_int;
+// aegis: boundary: ffi/zozz.h's function; src/abi_test.zig holds this signature to the header at compile time
 pub extern fn zozzQuaternionTrackRatios(track: ?*const QuaternionTrack, out_count: *usize) ?[*]const f32;
+// aegis: boundary: ffi/zozz.h's function; src/abi_test.zig holds this signature to the header at compile time
 pub extern fn zozzQuaternionTrackValues(track: ?*const QuaternionTrack, out_count: *usize) ?[*]const [4]f32;
+// aegis: boundary: ffi/zozz.h's function; src/abi_test.zig holds this signature to the header at compile time
 pub extern fn zozzQuaternionTrackSteps(track: ?*const QuaternionTrack, out_count: *usize) ?[*]const u8;
 
 /// Decodes any track's packed steps bitset; see the header for the bit order.
+// aegis: boundary: ffi/zozz.h's function; src/abi_test.zig holds this signature to the header at compile time
 pub extern fn zozzTrackInterpolations(
     steps: [*]const u8,
     bytes: usize,
@@ -644,6 +851,7 @@ pub extern fn zozzTrackInterpolations(
     count: usize,
 ) Result;
 
+// aegis: boundary: ffi/zozz.h's function; src/abi_test.zig holds this signature to the header at compile time
 pub extern fn zozzFloatTrackTriggeringJobRun(
     track: *const FloatTrack,
     from: f32,
@@ -651,8 +859,11 @@ pub extern fn zozzFloatTrackTriggeringJobRun(
     threshold: f32,
     out: *TrackTriggeringIterator,
 ) Result;
+// aegis: boundary: ffi/zozz.h's function; src/abi_test.zig holds this signature to the header at compile time
 pub extern fn zozzTrackTriggeringIteratorValid(iterator: ?*const TrackTriggeringIterator) bool;
+// aegis: boundary: ffi/zozz.h's function; src/abi_test.zig holds this signature to the header at compile time
 pub extern fn zozzTrackTriggeringIteratorNext(iterator: *TrackTriggeringIterator) Result;
+// aegis: boundary: ffi/zozz.h's function; src/abi_test.zig holds this signature to the header at compile time
 pub extern fn zozzTrackTriggeringIteratorGet(iterator: *const TrackTriggeringIterator, out: *TrackEdge) Result;
 
 //=============================================================================
@@ -670,6 +881,7 @@ pub const BlendingLayer = extern struct {
     num_joint_weights: usize,
 };
 
+// aegis: boundary: ffi/zozz.h's function; src/abi_test.zig holds this signature to the header at compile time
 pub extern fn zozzBlendingRun(
     layers: ?[*]const BlendingLayer,
     num_layers: usize,
@@ -697,100 +909,191 @@ pub const Stream = extern struct {
 pub const OArchive = opaque {};
 pub const IArchive = opaque {};
 
+// aegis: boundary: ffi/zozz.h's function; src/abi_test.zig holds this signature to the header at compile time
 pub extern fn zozzOArchiveCreate(stream: ?*const Stream, endianness: Endianness, out: **OArchive) Result;
+// aegis: boundary: ffi/zozz.h's function; src/abi_test.zig holds this signature to the header at compile time
 pub extern fn zozzOArchiveDestroy(archive: ?*OArchive) void;
+// aegis: boundary: ffi/zozz.h's function; src/abi_test.zig holds this signature to the header at compile time
 pub extern fn zozzOArchiveSaveBinary(archive: ?*OArchive, data: ?*const anyopaque, size: usize) Result;
+// aegis: boundary: ffi/zozz.h's function; src/abi_test.zig holds this signature to the header at compile time
 pub extern fn zozzOArchiveSaveInt32(archive: ?*OArchive, value: i32) Result;
+// aegis: boundary: ffi/zozz.h's function; src/abi_test.zig holds this signature to the header at compile time
 pub extern fn zozzOArchiveSaveFloat(archive: ?*OArchive, value: f32) Result;
+// aegis: boundary: ffi/zozz.h's function; src/abi_test.zig holds this signature to the header at compile time
 pub extern fn zozzOArchiveSaveSkeleton(archive: ?*OArchive, skeleton: ?*const Skeleton) Result;
+// aegis: boundary: ffi/zozz.h's function; src/abi_test.zig holds this signature to the header at compile time
 pub extern fn zozzOArchiveSaveAnimation(archive: ?*OArchive, animation: ?*const Animation) Result;
+// aegis: boundary: ffi/zozz.h's function; src/abi_test.zig holds this signature to the header at compile time
 pub extern fn zozzOArchiveSaveFloatTrack(archive: ?*OArchive, track: ?*const FloatTrack) Result;
+// aegis: boundary: ffi/zozz.h's function; src/abi_test.zig holds this signature to the header at compile time
 pub extern fn zozzOArchiveSaveFloat2Track(archive: ?*OArchive, track: ?*const Float2Track) Result;
+// aegis: boundary: ffi/zozz.h's function; src/abi_test.zig holds this signature to the header at compile time
 pub extern fn zozzOArchiveSaveFloat3Track(archive: ?*OArchive, track: ?*const Float3Track) Result;
+// aegis: boundary: ffi/zozz.h's function; src/abi_test.zig holds this signature to the header at compile time
 pub extern fn zozzOArchiveSaveFloat4Track(archive: ?*OArchive, track: ?*const Float4Track) Result;
+// aegis: boundary: ffi/zozz.h's function; src/abi_test.zig holds this signature to the header at compile time
 pub extern fn zozzOArchiveSaveQuaternionTrack(archive: ?*OArchive, track: ?*const QuaternionTrack) Result;
+// aegis: boundary: ffi/zozz.h's function; src/abi_test.zig holds this signature to the header at compile time
 pub extern fn zozzOArchiveSaveRawSkeleton(archive: ?*OArchive, raw: ?*const RawSkeleton) Result;
+// aegis: boundary: ffi/zozz.h's function; src/abi_test.zig holds this signature to the header at compile time
 pub extern fn zozzOArchiveSaveRawAnimation(archive: ?*OArchive, raw: ?*const RawAnimation) Result;
+// aegis: boundary: ffi/zozz.h's function; src/abi_test.zig holds this signature to the header at compile time
 pub extern fn zozzOArchiveSaveRawFloatTrack(archive: ?*OArchive, raw: ?*const RawFloatTrack) Result;
+// aegis: boundary: ffi/zozz.h's function; src/abi_test.zig holds this signature to the header at compile time
 pub extern fn zozzOArchiveSaveRawFloat2Track(archive: ?*OArchive, raw: ?*const RawFloat2Track) Result;
+// aegis: boundary: ffi/zozz.h's function; src/abi_test.zig holds this signature to the header at compile time
 pub extern fn zozzOArchiveSaveRawFloat3Track(archive: ?*OArchive, raw: ?*const RawFloat3Track) Result;
+// aegis: boundary: ffi/zozz.h's function; src/abi_test.zig holds this signature to the header at compile time
 pub extern fn zozzOArchiveSaveRawFloat4Track(archive: ?*OArchive, raw: ?*const RawFloat4Track) Result;
+// aegis: boundary: ffi/zozz.h's function; src/abi_test.zig holds this signature to the header at compile time
 pub extern fn zozzOArchiveSaveRawQuaternionTrack(archive: ?*OArchive, raw: ?*const RawQuaternionTrack) Result;
 
+// aegis: boundary: ffi/zozz.h's function; src/abi_test.zig holds this signature to the header at compile time
 pub extern fn zozzIArchiveCreate(stream: ?*const Stream, out: **IArchive) Result;
+// aegis: boundary: ffi/zozz.h's function; src/abi_test.zig holds this signature to the header at compile time
 pub extern fn zozzIArchiveDestroy(archive: ?*IArchive) void;
+// aegis: boundary: ffi/zozz.h's function; src/abi_test.zig holds this signature to the header at compile time
 pub extern fn zozzIArchiveEndianSwap(archive: ?*const IArchive) bool;
+// aegis: boundary: ffi/zozz.h's function; src/abi_test.zig holds this signature to the header at compile time
 pub extern fn zozzIArchiveLoadBinary(archive: ?*IArchive, data: ?*anyopaque, size: usize) Result;
+// aegis: boundary: ffi/zozz.h's function; src/abi_test.zig holds this signature to the header at compile time
 pub extern fn zozzIArchiveLoadInt32(archive: ?*IArchive, out: *i32) Result;
+// aegis: boundary: ffi/zozz.h's function; src/abi_test.zig holds this signature to the header at compile time
 pub extern fn zozzIArchiveLoadFloat(archive: ?*IArchive, out: *f32) Result;
+// aegis: boundary: ffi/zozz.h's function; src/abi_test.zig holds this signature to the header at compile time
 pub extern fn zozzIArchiveLoadSkeleton(archive: ?*IArchive, out: **Skeleton) Result;
+// aegis: boundary: ffi/zozz.h's function; src/abi_test.zig holds this signature to the header at compile time
 pub extern fn zozzIArchiveLoadAnimation(archive: ?*IArchive, out: **Animation) Result;
+// aegis: boundary: ffi/zozz.h's function; src/abi_test.zig holds this signature to the header at compile time
 pub extern fn zozzIArchiveLoadFloatTrack(archive: ?*IArchive, out: **FloatTrack) Result;
+// aegis: boundary: ffi/zozz.h's function; src/abi_test.zig holds this signature to the header at compile time
 pub extern fn zozzIArchiveLoadFloat2Track(archive: ?*IArchive, out: **Float2Track) Result;
+// aegis: boundary: ffi/zozz.h's function; src/abi_test.zig holds this signature to the header at compile time
 pub extern fn zozzIArchiveLoadFloat3Track(archive: ?*IArchive, out: **Float3Track) Result;
+// aegis: boundary: ffi/zozz.h's function; src/abi_test.zig holds this signature to the header at compile time
 pub extern fn zozzIArchiveLoadFloat4Track(archive: ?*IArchive, out: **Float4Track) Result;
+// aegis: boundary: ffi/zozz.h's function; src/abi_test.zig holds this signature to the header at compile time
 pub extern fn zozzIArchiveLoadQuaternionTrack(archive: ?*IArchive, out: **QuaternionTrack) Result;
+// aegis: boundary: ffi/zozz.h's function; src/abi_test.zig holds this signature to the header at compile time
 pub extern fn zozzIArchiveLoadRawSkeleton(archive: ?*IArchive, out: **RawSkeleton) Result;
+// aegis: boundary: ffi/zozz.h's function; src/abi_test.zig holds this signature to the header at compile time
 pub extern fn zozzIArchiveLoadRawAnimation(archive: ?*IArchive, out: **RawAnimation) Result;
+// aegis: boundary: ffi/zozz.h's function; src/abi_test.zig holds this signature to the header at compile time
 pub extern fn zozzIArchiveLoadRawFloatTrack(archive: ?*IArchive, out: **RawFloatTrack) Result;
+// aegis: boundary: ffi/zozz.h's function; src/abi_test.zig holds this signature to the header at compile time
 pub extern fn zozzIArchiveLoadRawFloat2Track(archive: ?*IArchive, out: **RawFloat2Track) Result;
+// aegis: boundary: ffi/zozz.h's function; src/abi_test.zig holds this signature to the header at compile time
 pub extern fn zozzIArchiveLoadRawFloat3Track(archive: ?*IArchive, out: **RawFloat3Track) Result;
+// aegis: boundary: ffi/zozz.h's function; src/abi_test.zig holds this signature to the header at compile time
 pub extern fn zozzIArchiveLoadRawFloat4Track(archive: ?*IArchive, out: **RawFloat4Track) Result;
+// aegis: boundary: ffi/zozz.h's function; src/abi_test.zig holds this signature to the header at compile time
 pub extern fn zozzIArchiveLoadRawQuaternionTrack(archive: ?*IArchive, out: **RawQuaternionTrack) Result;
+// aegis: boundary: ffi/zozz.h's function; src/abi_test.zig holds this signature to the header at compile time
 pub extern fn zozzIArchiveTestSkeleton(archive: ?*IArchive) bool;
+// aegis: boundary: ffi/zozz.h's function; src/abi_test.zig holds this signature to the header at compile time
 pub extern fn zozzIArchiveTestAnimation(archive: ?*IArchive) bool;
+// aegis: boundary: ffi/zozz.h's function; src/abi_test.zig holds this signature to the header at compile time
 pub extern fn zozzIArchiveTestFloatTrack(archive: ?*IArchive) bool;
+// aegis: boundary: ffi/zozz.h's function; src/abi_test.zig holds this signature to the header at compile time
 pub extern fn zozzIArchiveTestFloat2Track(archive: ?*IArchive) bool;
+// aegis: boundary: ffi/zozz.h's function; src/abi_test.zig holds this signature to the header at compile time
 pub extern fn zozzIArchiveTestFloat3Track(archive: ?*IArchive) bool;
+// aegis: boundary: ffi/zozz.h's function; src/abi_test.zig holds this signature to the header at compile time
 pub extern fn zozzIArchiveTestFloat4Track(archive: ?*IArchive) bool;
+// aegis: boundary: ffi/zozz.h's function; src/abi_test.zig holds this signature to the header at compile time
 pub extern fn zozzIArchiveTestQuaternionTrack(archive: ?*IArchive) bool;
+// aegis: boundary: ffi/zozz.h's function; src/abi_test.zig holds this signature to the header at compile time
 pub extern fn zozzIArchiveTestRawSkeleton(archive: ?*IArchive) bool;
+// aegis: boundary: ffi/zozz.h's function; src/abi_test.zig holds this signature to the header at compile time
 pub extern fn zozzIArchiveTestRawAnimation(archive: ?*IArchive) bool;
+// aegis: boundary: ffi/zozz.h's function; src/abi_test.zig holds this signature to the header at compile time
 pub extern fn zozzIArchiveTestRawFloatTrack(archive: ?*IArchive) bool;
+// aegis: boundary: ffi/zozz.h's function; src/abi_test.zig holds this signature to the header at compile time
 pub extern fn zozzIArchiveTestRawFloat2Track(archive: ?*IArchive) bool;
+// aegis: boundary: ffi/zozz.h's function; src/abi_test.zig holds this signature to the header at compile time
 pub extern fn zozzIArchiveTestRawFloat3Track(archive: ?*IArchive) bool;
+// aegis: boundary: ffi/zozz.h's function; src/abi_test.zig holds this signature to the header at compile time
 pub extern fn zozzIArchiveTestRawFloat4Track(archive: ?*IArchive) bool;
+// aegis: boundary: ffi/zozz.h's function; src/abi_test.zig holds this signature to the header at compile time
 pub extern fn zozzIArchiveTestRawQuaternionTrack(archive: ?*IArchive) bool;
 
+// aegis: boundary: ffi/zozz.h's function; src/abi_test.zig holds this signature to the header at compile time
 pub extern fn zozzSkeletonSaveFile(skeleton: ?*const Skeleton, path: [*:0]const u8) Result;
+// aegis: boundary: ffi/zozz.h's function; src/abi_test.zig holds this signature to the header at compile time
 pub extern fn zozzAnimationSaveFile(animation: ?*const Animation, path: [*:0]const u8) Result;
+// aegis: boundary: ffi/zozz.h's function; src/abi_test.zig holds this signature to the header at compile time
 pub extern fn zozzFloatTrackSaveFile(track: ?*const FloatTrack, path: [*:0]const u8) Result;
+// aegis: boundary: ffi/zozz.h's function; src/abi_test.zig holds this signature to the header at compile time
 pub extern fn zozzFloat2TrackSaveFile(track: ?*const Float2Track, path: [*:0]const u8) Result;
+// aegis: boundary: ffi/zozz.h's function; src/abi_test.zig holds this signature to the header at compile time
 pub extern fn zozzFloat3TrackSaveFile(track: ?*const Float3Track, path: [*:0]const u8) Result;
+// aegis: boundary: ffi/zozz.h's function; src/abi_test.zig holds this signature to the header at compile time
 pub extern fn zozzFloat4TrackSaveFile(track: ?*const Float4Track, path: [*:0]const u8) Result;
+// aegis: boundary: ffi/zozz.h's function; src/abi_test.zig holds this signature to the header at compile time
 pub extern fn zozzQuaternionTrackSaveFile(track: ?*const QuaternionTrack, path: [*:0]const u8) Result;
+// aegis: boundary: ffi/zozz.h's function; src/abi_test.zig holds this signature to the header at compile time
 pub extern fn zozzRawSkeletonSaveFile(raw: ?*const RawSkeleton, path: [*:0]const u8) Result;
+// aegis: boundary: ffi/zozz.h's function; src/abi_test.zig holds this signature to the header at compile time
 pub extern fn zozzRawAnimationSaveFile(raw: ?*const RawAnimation, path: [*:0]const u8) Result;
+// aegis: boundary: ffi/zozz.h's function; src/abi_test.zig holds this signature to the header at compile time
 pub extern fn zozzRawFloatTrackSaveFile(raw: ?*const RawFloatTrack, path: [*:0]const u8) Result;
+// aegis: boundary: ffi/zozz.h's function; src/abi_test.zig holds this signature to the header at compile time
 pub extern fn zozzRawFloat2TrackSaveFile(raw: ?*const RawFloat2Track, path: [*:0]const u8) Result;
+// aegis: boundary: ffi/zozz.h's function; src/abi_test.zig holds this signature to the header at compile time
 pub extern fn zozzRawFloat3TrackSaveFile(raw: ?*const RawFloat3Track, path: [*:0]const u8) Result;
+// aegis: boundary: ffi/zozz.h's function; src/abi_test.zig holds this signature to the header at compile time
 pub extern fn zozzRawFloat4TrackSaveFile(raw: ?*const RawFloat4Track, path: [*:0]const u8) Result;
+// aegis: boundary: ffi/zozz.h's function; src/abi_test.zig holds this signature to the header at compile time
 pub extern fn zozzRawQuaternionTrackSaveFile(raw: ?*const RawQuaternionTrack, path: [*:0]const u8) Result;
+// aegis: boundary: ffi/zozz.h's function; src/abi_test.zig holds this signature to the header at compile time
 pub extern fn zozzRawSkeletonLoadFile(path: [*:0]const u8, out: **RawSkeleton) Result;
+// aegis: boundary: ffi/zozz.h's function; src/abi_test.zig holds this signature to the header at compile time
 pub extern fn zozzRawSkeletonLoadMemory(data: [*]const u8, size: usize, out: **RawSkeleton) Result;
+// aegis: boundary: ffi/zozz.h's function; src/abi_test.zig holds this signature to the header at compile time
 pub extern fn zozzRawAnimationLoadFile(path: [*:0]const u8, out: **RawAnimation) Result;
+// aegis: boundary: ffi/zozz.h's function; src/abi_test.zig holds this signature to the header at compile time
 pub extern fn zozzRawAnimationLoadMemory(data: [*]const u8, size: usize, out: **RawAnimation) Result;
+// aegis: boundary: ffi/zozz.h's function; src/abi_test.zig holds this signature to the header at compile time
 pub extern fn zozzRawFloatTrackLoadFile(path: [*:0]const u8, out: **RawFloatTrack) Result;
+// aegis: boundary: ffi/zozz.h's function; src/abi_test.zig holds this signature to the header at compile time
 pub extern fn zozzRawFloatTrackLoadMemory(data: [*]const u8, size: usize, out: **RawFloatTrack) Result;
+// aegis: boundary: ffi/zozz.h's function; src/abi_test.zig holds this signature to the header at compile time
 pub extern fn zozzRawFloat2TrackLoadFile(path: [*:0]const u8, out: **RawFloat2Track) Result;
+// aegis: boundary: ffi/zozz.h's function; src/abi_test.zig holds this signature to the header at compile time
 pub extern fn zozzRawFloat2TrackLoadMemory(data: [*]const u8, size: usize, out: **RawFloat2Track) Result;
+// aegis: boundary: ffi/zozz.h's function; src/abi_test.zig holds this signature to the header at compile time
 pub extern fn zozzRawFloat3TrackLoadFile(path: [*:0]const u8, out: **RawFloat3Track) Result;
+// aegis: boundary: ffi/zozz.h's function; src/abi_test.zig holds this signature to the header at compile time
 pub extern fn zozzRawFloat3TrackLoadMemory(data: [*]const u8, size: usize, out: **RawFloat3Track) Result;
+// aegis: boundary: ffi/zozz.h's function; src/abi_test.zig holds this signature to the header at compile time
 pub extern fn zozzRawFloat4TrackLoadFile(path: [*:0]const u8, out: **RawFloat4Track) Result;
+// aegis: boundary: ffi/zozz.h's function; src/abi_test.zig holds this signature to the header at compile time
 pub extern fn zozzRawFloat4TrackLoadMemory(data: [*]const u8, size: usize, out: **RawFloat4Track) Result;
+// aegis: boundary: ffi/zozz.h's function; src/abi_test.zig holds this signature to the header at compile time
 pub extern fn zozzRawQuaternionTrackLoadFile(path: [*:0]const u8, out: **RawQuaternionTrack) Result;
+// aegis: boundary: ffi/zozz.h's function; src/abi_test.zig holds this signature to the header at compile time
 pub extern fn zozzRawQuaternionTrackLoadMemory(data: [*]const u8, size: usize, out: **RawQuaternionTrack) Result;
+// aegis: boundary: ffi/zozz.h's function; src/abi_test.zig holds this signature to the header at compile time
 pub extern fn zozzSkeletonJointRestPoseLocal(skeleton: ?*const Skeleton, joint: c_int, out: *Transform) Result;
+// aegis: boundary: ffi/zozz.h's function; src/abi_test.zig holds this signature to the header at compile time
 pub extern fn zozzSkeletonRestPoseModelSpace(skeleton: ?*const Skeleton, out: [*]Float4x4, count: usize) Result;
+// aegis: boundary: ffi/zozz.h's function; src/abi_test.zig holds this signature to the header at compile time
 pub extern fn zozzSkeletonJointIsLeaf(skeleton: ?*const Skeleton, joint: c_int, out: *bool) Result;
+// aegis: boundary: ffi/zozz.h's function; src/abi_test.zig holds this signature to the header at compile time
 pub extern fn zozzSkeletonFindJoint(skeleton: ?*const Skeleton, name: ?[*:0]const u8) c_int;
+// aegis: boundary: ffi/zozz.h's function; src/abi_test.zig holds this signature to the header at compile time
 pub extern fn zozzSkeletonIterateJointsDepthFirst(skeleton: ?*const Skeleton, from: c_int, visitor: JointVisitor, user: ?*anyopaque) Result;
+// aegis: boundary: ffi/zozz.h's function; src/abi_test.zig holds this signature to the header at compile time
 pub extern fn zozzSkeletonIterateJointsDepthFirstReverse(skeleton: ?*const Skeleton, visitor: JointVisitor, user: ?*anyopaque) Result;
 
+// aegis: boundary: ffi/zozz.h's function; src/abi_test.zig holds this signature to the header at compile time
 pub extern fn zozzAnimationCountTranslationKeys(animation: ?*const Animation, track: c_int, out: *c_int) Result;
+// aegis: boundary: ffi/zozz.h's function; src/abi_test.zig holds this signature to the header at compile time
 pub extern fn zozzAnimationCountRotationKeys(animation: ?*const Animation, track: c_int, out: *c_int) Result;
+// aegis: boundary: ffi/zozz.h's function; src/abi_test.zig holds this signature to the header at compile time
 pub extern fn zozzAnimationCountScaleKeys(animation: ?*const Animation, track: c_int, out: *c_int) Result;
 
+// aegis: boundary: ffi/zozz.h's function; src/abi_test.zig holds this signature to the header at compile time
 pub extern fn zozzMotionBlend(layers: ?[*]const MotionBlendLayer, count: usize, out: *Transform) Result;
 
 //=============================================================================
@@ -812,7 +1115,9 @@ pub const IKTwoBoneJob = extern struct {
     reached: ?*bool,
 };
 
+// aegis: boundary: ffi/zozz.h's function; src/abi_test.zig holds this signature to the header at compile time
 pub extern fn zozzIKTwoBoneJobDefaults(out: *IKTwoBoneJob) void;
+// aegis: boundary: ffi/zozz.h's function; src/abi_test.zig holds this signature to the header at compile time
 pub extern fn zozzIKTwoBoneJobRun(job: *const IKTwoBoneJob) Result;
 
 pub const IKAimJob = extern struct {
@@ -828,7 +1133,9 @@ pub const IKAimJob = extern struct {
     reached: ?*bool,
 };
 
+// aegis: boundary: ffi/zozz.h's function; src/abi_test.zig holds this signature to the header at compile time
 pub extern fn zozzIKAimJobDefaults(out: *IKAimJob) void;
+// aegis: boundary: ffi/zozz.h's function; src/abi_test.zig holds this signature to the header at compile time
 pub extern fn zozzIKAimJobRun(job: *const IKAimJob) Result;
 
 /// One joint's local-space rotation correction, `ZozzJointCorrection`.
@@ -837,6 +1144,7 @@ pub const JointCorrection = extern struct {
     joint: i32,
 };
 
+// aegis: boundary: ffi/zozz.h's function; src/abi_test.zig holds this signature to the header at compile time
 pub extern fn zozzSoaPoseApplyLocalCorrections(
     pose: [*]SoaTransform,
     blocks: usize,
@@ -891,16 +1199,22 @@ pub const SkinningJob = extern struct {
     out_tangents_stride: usize,
 };
 
+// aegis: boundary: ffi/zozz.h's function; src/abi_test.zig holds this signature to the header at compile time
 pub extern fn zozzSkinningJobRun(job: *const SkinningJob) Result;
 
 //=============================================================================
 // GV4 group-varint codec (ffi/zozz_encode.h)
 //=============================================================================
 
+// aegis: boundary: ffi/zozz.h's function; src/abi_test.zig holds this signature to the header at compile time
 pub extern fn zozzEncodeGV4(values: *const [4]u32, out: [*]u8, out_capacity: usize, out_size: *usize) Result;
+// aegis: boundary: ffi/zozz.h's function; src/abi_test.zig holds this signature to the header at compile time
 pub extern fn zozzDecodeGV4(buffer: [*]const u8, buffer_size: usize, out: *[4]u32, bytes_read: *usize) Result;
+// aegis: boundary: ffi/zozz.h's function; src/abi_test.zig holds this signature to the header at compile time
 pub extern fn zozzComputeGV4WorstBufferSize(values_count: usize, out: *usize) Result;
+// aegis: boundary: ffi/zozz.h's function; src/abi_test.zig holds this signature to the header at compile time
 pub extern fn zozzEncodeGV4Stream(values: [*]const u32, values_count: usize, out: [*]u8, out_capacity: usize, out_size: *usize) Result;
+// aegis: boundary: ffi/zozz.h's function; src/abi_test.zig holds this signature to the header at compile time
 pub extern fn zozzDecodeGV4Stream(buffer: [*]const u8, buffer_size: usize, values: [*]u32, values_count: usize, bytes_read: *usize) Result;
 
 //=============================================================================
@@ -916,8 +1230,11 @@ pub const OptionsParseResult = enum(c_int) {
     exit_failure = 2,
 };
 
+// aegis: boundary: ffi/zozz.h's function; src/abi_test.zig holds this signature to the header at compile time
 pub extern fn zozzOptionsParserCreate(out: **OptionsParser) Result;
+// aegis: boundary: ffi/zozz.h's function; src/abi_test.zig holds this signature to the header at compile time
 pub extern fn zozzOptionsParserDestroy(parser: ?*OptionsParser) void;
+// aegis: boundary: ffi/zozz.h's function; src/abi_test.zig holds this signature to the header at compile time
 pub extern fn zozzOptionsParserParseCommandLine(
     parser: ?*OptionsParser,
     argc: c_int,
@@ -926,35 +1243,62 @@ pub extern fn zozzOptionsParserParseCommandLine(
     usage: ?[*:0]const u8,
     out: *OptionsParseResult,
 ) Result;
+// aegis: boundary: ffi/zozz.h's function; src/abi_test.zig holds this signature to the header at compile time
 pub extern fn zozzOptionsParserHelp(parser: ?*OptionsParser) Result;
+// aegis: boundary: ffi/zozz.h's function; src/abi_test.zig holds this signature to the header at compile time
 pub extern fn zozzOptionsParserRegister(parser: ?*OptionsParser, option: ?*Option) Result;
+// aegis: boundary: ffi/zozz.h's function; src/abi_test.zig holds this signature to the header at compile time
 pub extern fn zozzOptionsParserUnregister(parser: ?*OptionsParser, option: ?*Option) Result;
+// aegis: boundary: ffi/zozz.h's function; src/abi_test.zig holds this signature to the header at compile time
 pub extern fn zozzOptionsParserSetUsage(parser: ?*OptionsParser, usage: ?[*:0]const u8) Result;
+// aegis: boundary: ffi/zozz.h's function; src/abi_test.zig holds this signature to the header at compile time
 pub extern fn zozzOptionsParserUsage(parser: ?*const OptionsParser) [*:0]const u8;
+// aegis: boundary: ffi/zozz.h's function; src/abi_test.zig holds this signature to the header at compile time
 pub extern fn zozzOptionsParserSetVersion(parser: ?*OptionsParser, version: ?[*:0]const u8) Result;
+// aegis: boundary: ffi/zozz.h's function; src/abi_test.zig holds this signature to the header at compile time
 pub extern fn zozzOptionsParserMaxOptions(parser: ?*const OptionsParser) c_int;
+// aegis: boundary: ffi/zozz.h's function; src/abi_test.zig holds this signature to the header at compile time
 pub extern fn zozzOptionsParserExecutableName(parser: ?*const OptionsParser) [*:0]const u8;
+// aegis: boundary: ffi/zozz.h's function; src/abi_test.zig holds this signature to the header at compile time
 pub extern fn zozzOptionsParserExecutablePath(parser: ?*const OptionsParser) [*:0]const u8;
 
+// aegis: boundary: ffi/zozz.h's function; src/abi_test.zig holds this signature to the header at compile time
 pub extern fn zozzIntOptionCreate(name: [*:0]const u8, help: ?[*:0]const u8, default_value: i32, required: bool, out: **Option) Result;
+// aegis: boundary: ffi/zozz.h's function; src/abi_test.zig holds this signature to the header at compile time
 pub extern fn zozzFloatOptionCreate(name: [*:0]const u8, help: ?[*:0]const u8, default_value: f32, required: bool, out: **Option) Result;
+// aegis: boundary: ffi/zozz.h's function; src/abi_test.zig holds this signature to the header at compile time
 pub extern fn zozzBoolOptionCreate(name: [*:0]const u8, help: ?[*:0]const u8, default_value: bool, required: bool, out: **Option) Result;
+// aegis: boundary: ffi/zozz.h's function; src/abi_test.zig holds this signature to the header at compile time
 pub extern fn zozzStringOptionCreate(name: [*:0]const u8, help: ?[*:0]const u8, default_value: ?[*:0]const u8, required: bool, out: **Option) Result;
+// aegis: boundary: ffi/zozz.h's function; src/abi_test.zig holds this signature to the header at compile time
 pub extern fn zozzOptionDestroy(option: ?*Option) void;
 
+// aegis: boundary: ffi/zozz.h's function; src/abi_test.zig holds this signature to the header at compile time
 pub extern fn zozzIntOptionValue(option: ?*const Option, out: *i32) Result;
+// aegis: boundary: ffi/zozz.h's function; src/abi_test.zig holds this signature to the header at compile time
 pub extern fn zozzFloatOptionValue(option: ?*const Option, out: *f32) Result;
+// aegis: boundary: ffi/zozz.h's function; src/abi_test.zig holds this signature to the header at compile time
 pub extern fn zozzBoolOptionValue(option: ?*const Option, out: *bool) Result;
+// aegis: boundary: ffi/zozz.h's function; src/abi_test.zig holds this signature to the header at compile time
 pub extern fn zozzStringOptionValue(option: ?*const Option, out: *[*:0]const u8) Result;
+// aegis: boundary: ffi/zozz.h's function; src/abi_test.zig holds this signature to the header at compile time
 pub extern fn zozzIntOptionDefault(option: ?*const Option, out: *i32) Result;
+// aegis: boundary: ffi/zozz.h's function; src/abi_test.zig holds this signature to the header at compile time
 pub extern fn zozzFloatOptionDefault(option: ?*const Option, out: *f32) Result;
+// aegis: boundary: ffi/zozz.h's function; src/abi_test.zig holds this signature to the header at compile time
 pub extern fn zozzBoolOptionDefault(option: ?*const Option, out: *bool) Result;
+// aegis: boundary: ffi/zozz.h's function; src/abi_test.zig holds this signature to the header at compile time
 pub extern fn zozzStringOptionDefault(option: ?*const Option, out: *[*:0]const u8) Result;
 
+// aegis: boundary: ffi/zozz.h's function; src/abi_test.zig holds this signature to the header at compile time
 pub extern fn zozzOptionName(option: ?*const Option) [*:0]const u8;
+// aegis: boundary: ffi/zozz.h's function; src/abi_test.zig holds this signature to the header at compile time
 pub extern fn zozzOptionHelp(option: ?*const Option) [*:0]const u8;
+// aegis: boundary: ffi/zozz.h's function; src/abi_test.zig holds this signature to the header at compile time
 pub extern fn zozzOptionRequired(option: ?*const Option) bool;
+// aegis: boundary: ffi/zozz.h's function; src/abi_test.zig holds this signature to the header at compile time
 pub extern fn zozzOptionStatisfied(option: ?*const Option) bool;
+// aegis: boundary: ffi/zozz.h's function; src/abi_test.zig holds this signature to the header at compile time
 pub extern fn zozzOptionRestoreDefault(option: ?*Option) Result;
 
 //=============================================================================
@@ -1048,12 +1392,19 @@ pub const ImporterInterface = extern struct {
     user: ?*anyopaque,
 };
 
+// aegis: boundary: ffi/zozz.h's function; src/abi_test.zig holds this signature to the header at compile time
 pub extern fn zozzImporterCreate(interface: ?*const ImporterInterface, out: **Importer) Result;
+// aegis: boundary: ffi/zozz.h's function; src/abi_test.zig holds this signature to the header at compile time
 pub extern fn zozzGltfImporterCreate(path: [*:0]const u8, out: **Importer) Result;
+// aegis: boundary: ffi/zozz.h's function; src/abi_test.zig holds this signature to the header at compile time
 pub extern fn zozzImporterDestroy(importer: ?*Importer) void;
+// aegis: boundary: ffi/zozz.h's function; src/abi_test.zig holds this signature to the header at compile time
 pub extern fn zozzImporterLoad(importer: ?*Importer, filename: [*:0]const u8) Result;
+// aegis: boundary: ffi/zozz.h's function; src/abi_test.zig holds this signature to the header at compile time
 pub extern fn zozzImporterImportSkeleton(importer: ?*Importer, types: ImportNodeType, out: **RawSkeleton) Result;
+// aegis: boundary: ffi/zozz.h's function; src/abi_test.zig holds this signature to the header at compile time
 pub extern fn zozzImporterIterateAnimationNames(importer: ?*Importer, visitor: StringVisitor, user: ?*anyopaque) Result;
+// aegis: boundary: ffi/zozz.h's function; src/abi_test.zig holds this signature to the header at compile time
 pub extern fn zozzImporterImportAnimation(
     importer: ?*Importer,
     animation_name: [*:0]const u8,
@@ -1061,12 +1412,14 @@ pub extern fn zozzImporterImportAnimation(
     sampling_rate: f32,
     out: **RawAnimation,
 ) Result;
+// aegis: boundary: ffi/zozz.h's function; src/abi_test.zig holds this signature to the header at compile time
 pub extern fn zozzImporterIterateNodeProperties(
     importer: ?*Importer,
     node_name: [*:0]const u8,
     visitor: NodePropertyVisitor,
     user: ?*anyopaque,
 ) Result;
+// aegis: boundary: ffi/zozz.h's function; src/abi_test.zig holds this signature to the header at compile time
 pub extern fn zozzImporterImportFloatTrack(
     importer: ?*Importer,
     animation_name: [*:0]const u8,
@@ -1076,6 +1429,7 @@ pub extern fn zozzImporterImportFloatTrack(
     sampling_rate: f32,
     out: **RawFloatTrack,
 ) Result;
+// aegis: boundary: ffi/zozz.h's function; src/abi_test.zig holds this signature to the header at compile time
 pub extern fn zozzImporterImportFloat2Track(
     importer: ?*Importer,
     animation_name: [*:0]const u8,
@@ -1085,6 +1439,7 @@ pub extern fn zozzImporterImportFloat2Track(
     sampling_rate: f32,
     out: **RawFloat2Track,
 ) Result;
+// aegis: boundary: ffi/zozz.h's function; src/abi_test.zig holds this signature to the header at compile time
 pub extern fn zozzImporterImportFloat3Track(
     importer: ?*Importer,
     animation_name: [*:0]const u8,
@@ -1094,6 +1449,7 @@ pub extern fn zozzImporterImportFloat3Track(
     sampling_rate: f32,
     out: **RawFloat3Track,
 ) Result;
+// aegis: boundary: ffi/zozz.h's function; src/abi_test.zig holds this signature to the header at compile time
 pub extern fn zozzImporterImportFloat4Track(
     importer: ?*Importer,
     animation_name: [*:0]const u8,
@@ -1103,4 +1459,5 @@ pub extern fn zozzImporterImportFloat4Track(
     sampling_rate: f32,
     out: **RawFloat4Track,
 ) Result;
+// aegis: boundary: ffi/zozz.h's function; src/abi_test.zig holds this signature to the header at compile time
 pub extern fn zozzImporterRun(importer: ?*Importer, argc: c_int, argv: [*]const [*:0]const u8) Result;

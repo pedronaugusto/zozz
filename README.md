@@ -9,11 +9,10 @@ reached through a C ABI of this package's own, with a Zig wrapper over it.
 
 ## Usage
 
-A region of [`examples/usage.zig`](examples/usage.zig), which `zig build
-examples` builds and runs; `ci/check-docs.sh` fails the build when this file
-and that example differ.
+A region of [`examples/usage.zig`](examples/usage.zig), which the tests build
+and run; the gate fails when this file and that example differ.
 
-<!-- BEGIN GENERATED ci/readme_usage.sh -->
+<!-- BEGIN GENERATED zig build docs -- usage -->
 ```zig
 const zozz = @import("zozz");
 
@@ -214,11 +213,12 @@ intercept it from.
 
 `src/c.zig` hand-writes its `extern` declarations rather than running
 translate-c, so the shipped module never compiles C. Three checks hold those
-declarations to reality: `src/abi_check.zig` compares them against `ffi/zozz.h`
+declarations to reality: `src/abi_test.zig` compares them against `ffi/zozz.h`
 by reflection, `zozzAbiLayout()` compares them against the linked library, and
 `static_assert`s in `ffi/zozz_abi.cpp` compare the C++ against ozz.
-`ci/check-abi-drift.sh` proves the first one fires, on both ABIs. That check
-pairs declarations to the header by name, so the naming convention in
+`bay probe` proves the first one fires: each drift in `ci/probes/` must fail
+it. That check pairs declarations to the header by name, so the naming
+convention in
 [BINDING.md](BINDING.md) is a build requirement.
 [docs/abi-guard.md](docs/abi-guard.md) has what each check covers;
 [docs/build-hygiene.md](docs/build-hygiene.md) the rules `build.zig` keeps.
@@ -226,13 +226,13 @@ pairs declarations to the header by name, so the naming convention in
 ## Scope
 
 The scope is ozz-animation at the vendored version: ozz `0.17.0`, commit
-pinned, taken unmodified. `ci/verify-vendor.sh` fetches that commit and diffs it
-against `libs/` as its own CI job, and [UPSTREAM.md](UPSTREAM.md) records what
+pinned, taken unmodified. `zig build check-vendor` fetches that commit and
+diffs it against `libs/` in the gate, and [UPSTREAM.md](UPSTREAM.md) records what
 was left out of the vendored tree and every upstream behaviour worked around
 here.
 
 Every public name ozz declares in its include tree is accounted for, and
-`ci/check-coverage.sh` is what says so: it enumerates them from ozz's own
+`zig build check-coverage` is what says so: it enumerates them from ozz's own
 headers, requires a verdict for each — bound across the C ABI, delivered as a C
 callback, provided in Zig, provided by the Zig language, or internal to ozz —
 and fails the build on one that has none. Every directory under
@@ -267,18 +267,17 @@ reference SIMD backend, and the downstream-consumer build.
 ## Testing
 
 ```sh
-zig build test          # the suite, examples/ included
+bay test                # the gate: every suite arm, the checks, lint, docs
+zig build test          # the suite arms alone, examples/ included
 zig build test-c        # the C header on its own, no Zig in the picture
-ci/run.sh               # the whole matrix, as CI runs it
-ci/run.sh --quick       # native Debug only, for the inner loop
-ci/install-hooks.sh     # run ci/run.sh before every push
+bay probe               # each invariant in ci/probes/, mutated, must fail
 ```
 
 Assets are built at test time through ozz's own offline builders and serialised
 in memory (`tests/fixture.cpp`), so the suite is version-matched to the vendored
-runtime and ships no third-party clips. `zig build --build-file
-tests/consumer/build.zig run` builds zozz the way a downstream package does,
-through `b.dependency` — a path nothing in `src/` or `tests/` exercises.
+runtime and ships no third-party clips. `zig build check-consumer` builds zozz
+the way a downstream package does, through `b.dependency` — a path nothing in
+`src/` or `tests/` exercises.
 
 `-Dsanitize_c=true` skips the truncated-archive test: upstream ozz forms member
 accesses on a null pointer when a keyframe array has zero entries, the exact
@@ -289,39 +288,36 @@ their local translation, a clip that moves, and a refused NaN ratio.
 
 ### By the numbers
 
-<!-- BEGIN GENERATED ci/measurements.sh --markdown -->
+<!-- BEGIN GENERATED zig build measurements -->
 | | |
 |---:|---|
 | **0.5.0** | version, the same in `build.zig.zon` and `ffi/zozz_core.h` |
-| **359** | C entry points (`ZOZZ_API` in `ffi/*.h`) |
-| **359** | Zig externs (`pub extern fn` in `src/c.zig`) |
-| **21** | installed public headers |
-| **97** | ozz public names with a binding |
-| **418** | ozz public names in the bound areas |
-| **199** | Zig tests `zig build test` executes |
-| **10** | tests it skips, each needing a build option or an on-disk asset |
+| **359** | C entry points (`ZOZZ_API` in `ffi/*.h`), each with its Zig extern |
+| **19** | installed public headers: `zozz.h` and those it includes |
+| **321** | public ozz names no entry point spells out, each carrying a verdict in `ci/coverage/` |
+| **36** | of them reachable through the C boundary under another name (`BOUND`) |
+| **5** | C++ virtuals delivered as C callbacks (`EXTENSION`) |
+| **212** | provided in Zig without crossing the boundary (`ZIG`) |
+| **36** | provided by the Zig language (`LANGUAGE`) |
+| **32** | internal to ozz or compiled by no source here (`INTERNAL`) |
 | **206** | assertions in the standalone C smoke test |
 | **41** | vendored ozz translation units `build.zig` compiles |
 | **20** | zozz C++ translation units (`ffi/*.cpp`) |
-| **14690** | Zig source lines (`src/`) |
-| **9730** | C++ source lines (`ffi/`) |
-| **18** | deliberate drifts `ci/check-abi-drift.sh` must refuse |
-| **32** | steps `ci/run.sh` runs |
-| **7** | further targets `ci/run.sh` cross-compiles |
+| **18** | invariants `bay probe` mutates, each with the test that must notice |
 <!-- END GENERATED -->
 
-`ci/measurements.sh` recomputes these from the tree; `ci/check-docs.sh` fails
-the build if the committed block differs, or if any other hand-written number
-appears in these documents.
+`zig build measurements` recomputes these from the tree, and the gate fails if
+the committed block differs, or if a document states a number by hand that
+`ci/numbers.zig` does not account for.
 
 ## Contributing
 
 Issues and pull requests are welcome; [BINDING.md](BINDING.md) is the contract
 a new area has to satisfy. `libs/ozz` is vendored verbatim and must not be
 edited — changes there are lost at the next re-vendor, so work around upstream
-in `ffi/` and record it in [UPSTREAM.md](UPSTREAM.md). Run `ci/run.sh` before
-pushing, or `ci/install-hooks.sh` once and it runs itself. Comments state a
-contract, not a narrative, and `ci/check-comments.sh` enforces the length cap
+in `ffi/` and record it in [UPSTREAM.md](UPSTREAM.md). Run `bay test` before
+pushing. Comments state a contract, not a narrative, and `zig build
+check-comments` enforces the length cap
 and the register; the cap never justifies dropping a fact, so units, ownership,
 lifetime, nullability, error conditions and ordering constraints come first.
 New source files go into the explicit lists in `build.zig` deliberately.

@@ -1,0 +1,11 @@
+# expect: zozz ABI drift:
+--- a/src/c.zig
++++ b/src/c.zig
+@@ -326,7 +326,6 @@
+ // aegis: boundary: ffi/zozz.h's function; src/abi_test.zig holds this signature to the header at compile time
+ pub extern fn zozzVersion() u32;
+ // aegis: boundary: ffi/zozz.h's function; src/abi_test.zig holds this signature to the header at compile time
+-pub extern fn zozzOzzVersion() u32;
+ // aegis: boundary: ffi/zozz.h's function; src/abi_test.zig holds this signature to the header at compile time
+ pub extern fn zozzResultName(result: Result) [*:0]const u8;
+ // aegis: boundary: ffi/zozz.h's function; src/abi_test.zig holds this signature to the header at compile time

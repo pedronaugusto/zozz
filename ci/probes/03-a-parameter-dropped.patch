@@ -1,0 +1,12 @@
+# expect: zozz ABI drift:
+--- a/src/c.zig
++++ b/src/c.zig
+@@ -366,7 +366,7 @@
+ // aegis: boundary: ffi/zozz.h's function; src/abi_test.zig holds this signature to the header at compile time
+ pub extern fn zozzSkeletonJointRestPoses(skeleton: ?*const Skeleton, out_count: *usize) ?[*]const SoaTransform;
+ // aegis: boundary: ffi/zozz.h's function; src/abi_test.zig holds this signature to the header at compile time
+-pub extern fn zozzSkeletonRestPose(skeleton: ?*const Skeleton, out: [*]Transform, count: usize) Result;
++pub extern fn zozzSkeletonRestPose(skeleton: ?*const Skeleton, out: [*]Transform) Result;
+ // aegis: boundary: ffi/zozz.h's function; src/abi_test.zig holds this signature to the header at compile time
+ pub extern fn zozzSkeletonRestPoseSoa(skeleton: ?*const Skeleton, out: [*]SoaTransform, blocks: usize) Result;
+ 

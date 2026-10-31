@@ -1,8 +1,8 @@
 //! The README's Usage section, as a program that runs.
 //!
 //! Everything between the two `README:usage` markers is what README.md shows:
-//! `ci/readme_usage.sh` extracts it and `ci/check-docs.sh` compares, so the
-//! snippet a reader copies is the snippet CI executes. Before the markers is
+//! `zig build docs -- usage` extracts it and the gate compares, so the
+//! snippet a reader copies is the snippet the tests execute. Before the markers is
 //! what a real application already has — assets its toolchain produced — and
 //! after them is the assertion that the frame actually did something.
 
@@ -137,6 +137,4 @@ pub fn main() !void {
     if (!std.math.approxEqAbs(f32, skinning.m[0], 1, 1e-4)) {
         return error.SkinningMatrixWrong;
     }
-
-    std.debug.print("usage example ok\n", .{});
 }

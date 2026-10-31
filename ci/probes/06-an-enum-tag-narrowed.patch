@@ -1,0 +1,12 @@
+# expect: zozz ABI drift:
+--- a/src/c.zig
++++ b/src/c.zig
+@@ -15,7 +15,7 @@
+ // Results
+ //=============================================================================
+ 
+-pub const Result = enum(c_int) {
++pub const Result = enum(i8) {
+     ok = 0,
+     file_not_found = 1,
+     io = 2,

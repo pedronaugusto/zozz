@@ -1,0 +1,12 @@
+# expect: zozz ABI drift:
+--- a/ffi/zozz_core.h
++++ b/ffi/zozz_core.h
+@@ -304,7 +304,7 @@
+   /// can be trusted.
+   uint32_t layout_size;
+ 
+-  uint32_t transform_size;
++  int32_t transform_size;
+   uint32_t transform_align;
+   uint32_t transform_offset_translation;
+   uint32_t transform_offset_rotation;

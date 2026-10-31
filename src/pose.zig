@@ -10,7 +10,6 @@
 //! stack, inside a larger struct, or as a sub-range of a batch, and two poses
 //! can be sub-ranges of one allocation. An opaque handle made all of those
 //! impossible and cost a heap allocation per pose.
-const std = @import("std");
 const c = @import("c.zig");
 const err = @import("error.zig");
 const math = @import("math.zig");
@@ -63,5 +62,5 @@ pub fn fromLocalTransforms(in: []const math.Transform, pose: []SoaTransform) err
 /// treats a negative weight as 0, and above 1 is valid wherever
 /// normalisation allows it. Every value must be finite.
 pub fn packJointWeights(in: []const f32, out: []math.SimdFloat4) err.Error!void {
-    try err.check(c.zozzSoaWeightsPack(in.ptr, in.len, @ptrCast(out.ptr), out.len));
+    try err.check(c.zozzSoaWeightsPack(in.ptr, in.len, @ptrCast(out.ptr), out.len)); // aegis: no-danger: math.SimdFloat4 and c.SimdFloat4 are the same 16 bytes at the same alignment, asserted at comptime above
 }

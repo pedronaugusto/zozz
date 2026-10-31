@@ -1,0 +1,12 @@
+# expect: zozz ABI drift:
+--- a/src/c.zig
++++ b/src/c.zig
+@@ -19,7 +19,7 @@
+     ok = 0,
+     file_not_found = 1,
+     io = 2,
+-    bad_format = 3,
++    bad_format = 30,
+     out_of_memory = 4,
+     invalid_argument = 5,
+     job_invalid = 6,

@@ -1,0 +1,13 @@
+# expect: zozz ABI drift:
+--- a/src/c.zig
++++ b/src/c.zig
+@@ -875,8 +875,8 @@
+ /// asserts every offset against ozz's own type.
+ pub const BlendingLayer = extern struct {
+     weight: f32,
++    num_transform: usize,
+     transform: ?[*]const SoaTransform,
+-    num_transform: usize,
+     joint_weights: ?[*]const SimdFloat4,
+     num_joint_weights: usize,
+ };

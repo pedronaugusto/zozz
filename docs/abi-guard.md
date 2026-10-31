@@ -6,10 +6,10 @@ module never compiles C. Nothing in either compiler checks that those
 declarations still agree with the header: a `size_t` narrowed to an `int` links
 cleanly and corrupts. Three checks close that, on three different axes.
 
-## `src/abi_check.zig` — the header against the declarations
+## `src/abi_test.zig` — the header against the declarations
 
-A comptime `@cImport` of the real header, compared against `src/c.zig` by
-reflection: every struct field paired by name with its own offset, every
+The real header, translated by the build's translate-c step, compared against
+`src/c.zig` by reflection: every struct field paired by name with its own offset, every
 scalar's size, alignment, signedness and int-versus-float, every function's
 arity and variadic-ness, every enumerator's value, every constant.
 
@@ -33,24 +33,21 @@ types.
 
 ## Proving the first check is not vacuous
 
-`src/abi_check.zig` is the check that guards the other two, and it is the one
+`src/abi_test.zig` is the check that guards the other two, and it is the one
 test here that cannot test itself — a refactor that quietly makes it vacuous
-looks exactly like a passing build. `ci/check-abi-drift.sh` applies deliberate
-drifts one at a time and requires each to be refused, including a field swap
-that leaves every offset in the struct unchanged and so defeats any positional
-or offsets-only comparison.
+looks exactly like a passing build. `bay probe` applies the deliberate
+drifts in `ci/probes/` one at a time and requires each to be refused, including
+a field swap that leaves every offset in the struct unchanged and so defeats
+any positional or offsets-only comparison.
 
 It compares `src/c.zig` against the header *as preprocessed for a target*, so
 firing on the Itanium ABI proves nothing about MSVC's, where a C enum is `int`
 rather than `unsigned int` — a difference `ZozzResult` and
-`ZozzTrackInterpolation` cross in signatures and in struct fields. CI runs the
-script on both ABIs, as separate jobs.
-
-Locally `ci/run.sh` runs this host's ABI only. The second arm is
-`ci/run.sh --drift-target=<triple>`, or `ci/check-abi-drift.sh
--Dtarget=<triple>` on its own. It is opt-in because it rebuilds once per
-mutation and `ci/run.sh` is installable as a pre-push hook. A release should
-run both arms.
+`ZozzTrackInterpolation` cross in signatures and in struct fields. A drift is
+a compile error, so the check fires wherever the tests compile, and the gate
+compiles them for `x86_64-windows-msvc` as well as the Itanium targets. The
+probes run outside the gate, because each rebuilds the suite, and on the
+host's ABI only.
 
 ## Naming is load-bearing
 

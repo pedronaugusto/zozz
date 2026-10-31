@@ -6,20 +6,12 @@
     .paths = .{
         "build.zig",
         "build.zig.zon",
-        "ci",
-        "docs",
-        "examples",
-        "tools",
-        ".github",
         "ffi",
         "libs",
         "src",
-        "tests",
-        "BINDING.md",
-        "CHANGELOG.md",
         "LICENSE",
         "README.md",
-        "UPSTREAM.md",
+        "CHANGELOG.md",
     },
     .dev_dependencies = .{
         .preflight = .{
@@ -29,6 +21,16 @@
         .shakedown = .{
             .url = "git+https://github.com/pedronaugusto/shakedown?ref=v0.6.0#778a399a2e0800e410e6b95269bb7f533b6947e2",
             .hash = "shakedown-0.6.0-BR8U48Z0FwD9owc-v_cfmrajSGSLOjFoJB71L3I7TvYt",
+        },
+        .ozz = .{
+            .url = "git+https://github.com/guillaumeblanc/ozz-animation?ref=0.17.0#744eb9d99f606eda849acb0b1204f7a3dc20bca1",
+            .hash = "N-V-__8AANxHtQesN2gRnIwiaqXbT6QakHUubU9mnk-vG-cW",
+        },
+    },
+    .dependencies = .{
+        .aegis = .{
+            .url = "git+https://github.com/pedronaugusto/aegis?ref=v0.2.4#68ddadb40eb5ea602c8ba81848344171fcebeb40",
+            .hash = "aegis-0.2.4-rsxouiMcCQBrVW0T-Vq8k66DwLarBqrEFONyfpGEJGcu",
         },
     },
 }

@@ -9,7 +9,26 @@ could not express, so a port has the reason and not only the diff.
 
 ## [Unreleased]
 
+### Breaking
+
+- Builds on Zig 0.17.0, which `build.zig.zon` now requires. The tests read
+  `ffi/zozz.h` through the build's translate-c step, since 0.17 removed
+  `@cImport`, and the wrapper walks 0.17's reflection lists.
+
+### Changed
+
+- The `zozz` module depends on aegis 0.2.4. The installed allocator is held
+  in an `aegis.Guarded` cell rather than a bare mutable global, so every read
+  and write of it goes through one acquire.
+- Development runs under preflight's gate (`bay test`), with every check a Zig
+  program under `ci/`; the shell scripts, `ci/run.sh` and its pre-push hook are
+  gone. `zig build recon -- <Class>` replaces `tools/recon.sh`.
+
 ### Fixed
+
+- README's numbers block counted every header in `ffi/` as an installed public
+  header, the two C++-internal ones that are never installed included. It now
+  counts `zozz.h` and the headers it includes.
 
 - `-Denable_asserts=true` keeps ozz's asserts in ReleaseFast and ReleaseSmall.
   Zig 0.17 defines NDEBUG for C by itself in those two modes, and the build

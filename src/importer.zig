@@ -90,11 +90,11 @@ pub const Importer = struct {
         };
         const Trampoline = struct {
             fn call(name: [*:0]const u8, user: ?*anyopaque) callconv(.c) void {
-                const ctx: Context = @ptrCast(@alignCast(user.?));
+                const ctx: Context = @ptrCast(@alignCast(user.?)); // aegis: no-danger: user is the caller's context, which this function handed the C side and it hands back unchanged
                 visit(ctx, std.mem.span(name));
             }
         };
-        try err.check(c.zozzImporterIterateAnimationNames(self.handle.?, &Trampoline.call, @ptrCast(context)));
+        try err.check(c.zozzImporterIterateAnimationNames(self.handle.?, &Trampoline.call, @ptrCast(context))); // aegis: no-danger: the caller's context as the C side's opaque user pointer, read back only by the trampoline
     }
 
     /// Imports one named animation against `skeleton`'s joints, handed back
@@ -131,11 +131,11 @@ pub const Importer = struct {
         };
         const Trampoline = struct {
             fn call(property: *const NodeProperty, user: ?*anyopaque) callconv(.c) void {
-                const ctx: Context = @ptrCast(@alignCast(user.?));
+                const ctx: Context = @ptrCast(@alignCast(user.?)); // aegis: no-danger: user is the caller's context, which this function handed the C side and it hands back unchanged
                 visit(ctx, property.*);
             }
         };
-        try err.check(c.zozzImporterIterateNodeProperties(self.handle.?, node_name, &Trampoline.call, @ptrCast(context)));
+        try err.check(c.zozzImporterIterateNodeProperties(self.handle.?, node_name, &Trampoline.call, @ptrCast(context))); // aegis: no-danger: the caller's context as the C side's opaque user pointer, read back only by the trampoline
     }
 
     /// Track imports, one per value width, mirroring `OzzImporter`'s four

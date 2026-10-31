@@ -5,7 +5,6 @@
 //! and animation_utils.h: standalone functions over `Skeleton` and
 //! `Animation`, not members of either.
 
-const std = @import("std");
 const c = @import("c.zig");
 const err = @import("error.zig");
 const math = @import("math.zig");
@@ -61,7 +60,7 @@ pub fn iterateJointsDepthFirst(
 
     const Trampoline = struct {
         fn call(joint: c_int, parent: c_int, user: ?*anyopaque) callconv(.c) void {
-            const ctx: Context = @ptrCast(@alignCast(user.?));
+            const ctx: Context = @ptrCast(@alignCast(user.?)); // aegis: no-danger: user is the caller's context, which this function handed the C side and it hands back unchanged
             visit(ctx, @intCast(joint), parent);
         }
     };
@@ -69,7 +68,7 @@ pub fn iterateJointsDepthFirst(
         skeleton.handle,
         from,
         &Trampoline.call,
-        @ptrCast(context),
+        @ptrCast(context), // aegis: no-danger: the caller's context as the C side's opaque user pointer, read back only by the trampoline
     ));
 }
 
@@ -88,14 +87,14 @@ pub fn iterateJointsDepthFirstReverse(
 
     const Trampoline = struct {
         fn call(joint: c_int, parent: c_int, user: ?*anyopaque) callconv(.c) void {
-            const ctx: Context = @ptrCast(@alignCast(user.?));
+            const ctx: Context = @ptrCast(@alignCast(user.?)); // aegis: no-danger: user is the caller's context, which this function handed the C side and it hands back unchanged
             visit(ctx, @intCast(joint), parent);
         }
     };
     try err.check(c.zozzSkeletonIterateJointsDepthFirstReverse(
         skeleton.handle,
         &Trampoline.call,
-        @ptrCast(context),
+        @ptrCast(context), // aegis: no-danger: the caller's context as the C side's opaque user pointer, read back only by the trampoline
     ));
 }
 

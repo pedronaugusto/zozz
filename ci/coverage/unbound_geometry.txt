@@ -1,0 +1,12 @@
+# AREA<TAB>NAME<TAB>VERDICT<TAB>EVIDENCE — one line per name
+# `ci/coverage.zig --names` reports unbound, keyed by the area it was found in.
+#
+#   BOUND      crosses the ABI; evidence names the zozz entry points.
+#   EXTENSION  a C++ virtual delivered as a C callback; evidence names it.
+#   LANGUAGE   Zig provides it; evidence names the facility.
+#   ZIG        zozz provides it in Zig without crossing the ABI; evidence is
+#              src/FILE.zig:decl.
+#   INTERNAL   upstream marks it internal, it has no public declaration, or
+#              this build compiles no source for it.
+#              `ci/coverage.zig --classify` computes this; nothing else may claim it.
+#   GAP        work. ci/coverage.zig fails while any remain.

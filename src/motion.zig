@@ -5,7 +5,6 @@
 //! extracted them (offline, at bake time) and are combined at runtime only
 //! through blending.
 
-const std = @import("std");
 const c = @import("c.zig");
 const err = @import("error.zig");
 const math = @import("math.zig");

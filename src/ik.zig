@@ -130,7 +130,7 @@ pub const AimResult = struct {
 };
 
 /// One joint's local-space rotation correction, as an IK job produces it.
-/// The layout is `c.JointCorrection`'s, which is what `abi_check.zig`
+/// The layout is `c.JointCorrection`'s, which is what `abi_test.zig`
 /// compares against the header; `correction` below is how one is built.
 pub const JointCorrection = c.JointCorrection;
 

@@ -1,0 +1,12 @@
+# expect: zozz ABI drift:
+--- a/src/c.zig
++++ b/src/c.zig
+@@ -204,7 +204,7 @@
+ /// `abi_test.zig` sweeps — a constant declared anywhere else is a second,
+ /// uncompared literal. `i16` because that is what
+ /// `zozzSkeletonJointParent` returns.
+-pub const no_parent: i16 = -1;
++pub const no_parent: i16 = -2;
+ 
+ /// ozz's `Skeleton::kMaxJoints`, and the value ozz gives
+ /// `LocalToModelJob::to` by default -- "walk to the last joint". Mirrors

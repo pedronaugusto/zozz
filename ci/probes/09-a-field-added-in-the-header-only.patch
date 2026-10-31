@@ -1,0 +1,11 @@
+# expect: zozz ABI drift:
+--- a/ffi/zozz_core.h
++++ b/ffi/zozz_core.h
+@@ -299,6 +299,7 @@
+ //===----------------------------------------------------------------------===//
+ 
+ typedef struct ZozzAbiLayout {
++  uint32_t intruder;
+   /// sizeof(ZozzAbiLayout). Read this first: if it disagrees with the
+   /// consumer's own sizeof, the struct itself has changed and no field below
+   /// can be trusted.

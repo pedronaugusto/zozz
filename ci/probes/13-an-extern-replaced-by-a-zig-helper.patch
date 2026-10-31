@@ -1,0 +1,15 @@
+# expect: zozz ABI drift:
+--- a/src/c.zig
++++ b/src/c.zig
+@@ -377,7 +377,10 @@
+ // aegis: boundary: ffi/zozz.h's function; src/abi_test.zig holds this signature to the header at compile time
+ pub extern fn zozzAnimationDestroy(animation: ?*Animation) void;
+ // aegis: boundary: ffi/zozz.h's function; src/abi_test.zig holds this signature to the header at compile time
+-pub extern fn zozzAnimationDuration(animation: ?*const Animation) f32;
++pub fn zozzAnimationDuration(animation: ?*const Animation) f32 {
++    _ = animation;
++    return 0;
++}
+ // aegis: boundary: ffi/zozz.h's function; src/abi_test.zig holds this signature to the header at compile time
+ pub extern fn zozzAnimationNumTracks(animation: ?*const Animation) c_int;
+ // aegis: boundary: ffi/zozz.h's function; src/abi_test.zig holds this signature to the header at compile time

@@ -1,0 +1,20 @@
+# expect: names match an entry point's words as whole words, in order
+# run: zig build check-coverage
+--- a/ci/coverage.zig
++++ b/ci/coverage.zig
+@@ -477,10 +477,11 @@
+     for (bound) |b| {
+         var k: usize = 0;
+         for (b) |w| {
+-            if (k == words.len) break;
+-            if (sameWord(w, words[k])) k += 1;
+-        }
+-        if (k == words.len) return true;
++            for (words) |word| {
++                if (sameWord(w, word)) k += 1;
++            }
++        }
++        if (k >= words.len) return true;
+     }
+     return false;
+ }

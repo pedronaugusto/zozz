@@ -6,13 +6,13 @@ shape. This is the contract a change has to satisfy.
 ## Start with recon
 
 ```sh
-tools/recon.sh BlendingJob
+zig build recon -- BlendingJob
 ```
 
 ozz is C++, and what decides whether a binding is correct is not in the
 signatures — it is an `assert()` in a method body, a `Validate()` that rejects
 what the signature suggests is fine, a span the job expects the caller to keep
-alive, a private constructor. `tools/recon.sh` pulls those out with line
+alive, a private constructor. `zig build recon` pulls those out with line
 numbers: a page instead of a file. It is a lead generator, not an oracle.
 
 ## One entry point, all the way through
@@ -77,14 +77,14 @@ globs: a re-vendor must not silently start compiling something new.
 ## Do not read anything else
 
 Startup reading is the largest cost in binding an area and almost all of it is
-wasted. **Read this file, run `tools/recon.sh` on your classes, then write.**
+wasted. **Read this file, run `zig build recon` on your classes, then write.**
 Do not read `README.md`, do not read `git log`, do not open another area "for
 style" — the style is above. Do not open an ozz header that recon already
 summarised unless recon pointed you at a line in it.
 
 ## Naming, which is load-bearing
 
-`src/abi_check.zig` pairs the two sides by name with **no hand-maintained
+`src/abi_test.zig` pairs the two sides by name with **no hand-maintained
 list**, so a name that breaks convention is a build failure, not a style nit:
 
 | Zig side | C side |
@@ -140,5 +140,5 @@ it in `src/c.zig`, because the guard only walks that file.
 
 ## Before you call it done
 
-`zig build test` is the bar. It is your compile, and it runs the ABI
+`bay test` is the bar. It is your compile, and it runs the ABI
 cross-check and the allocator-balance assertions for free.

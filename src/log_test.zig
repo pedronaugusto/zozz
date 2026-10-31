@@ -45,7 +45,7 @@ const Sink = struct {
 };
 
 test "zozzSetLogLevel round-trips through zozzGetLogLevel" {
-    defer _ = zozz.setLogLevel(.standard) catch {};
+    defer _ = zozz.setLogLevel(.standard) catch |e| std.debug.panic("restoring the log level: {s}", .{@errorName(e)});
 
     // ozz's own default, before anything here has touched it.
     try std.testing.expectEqual(zozz.LogLevel.standard, zozz.logLevel());
@@ -64,7 +64,7 @@ test "SILENT suppresses the diagnostic ozz logs for a version-mismatched skeleto
     const gpa = std.testing.allocator;
     try zozz.setAllocator(gpa);
     defer zozz.resetAllocator() catch unreachable;
-    defer _ = zozz.setLogLevel(.standard) catch {};
+    defer _ = zozz.setLogLevel(.standard) catch |e| std.debug.panic("restoring the log level: {s}", .{@errorName(e)});
 
     // Just enough of an archive to pass Skeleton::Load's tag test, then fail
     // its version check: the tag is "ozz-skeleton" plus its counted null

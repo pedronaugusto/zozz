@@ -95,7 +95,7 @@ pub const RawSkeleton = struct {
 
         const Trampoline = struct {
             fn call(joint: c_int, parent: c_int, user: ?*anyopaque) callconv(.c) void {
-                const ctx: Context = @ptrCast(@alignCast(user.?));
+                const ctx: Context = @ptrCast(@alignCast(user.?)); // aegis: no-danger: user is the caller's context, which this function handed the C side and it hands back unchanged
                 const parent_joint: ?u32 = if (parent < 0) null else @intCast(parent);
                 visit(ctx, @intCast(joint), parent_joint);
             }
@@ -103,7 +103,7 @@ pub const RawSkeleton = struct {
         try err.check(c.zozzRawSkeletonIterateJointsBreadthFirst(
             self.handle.?,
             &Trampoline.call,
-            @ptrCast(context),
+            @ptrCast(context), // aegis: no-danger: the caller's context as the C side's opaque user pointer, read back only by the trampoline
         ));
     }
 

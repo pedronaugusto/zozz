@@ -59,7 +59,7 @@ Which translation units actually compile is decided explicitly in `build.zig`
 ozz archives are versioned per type, and the runtime refuses anything it does
 not recognise. At the pinned version, read out of the vendored headers:
 
-<!-- BEGIN GENERATED tools/archive_versions.sh -->
+<!-- BEGIN GENERATED zig build archive-versions -->
 | Type | Archive version | Declared in |
 |---|---:|---|
 | `animation::Animation` | 7 | `animation/runtime/animation.h` |
@@ -193,9 +193,9 @@ other — for precision or for speed.
 
 ## Re-vendoring procedure
 
-`ci/verify-vendor.sh` fetches the pinned commit and diffs it against
+`zig build check-vendor` fetches the pinned commit and diffs it against
 `libs/`, so the claim that this copy is unmodified is checked rather than
-asserted. It runs as its own CI job. Run it after any step below.
+asserted. It runs in the gate. Run it after any step below.
 
 1. Clone upstream at the new tag; copy `include/` and `src/` over `libs/ozz/`,
    re-applying the exclusions above.
@@ -203,7 +203,7 @@ asserted. It runs as its own CI job. Run it after any step below.
    `ffi/zozz_core.cpp`.
 3. Re-check the archive versions above against the `OZZ_IO_TYPE_VERSION` lines
    in `animation.h` and `skeleton.h`.
-4. `zig build test`. The `static_assert`s in `ffi/zozz_abi.cpp` fail the build
+4. `bay test`. The `static_assert`s in `ffi/zozz_abi.cpp` fail the build
    if a type zozz casts to or from has changed shape; the ABI test fails if the
    Zig externs have drifted.
 5. Add any new source files to `build.zig` deliberately — the explicit lists

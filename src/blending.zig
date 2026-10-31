@@ -1,7 +1,6 @@
 //! Pose blending: weighted, additive and per-joint partial blending, all one
 //! job (ozz::animation::BlendingJob).
 
-const std = @import("std");
 const c = @import("c.zig");
 const err = @import("error.zig");
 const math = @import("math.zig");
@@ -39,7 +38,7 @@ pub fn maskedLayer(
         .weight = weight,
         .transform = transform.ptr,
         .num_transform = transform.len,
-        .joint_weights = @ptrCast(joint_weights.ptr),
+        .joint_weights = @ptrCast(joint_weights.ptr), // aegis: no-danger: math.SimdFloat4 and c.SimdFloat4 are the same 16 bytes at the same alignment, asserted at comptime in pose.zig
         .num_joint_weights = joint_weights.len,
     };
 }

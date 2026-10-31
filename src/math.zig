@@ -1713,7 +1713,7 @@ pub fn pointerStride(ptr: anytype, stride: usize) @TypeOf(ptr) {
     comptime {
         if (@typeInfo(@TypeOf(ptr)) != .pointer) @compileError("pointerStride: ptr must be a pointer");
     }
-    return @ptrFromInt(@intFromPtr(ptr) + stride);
+    return @ptrFromInt(@intFromPtr(ptr) + stride); // aegis: design: ozz::PointerStride, an unchecked step over a strided buffer whose stride the caller states
 }
 
 /// Case-sensitive wildcard matching, ported straight from platform.cc's

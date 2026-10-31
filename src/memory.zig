@@ -14,6 +14,7 @@
 //! seam, and installing is not itself synchronised.
 
 const std = @import("std");
+const aegis = @import("aegis");
 const c = @import("c.zig");
 const err = @import("error.zig");
 
@@ -49,8 +50,17 @@ fn backingAlignment(alignment: std.mem.Alignment) std.mem.Alignment {
     )));
 }
 
+/// The allocator `user` guards, copied out under its lock so the allocation
+/// itself runs outside it.
+fn installedAllocator(user: *anyopaque) std.mem.Allocator {
+    const owner: *aegis.Guarded(std.mem.Allocator) = @ptrCast(@alignCast(user)); // aegis: no-danger: user is &installed, which setAllocator hands the C side
+    var held = owner.acquire();
+    defer held.deinit();
+    return held.value().*;
+}
+
 fn allocate(user: ?*anyopaque, size: usize, alignment: usize) callconv(.c) ?*anyopaque {
-    const gpa: *const std.mem.Allocator = @ptrCast(@alignCast(user orelse return null));
+    const gpa = installedAllocator(user orelse return null);
 
     // ozz documents alignment as a power of two; refuse anything else rather
     // than computing a bogus prefix from it.
@@ -64,9 +74,9 @@ fn allocate(user: ?*anyopaque, size: usize, alignment: usize) callconv(.c) ?*any
     const base = gpa.rawAlloc(total, backing, @returnAddress()) orelse return null;
 
     const payload = base + prefix;
-    const header: *Header = @ptrCast(@alignCast(payload - @sizeOf(Header)));
-    header.* = .{ .total_len = total, .alignment = backing, .gpa = gpa.* };
-    return @ptrCast(payload);
+    const header: *Header = @ptrCast(@alignCast(payload - @sizeOf(Header))); // aegis: no-danger: the header slot allocate reserves in front of every payload, aligned by backingAlignment
+    header.* = .{ .total_len = total, .alignment = backing, .gpa = gpa };
+    return @ptrCast(payload); // aegis: no-danger: the payload, as the seam's untyped pointer
 }
 
 fn deallocate(user: ?*anyopaque, block: ?*anyopaque) callconv(.c) void {
@@ -74,9 +84,9 @@ fn deallocate(user: ?*anyopaque, block: ?*anyopaque) callconv(.c) void {
     // allocator that produced it, which is not necessarily the one installed
     // now.
     _ = user;
-    const payload: [*]u8 = @ptrCast(block orelse return);
+    const payload: [*]u8 = @ptrCast(block orelse return); // aegis: no-danger: a block allocate issued, as its bytes
 
-    const header: *const Header = @ptrCast(@alignCast(payload - @sizeOf(Header)));
+    const header: *const Header = @ptrCast(@alignCast(payload - @sizeOf(Header))); // aegis: no-danger: the header slot allocate reserves in front of every payload, aligned by backingAlignment
     const total_len = header.total_len;
     const backing = header.alignment;
     const gpa = header.gpa;
@@ -93,8 +103,10 @@ fn deallocate(user: ?*anyopaque, block: ?*anyopaque) callconv(.c) void {
 }
 
 /// The allocator ozz is currently pointed at, kept alive for as long as it is
-/// installed. `user` in the C struct points at this.
-var installed: std.mem.Allocator = undefined;
+/// installed. `user` in the C struct points at this. ozz's hook is
+/// process-wide and read on whichever thread allocates, so the allocator sits
+/// behind a lock, held only to copy it in or out.
+var installed: aegis.Guarded(std.mem.Allocator) = .init(undefined);
 
 /// Routes every subsequent ozz allocation through `gpa`. Process-wide, and to
 /// be called at start-up. Swapping one Zig allocator for another is safe with
@@ -106,10 +118,12 @@ pub fn setAllocator(gpa: std.mem.Allocator) err.Error!void {
     const bridge = c.Allocator{
         .allocate = allocate,
         .deallocate = deallocate,
-        .user = @ptrCast(&installed),
+        .user = @ptrCast(&installed), // aegis: no-danger: the guarded allocator's address, which allocate reads back
     };
     try err.check(c.zozzSetAllocator(&bridge));
-    installed = gpa;
+    var held = installed.acquire();
+    defer held.deinit();
+    held.value().* = gpa;
 }
 
 /// Restores ozz's built-in malloc/free allocator. `error.AllocatorInUse`

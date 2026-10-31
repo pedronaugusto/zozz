@@ -1,0 +1,12 @@
+# expect: zozz ABI drift:
+--- a/src/c.zig
++++ b/src/c.zig
+@@ -731,7 +731,7 @@
+ // aegis: boundary: ffi/zozz.h's function; src/abi_test.zig holds this signature to the header at compile time
+ pub extern fn zozzSamplingContextMaxTracks(context: ?*const SamplingContext) c_int;
+ // aegis: boundary: ffi/zozz.h's function; src/abi_test.zig holds this signature to the header at compile time
+-pub extern fn zozzSample(animation: *const Animation, context: *SamplingContext, ratio: f32, out: [*]SoaTransform, blocks: usize) Result;
++pub extern fn zozzSample(animation: *const Animation, context: *SamplingContext, ratio: f64, out: [*]SoaTransform, blocks: usize) Result;
+ 
+ // aegis: boundary: ffi/zozz.h's function; src/abi_test.zig holds this signature to the header at compile time
+ pub extern fn zozzLocalToModel(

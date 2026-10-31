@@ -1,0 +1,33 @@
+{
+  "sources": ["src"],
+  "test_roots": ["src/zozz.zig"],
+  "test_dependencies": ["zozz_h", "mathref_h", "test_options"],
+  "shipped": {
+    "ffi": "the C boundary: the library compiles its translation units, and the installed headers are ffi/*.h",
+    "libs": "the vendored ozz-animation, which the library compiles"
+  },
+  "docs": {
+    "zig build docs -- usage": {
+      "source": "examples/usage.zig",
+      "region": "usage",
+      "imports": ["zozz"]
+    },
+    "zig build measurements": {
+      "command": ["zig", "build", "measurements"]
+    },
+    "zig build archive-versions": {
+      "command": ["zig", "build", "archive-versions"]
+    }
+  },
+  "extra_checks": [
+    ["zig", "build", "check-consumer"],
+    ["zig", "build", "check-coverage"],
+    ["zig", "build", "check-alignment"],
+    ["zig", "build", "check-comments"],
+    ["zig", "build", "check-ignored"],
+    ["zig", "build", "check-mathref"],
+    ["zig", "build", "check-numbers"],
+    ["zig", "build", "check-vendor"]
+  ],
+  "glint_paths": ["src", "examples", "ci", "build.zig"]
+}
