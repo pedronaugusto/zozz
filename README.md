@@ -277,7 +277,7 @@ docs/design.md records.
 | **212** | provided in Zig without crossing the boundary (`ZIG`) |
 | **38** | provided by the Zig language (`LANGUAGE`) |
 | **30** | internal to ozz or compiled by no source here (`INTERNAL`) |
-| **206** | assertions in the standalone C smoke test |
+| **207** | assertions in the standalone C smoke test |
 | **41** | vendored ozz translation units `build.zig` compiles |
 | **20** | zozz C++ translation units (`ffi/*.cpp`) |
 | **18** | invariants `bay probe` mutates, each with the test that must notice |

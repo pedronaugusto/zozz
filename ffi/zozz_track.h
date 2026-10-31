@@ -41,10 +41,12 @@ typedef struct ZozzQuaternionTrack ZozzQuaternionTrack;
 //===----------------------------------------------------------------------===//
 
 ZOZZ_API ZozzResult zozzFloatTrackLoadFile(const char* path,
-                                           ZozzFloatTrack** out);
+                                           ZozzFloatTrack** out,
+                                           ZozzRefusal* refusal);
 
 ZOZZ_API ZozzResult zozzFloatTrackLoadMemory(const void* data, size_t size,
-                                             ZozzFloatTrack** out);
+                                             ZozzFloatTrack** out,
+                                             ZozzRefusal* refusal);
 
 ZOZZ_API void zozzFloatTrackDestroy(ZozzFloatTrack* track);
 
@@ -106,10 +108,12 @@ ZOZZ_API ZozzResult zozzTrackInterpolations(const uint8_t* steps, size_t bytes,
 //===----------------------------------------------------------------------===//
 
 ZOZZ_API ZozzResult zozzFloat2TrackLoadFile(const char* path,
-                                            ZozzFloat2Track** out);
+                                            ZozzFloat2Track** out,
+                                            ZozzRefusal* refusal);
 
 ZOZZ_API ZozzResult zozzFloat2TrackLoadMemory(const void* data, size_t size,
-                                              ZozzFloat2Track** out);
+                                              ZozzFloat2Track** out,
+                                              ZozzRefusal* refusal);
 
 ZOZZ_API void zozzFloat2TrackDestroy(ZozzFloat2Track* track);
 
@@ -138,10 +142,12 @@ ZOZZ_API const uint8_t* zozzFloat2TrackSteps(const ZozzFloat2Track* track,
 //===----------------------------------------------------------------------===//
 
 ZOZZ_API ZozzResult zozzFloat3TrackLoadFile(const char* path,
-                                            ZozzFloat3Track** out);
+                                            ZozzFloat3Track** out,
+                                            ZozzRefusal* refusal);
 
 ZOZZ_API ZozzResult zozzFloat3TrackLoadMemory(const void* data, size_t size,
-                                              ZozzFloat3Track** out);
+                                              ZozzFloat3Track** out,
+                                              ZozzRefusal* refusal);
 
 ZOZZ_API void zozzFloat3TrackDestroy(ZozzFloat3Track* track);
 
@@ -170,10 +176,12 @@ ZOZZ_API const uint8_t* zozzFloat3TrackSteps(const ZozzFloat3Track* track,
 //===----------------------------------------------------------------------===//
 
 ZOZZ_API ZozzResult zozzFloat4TrackLoadFile(const char* path,
-                                            ZozzFloat4Track** out);
+                                            ZozzFloat4Track** out,
+                                            ZozzRefusal* refusal);
 
 ZOZZ_API ZozzResult zozzFloat4TrackLoadMemory(const void* data, size_t size,
-                                              ZozzFloat4Track** out);
+                                              ZozzFloat4Track** out,
+                                              ZozzRefusal* refusal);
 
 ZOZZ_API void zozzFloat4TrackDestroy(ZozzFloat4Track* track);
 
@@ -206,11 +214,13 @@ ZOZZ_API const uint8_t* zozzFloat4TrackSteps(const ZozzFloat4Track* track,
 //===----------------------------------------------------------------------===//
 
 ZOZZ_API ZozzResult zozzQuaternionTrackLoadFile(const char* path,
-                                                ZozzQuaternionTrack** out);
+                                                ZozzQuaternionTrack** out,
+                                                ZozzRefusal* refusal);
 
 ZOZZ_API ZozzResult zozzQuaternionTrackLoadMemory(const void* data,
                                                   size_t size,
-                                                  ZozzQuaternionTrack** out);
+                                                  ZozzQuaternionTrack** out,
+                                                  ZozzRefusal* refusal);
 
 ZOZZ_API void zozzQuaternionTrackDestroy(ZozzQuaternionTrack* track);
 

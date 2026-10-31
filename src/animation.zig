@@ -18,7 +18,8 @@ pub const Animation = struct {
 
     pub fn initFromFile(path: [*:0]const u8, failure: *err.Failure) err.Error!Animation {
         var handle: *c.Animation = undefined;
-        try err.check(failure, .animation_load_file, c.zozzAnimationLoadFile(path, &handle));
+        var refusal: c.Refusal = .{};
+        try err.checkLoad(failure, .animation_load_file, c.zozzAnimationLoadFile(path, &handle, &refusal), refusal);
         return .{ .handle = handle };
     }
 
@@ -26,7 +27,8 @@ pub const Animation = struct {
     pub fn initFromMemory(bytes: err.Bytes, failure: *err.Failure) err.Error!Animation {
         const image = bytes.readForParse();
         var handle: *c.Animation = undefined;
-        try err.check(failure, .animation_load_memory, c.zozzAnimationLoadMemory(image.ptr, image.len, &handle));
+        var refusal: c.Refusal = .{};
+        try err.checkLoad(failure, .animation_load_memory, c.zozzAnimationLoadMemory(image.ptr, image.len, &handle, &refusal), refusal);
         return .{ .handle = handle };
     }
 

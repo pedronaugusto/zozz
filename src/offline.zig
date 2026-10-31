@@ -121,7 +121,8 @@ pub const RawSkeleton = struct {
     /// and rest transforms all survive. Pinned by test.
     pub fn initFromFile(path: [*:0]const u8, failure: *err.Failure) err.Error!RawSkeleton {
         var handle: *c.RawSkeleton = undefined;
-        try err.check(failure, .raw_skeleton_load_file, c.zozzRawSkeletonLoadFile(path, &handle));
+        var refusal: c.Refusal = .{};
+        try err.checkLoad(failure, .raw_skeleton_load_file, c.zozzRawSkeletonLoadFile(path, &handle, &refusal), refusal);
         return .{ .handle = handle };
     }
 
@@ -130,7 +131,8 @@ pub const RawSkeleton = struct {
     pub fn initFromMemory(bytes: err.Bytes, failure: *err.Failure) err.Error!RawSkeleton {
         const image = bytes.readForParse();
         var handle: *c.RawSkeleton = undefined;
-        try err.check(failure, .raw_skeleton_load_memory, c.zozzRawSkeletonLoadMemory(image.ptr, image.len, &handle));
+        var refusal: c.Refusal = .{};
+        try err.checkLoad(failure, .raw_skeleton_load_memory, c.zozzRawSkeletonLoadMemory(image.ptr, image.len, &handle, &refusal), refusal);
         return .{ .handle = handle };
     }
 
@@ -204,7 +206,8 @@ pub const RawAnimation = struct {
     /// `archive.saveRawAnimationToFile` or `OArchive.saveRawAnimation`.
     pub fn initFromFile(path: [*:0]const u8, failure: *err.Failure) err.Error!RawAnimation {
         var handle: *c.RawAnimation = undefined;
-        try err.check(failure, .raw_animation_load_file, c.zozzRawAnimationLoadFile(path, &handle));
+        var refusal: c.Refusal = .{};
+        try err.checkLoad(failure, .raw_animation_load_file, c.zozzRawAnimationLoadFile(path, &handle, &refusal), refusal);
         return .{ .handle = handle };
     }
 
@@ -213,7 +216,8 @@ pub const RawAnimation = struct {
     pub fn initFromMemory(bytes: err.Bytes, failure: *err.Failure) err.Error!RawAnimation {
         const image = bytes.readForParse();
         var handle: *c.RawAnimation = undefined;
-        try err.check(failure, .raw_animation_load_memory, c.zozzRawAnimationLoadMemory(image.ptr, image.len, &handle));
+        var refusal: c.Refusal = .{};
+        try err.checkLoad(failure, .raw_animation_load_memory, c.zozzRawAnimationLoadMemory(image.ptr, image.len, &handle, &refusal), refusal);
         return .{ .handle = handle };
     }
 

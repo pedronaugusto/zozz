@@ -7,12 +7,18 @@
 namespace zozz {
 
 /// Rejects a clip that parsed but is not sampleable. A zero or negative
-/// duration would make every ratio degenerate; a track count over the joint
-/// limit means the archive is not what it claimed to be.
-ZozzResult ValidateAnimation(const ozz::animation::Animation& animation) {
+/// duration would make every ratio degenerate, and is refused with no record:
+/// a float has no u64 value to report. A track count over the joint limit
+/// means the archive is not what it claimed to be.
+ZozzResult ValidateAnimation(const ozz::animation::Animation& animation,
+                             ZozzRefusal* refusal) {
   if (!(animation.duration() > 0.f)) return ZOZZ_RESULT_BAD_FORMAT;
   const int tracks = animation.num_tracks();
-  if (tracks < 0 || tracks > zozz::kMaxJoints) return ZOZZ_RESULT_BAD_FORMAT;
+  if (tracks < 0) return ZOZZ_RESULT_BAD_FORMAT;
+  if (tracks > zozz::kMaxJoints) {
+    return zozz::Refuse(refusal, "Animation.num_tracks",
+                        static_cast<uint64_t>(tracks), zozz::kMaxJoints);
+  }
   return ZOZZ_RESULT_OK;
 }
 
@@ -21,12 +27,12 @@ ZozzResult ValidateAnimation(const ozz::animation::Animation& animation) {
 namespace {
 
 ZozzResult FinishLoad(ZozzAnimation* animation, ZozzResult load_result,
-                      ZozzAnimation** out) {
+                      ZozzAnimation** out, ZozzRefusal* refusal) {
   if (load_result != ZOZZ_RESULT_OK) {
     zozz::Delete(animation);
     return load_result;
   }
-  const ZozzResult valid = zozz::ValidateAnimation(animation->impl);
+  const ZozzResult valid = zozz::ValidateAnimation(animation->impl, refusal);
   if (valid != ZOZZ_RESULT_OK) {
     zozz::Delete(animation);
     return valid;
@@ -69,22 +75,29 @@ ZozzResult CopySpan(ozz::span<const T> source, T* out, size_t count) {
 
 extern "C" {
 
-ZozzResult zozzAnimationLoadFile(const char* path, ZozzAnimation** out) {
+ZozzResult zozzAnimationLoadFile(const char* path, ZozzAnimation** out,
+                                 ZozzRefusal* refusal) {
+  zozz::ClearRefusal(refusal);
   if (out == nullptr) return ZOZZ_RESULT_INVALID_ARGUMENT;
   *out = nullptr;
   ZozzAnimation* animation = zozz::New<ZozzAnimation>();
   if (animation == nullptr) return ZOZZ_RESULT_OUT_OF_MEMORY;
-  return FinishLoad(animation, zozz::LoadFromFile(path, &animation->impl), out);
+  return FinishLoad(animation,
+                    zozz::LoadFromFile(path, &animation->impl, refusal), out,
+                    refusal);
 }
 
 ZozzResult zozzAnimationLoadMemory(const void* data, size_t size,
-                                   ZozzAnimation** out) {
+                                   ZozzAnimation** out,
+                                   ZozzRefusal* refusal) {
+  zozz::ClearRefusal(refusal);
   if (out == nullptr) return ZOZZ_RESULT_INVALID_ARGUMENT;
   *out = nullptr;
   ZozzAnimation* animation = zozz::New<ZozzAnimation>();
   if (animation == nullptr) return ZOZZ_RESULT_OUT_OF_MEMORY;
   return FinishLoad(
-      animation, zozz::LoadFromMemory(data, size, &animation->impl), out);
+      animation, zozz::LoadFromMemory(data, size, &animation->impl, refusal),
+      out, refusal);
 }
 
 void zozzAnimationDestroy(ZozzAnimation* animation) { zozz::Delete(animation); }

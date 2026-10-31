@@ -197,13 +197,15 @@ pub const IArchive = struct {
 
     pub fn loadSkeleton(self: IArchive, failure: *err.Failure) err.Error!Skeleton {
         var handle: *c.Skeleton = undefined;
-        try err.check(failure, .i_archive_load_skeleton, c.zozzIArchiveLoadSkeleton(err.live(self.handle), &handle));
+        var refusal: c.Refusal = .{};
+        try err.checkLoad(failure, .i_archive_load_skeleton, c.zozzIArchiveLoadSkeleton(err.live(self.handle), &handle, &refusal), refusal);
         return .{ .handle = handle };
     }
 
     pub fn loadAnimation(self: IArchive, failure: *err.Failure) err.Error!Animation {
         var handle: *c.Animation = undefined;
-        try err.check(failure, .i_archive_load_animation, c.zozzIArchiveLoadAnimation(err.live(self.handle), &handle));
+        var refusal: c.Refusal = .{};
+        try err.checkLoad(failure, .i_archive_load_animation, c.zozzIArchiveLoadAnimation(err.live(self.handle), &handle, &refusal), refusal);
         return .{ .handle = handle };
     }
 
@@ -212,31 +214,36 @@ pub const IArchive = struct {
     /// the save side.
     pub fn loadFloatTrack(self: IArchive, failure: *err.Failure) err.Error!FloatTrack {
         var handle: *c.FloatTrack = undefined;
-        try err.check(failure, .i_archive_load_float_track, c.zozzIArchiveLoadFloatTrack(err.live(self.handle), &handle));
+        var refusal: c.Refusal = .{};
+        try err.checkLoad(failure, .i_archive_load_float_track, c.zozzIArchiveLoadFloatTrack(err.live(self.handle), &handle, &refusal), refusal);
         return .{ .handle = handle };
     }
 
     pub fn loadFloat2Track(self: IArchive, failure: *err.Failure) err.Error!Float2Track {
         var handle: *c.Float2Track = undefined;
-        try err.check(failure, .i_archive_load_float2_track, c.zozzIArchiveLoadFloat2Track(err.live(self.handle), &handle));
+        var refusal: c.Refusal = .{};
+        try err.checkLoad(failure, .i_archive_load_float2_track, c.zozzIArchiveLoadFloat2Track(err.live(self.handle), &handle, &refusal), refusal);
         return .{ .handle = handle };
     }
 
     pub fn loadFloat3Track(self: IArchive, failure: *err.Failure) err.Error!Float3Track {
         var handle: *c.Float3Track = undefined;
-        try err.check(failure, .i_archive_load_float3_track, c.zozzIArchiveLoadFloat3Track(err.live(self.handle), &handle));
+        var refusal: c.Refusal = .{};
+        try err.checkLoad(failure, .i_archive_load_float3_track, c.zozzIArchiveLoadFloat3Track(err.live(self.handle), &handle, &refusal), refusal);
         return .{ .handle = handle };
     }
 
     pub fn loadFloat4Track(self: IArchive, failure: *err.Failure) err.Error!Float4Track {
         var handle: *c.Float4Track = undefined;
-        try err.check(failure, .i_archive_load_float4_track, c.zozzIArchiveLoadFloat4Track(err.live(self.handle), &handle));
+        var refusal: c.Refusal = .{};
+        try err.checkLoad(failure, .i_archive_load_float4_track, c.zozzIArchiveLoadFloat4Track(err.live(self.handle), &handle, &refusal), refusal);
         return .{ .handle = handle };
     }
 
     pub fn loadQuaternionTrack(self: IArchive, failure: *err.Failure) err.Error!QuaternionTrack {
         var handle: *c.QuaternionTrack = undefined;
-        try err.check(failure, .i_archive_load_quaternion_track, c.zozzIArchiveLoadQuaternionTrack(err.live(self.handle), &handle));
+        var refusal: c.Refusal = .{};
+        try err.checkLoad(failure, .i_archive_load_quaternion_track, c.zozzIArchiveLoadQuaternionTrack(err.live(self.handle), &handle, &refusal), refusal);
         return .{ .handle = handle };
     }
 
@@ -280,43 +287,50 @@ pub const IArchive = struct {
     /// performs. Data that would fail its own `validate` still loads.
     pub fn loadRawSkeleton(self: IArchive, failure: *err.Failure) err.Error!RawSkeleton {
         var handle: *c.RawSkeleton = undefined;
-        try err.check(failure, .i_archive_load_raw_skeleton, c.zozzIArchiveLoadRawSkeleton(err.live(self.handle), &handle));
+        var refusal: c.Refusal = .{};
+        try err.checkLoad(failure, .i_archive_load_raw_skeleton, c.zozzIArchiveLoadRawSkeleton(err.live(self.handle), &handle, &refusal), refusal);
         return .{ .handle = handle };
     }
 
     pub fn loadRawAnimation(self: IArchive, failure: *err.Failure) err.Error!RawAnimation {
         var handle: *c.RawAnimation = undefined;
-        try err.check(failure, .i_archive_load_raw_animation, c.zozzIArchiveLoadRawAnimation(err.live(self.handle), &handle));
+        var refusal: c.Refusal = .{};
+        try err.checkLoad(failure, .i_archive_load_raw_animation, c.zozzIArchiveLoadRawAnimation(err.live(self.handle), &handle, &refusal), refusal);
         return .{ .handle = handle };
     }
 
     pub fn loadRawFloatTrack(self: IArchive, failure: *err.Failure) err.Error!RawFloatTrack {
         var handle: *c.RawFloatTrack = undefined;
-        try err.check(failure, .i_archive_load_raw_float_track, c.zozzIArchiveLoadRawFloatTrack(err.live(self.handle), &handle));
+        var refusal: c.Refusal = .{};
+        try err.checkLoad(failure, .i_archive_load_raw_float_track, c.zozzIArchiveLoadRawFloatTrack(err.live(self.handle), &handle, &refusal), refusal);
         return .{ .handle = handle };
     }
 
     pub fn loadRawFloat2Track(self: IArchive, failure: *err.Failure) err.Error!RawFloat2Track {
         var handle: *c.RawFloat2Track = undefined;
-        try err.check(failure, .i_archive_load_raw_float2_track, c.zozzIArchiveLoadRawFloat2Track(err.live(self.handle), &handle));
+        var refusal: c.Refusal = .{};
+        try err.checkLoad(failure, .i_archive_load_raw_float2_track, c.zozzIArchiveLoadRawFloat2Track(err.live(self.handle), &handle, &refusal), refusal);
         return .{ .handle = handle };
     }
 
     pub fn loadRawFloat3Track(self: IArchive, failure: *err.Failure) err.Error!RawFloat3Track {
         var handle: *c.RawFloat3Track = undefined;
-        try err.check(failure, .i_archive_load_raw_float3_track, c.zozzIArchiveLoadRawFloat3Track(err.live(self.handle), &handle));
+        var refusal: c.Refusal = .{};
+        try err.checkLoad(failure, .i_archive_load_raw_float3_track, c.zozzIArchiveLoadRawFloat3Track(err.live(self.handle), &handle, &refusal), refusal);
         return .{ .handle = handle };
     }
 
     pub fn loadRawFloat4Track(self: IArchive, failure: *err.Failure) err.Error!RawFloat4Track {
         var handle: *c.RawFloat4Track = undefined;
-        try err.check(failure, .i_archive_load_raw_float4_track, c.zozzIArchiveLoadRawFloat4Track(err.live(self.handle), &handle));
+        var refusal: c.Refusal = .{};
+        try err.checkLoad(failure, .i_archive_load_raw_float4_track, c.zozzIArchiveLoadRawFloat4Track(err.live(self.handle), &handle, &refusal), refusal);
         return .{ .handle = handle };
     }
 
     pub fn loadRawQuaternionTrack(self: IArchive, failure: *err.Failure) err.Error!RawQuaternionTrack {
         var handle: *c.RawQuaternionTrack = undefined;
-        try err.check(failure, .i_archive_load_raw_quaternion_track, c.zozzIArchiveLoadRawQuaternionTrack(err.live(self.handle), &handle));
+        var refusal: c.Refusal = .{};
+        try err.checkLoad(failure, .i_archive_load_raw_quaternion_track, c.zozzIArchiveLoadRawQuaternionTrack(err.live(self.handle), &handle, &refusal), refusal);
         return .{ .handle = handle };
     }
 

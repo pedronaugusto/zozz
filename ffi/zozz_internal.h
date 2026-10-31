@@ -63,6 +63,29 @@ int32_t RawEnum(const E& value) {
 constexpr int SoaBlocks(int num_joints) { return (num_joints + 3) / 4; }
 
 //===----------------------------------------------------------------------===//
+// The refusal record
+//
+// Every loader clears the caller's ZozzRefusal on entry and hands it down to
+// the parse and to the post-parse checks. Refuse is the only way one is
+// filled, and it returns ZOZZ_RESULT_BAD_FORMAT, so a record can never arrive
+// with any other result. `what` binds to a string literal, never a pointer.
+//===----------------------------------------------------------------------===//
+
+/// Empties `refusal`, which may be NULL.
+inline void ClearRefusal(ZozzRefusal* refusal) {
+  if (refusal != nullptr) *refusal = ZozzRefusal{nullptr, 0, 0};
+}
+
+/// A content refusal: fills `refusal` (which may be NULL) with the count or
+/// invariant that failed, what the archive held and the bound it broke.
+template <size_t N>
+ZozzResult Refuse(ZozzRefusal* refusal, const char (&what)[N], uint64_t value,
+                  uint64_t limit) {
+  if (refusal != nullptr) *refusal = ZozzRefusal{what, value, limit};
+  return ZOZZ_RESULT_BAD_FORMAT;
+}
+
+//===----------------------------------------------------------------------===//
 // The SoA POD types, as ozz's own
 //
 // ZozzSoaTransform and ZozzSimdFloat4 are ozz::math::SoaTransform and
@@ -232,11 +255,15 @@ class ConstMemoryStream : public ozz::io::Stream {
 /// truncation flag catches an input that ran out mid-parse (ozz only
 /// asserts on the short read).
 template <typename T>
-ZozzResult LoadTagged(ConstMemoryStream* stream, T* out) {
+ZozzResult LoadTagged(ConstMemoryStream* stream, T* out,
+                      ZozzRefusal* refusal) {
   if (!stream->opened()) return ZOZZ_RESULT_IO;
   ozz::io::IArchive archive(stream);
   if (!archive.TestTag<T>()) return ZOZZ_RESULT_BAD_FORMAT;
   if (stream->truncated()) return ZOZZ_RESULT_IO;
+  // ozz's Load reports no content refusal of its own yet: `refusal` reaches
+  // this parse so that one has a single place to land.
+  static_cast<void>(refusal);
   archive >> *out;
   if (stream->truncated()) return ZOZZ_RESULT_IO;
   return ZOZZ_RESULT_OK;
@@ -244,10 +271,11 @@ ZozzResult LoadTagged(ConstMemoryStream* stream, T* out) {
 
 /// Loads one tagged ozz object from a borrowed memory image.
 template <typename T>
-ZozzResult LoadFromMemory(const void* data, size_t size, T* out) {
+ZozzResult LoadFromMemory(const void* data, size_t size, T* out,
+                          ZozzRefusal* refusal) {
   if (data == nullptr || size == 0) return ZOZZ_RESULT_INVALID_ARGUMENT;
   ConstMemoryStream stream(data, size);
-  return LoadTagged(&stream, out);
+  return LoadTagged(&stream, out, refusal);
 }
 
 /// Allocates a handle and loads one tagged ozz object into its `impl`,
@@ -257,12 +285,14 @@ ZozzResult LoadFromMemory(const void* data, size_t size, T* out) {
 /// both need it, and a second copy is a second place for the unwind to be
 /// wrong.
 template <typename Handle>
-ZozzResult LoadHandleFromMemory(const void* data, size_t size, Handle** out) {
+ZozzResult LoadHandleFromMemory(const void* data, size_t size, Handle** out,
+                                ZozzRefusal* refusal) {
   if (out == nullptr) return ZOZZ_RESULT_INVALID_ARGUMENT;
   *out = nullptr;
   Handle* handle = New<Handle>();
   if (handle == nullptr) return ZOZZ_RESULT_OUT_OF_MEMORY;
-  const ZozzResult result = LoadFromMemory(data, size, &handle->impl);
+  const ZozzResult result =
+      LoadFromMemory(data, size, &handle->impl, refusal);
   if (result != ZOZZ_RESULT_OK) {
     Delete(handle);
     return result;
@@ -278,7 +308,7 @@ ZozzResult LoadHandleFromMemory(const void* data, size_t size, Handle** out) {
 /// size of the archive, read in full regardless, and buys both paths the
 /// same truncation guarantee.
 template <typename T>
-ZozzResult LoadFromFile(const char* path, T* out) {
+ZozzResult LoadFromFile(const char* path, T* out, ZozzRefusal* refusal) {
   if (path == nullptr) return ZOZZ_RESULT_INVALID_ARGUMENT;
 
   ozz::io::File file(path, "rb");
@@ -297,7 +327,7 @@ ZozzResult LoadFromFile(const char* path, T* out) {
     return ZOZZ_RESULT_IO;
   }
 
-  const ZozzResult result = LoadFromMemory(buffer, size, out);
+  const ZozzResult result = LoadFromMemory(buffer, size, out, refusal);
   allocator->Deallocate(buffer);
   return result;
 }
@@ -331,12 +361,13 @@ void AosToSoa(const ZozzTransform* aos, ozz::math::SoaTransform* soa,
 
 /// The file twin of LoadHandleFromMemory, over LoadFromFile.
 template <typename Handle>
-ZozzResult LoadHandleFromFile(const char* path, Handle** out) {
+ZozzResult LoadHandleFromFile(const char* path, Handle** out,
+                              ZozzRefusal* refusal) {
   if (out == nullptr) return ZOZZ_RESULT_INVALID_ARGUMENT;
   *out = nullptr;
   Handle* handle = New<Handle>();
   if (handle == nullptr) return ZOZZ_RESULT_OUT_OF_MEMORY;
-  const ZozzResult result = LoadFromFile(path, &handle->impl);
+  const ZozzResult result = LoadFromFile(path, &handle->impl, refusal);
   if (result != ZOZZ_RESULT_OK) {
     Delete(handle);
     return result;
@@ -345,8 +376,10 @@ ZozzResult LoadHandleFromFile(const char* path, Handle** out) {
   return ZOZZ_RESULT_OK;
 }
 
-ZozzResult ValidateSkeleton(const ozz::animation::Skeleton& skeleton);
-ZozzResult ValidateAnimation(const ozz::animation::Animation& animation);
+ZozzResult ValidateSkeleton(const ozz::animation::Skeleton& skeleton,
+                            ZozzRefusal* refusal);
+ZozzResult ValidateAnimation(const ozz::animation::Animation& animation,
+                             ZozzRefusal* refusal);
 
 //===----------------------------------------------------------------------===//
 // Flat/nested raw-skeleton conversion

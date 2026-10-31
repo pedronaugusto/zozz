@@ -160,7 +160,7 @@ size_t zozzFixtureCapturedSkeletonLoadBytes(const void* data, size_t size) {
   std::streambuf* original = std::cerr.rdbuf(capture.rdbuf());
 
   ZozzSkeleton* skeleton = nullptr;
-  zozzSkeletonLoadMemory(data, size, &skeleton);
+  zozzSkeletonLoadMemory(data, size, &skeleton, nullptr);
   zozzSkeletonDestroy(skeleton);
 
   std::cerr.rdbuf(original);

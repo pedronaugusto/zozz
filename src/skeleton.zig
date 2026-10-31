@@ -26,7 +26,8 @@ pub const Skeleton = struct {
     /// native path in the platform's encoding.
     pub fn initFromFile(path: [*:0]const u8, failure: *err.Failure) err.Error!Skeleton {
         var handle: *c.Skeleton = undefined;
-        try err.check(failure, .skeleton_load_file, c.zozzSkeletonLoadFile(path, &handle));
+        var refusal: c.Refusal = .{};
+        try err.checkLoad(failure, .skeleton_load_file, c.zozzSkeletonLoadFile(path, &handle, &refusal), refusal);
         return .{ .handle = handle };
     }
 
@@ -35,7 +36,8 @@ pub const Skeleton = struct {
     pub fn initFromMemory(bytes: err.Bytes, failure: *err.Failure) err.Error!Skeleton {
         const image = bytes.readForParse();
         var handle: *c.Skeleton = undefined;
-        try err.check(failure, .skeleton_load_memory, c.zozzSkeletonLoadMemory(image.ptr, image.len, &handle));
+        var refusal: c.Refusal = .{};
+        try err.checkLoad(failure, .skeleton_load_memory, c.zozzSkeletonLoadMemory(image.ptr, image.len, &handle, &refusal), refusal);
         return .{ .handle = handle };
     }
 

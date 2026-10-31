@@ -38,6 +38,7 @@ const importer_mod = @import("importer.zig");
 pub const Error = error_mod.Error;
 pub const Failure = error_mod.Failure;
 pub const Frame = error_mod.Frame;
+pub const Refusal = error_mod.Refusal;
 pub const Call = error_mod.Call;
 pub const Bytes = error_mod.Bytes;
 pub const resultName = error_mod.name;

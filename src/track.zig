@@ -16,7 +16,8 @@ pub const FloatTrack = struct {
     /// Loads a track from a `.ozz` file on disk.
     pub fn initFromFile(path: [*:0]const u8, failure: *err.Failure) err.Error!FloatTrack {
         var handle: *c.FloatTrack = undefined;
-        try err.check(failure, .float_track_load_file, c.zozzFloatTrackLoadFile(path, &handle));
+        var refusal: c.Refusal = .{};
+        try err.checkLoad(failure, .float_track_load_file, c.zozzFloatTrackLoadFile(path, &handle, &refusal), refusal);
         return .{ .handle = handle };
     }
 
@@ -25,7 +26,8 @@ pub const FloatTrack = struct {
     pub fn initFromMemory(bytes: err.Bytes, failure: *err.Failure) err.Error!FloatTrack {
         const image = bytes.readForParse();
         var handle: *c.FloatTrack = undefined;
-        try err.check(failure, .float_track_load_memory, c.zozzFloatTrackLoadMemory(image.ptr, image.len, &handle));
+        var refusal: c.Refusal = .{};
+        try err.checkLoad(failure, .float_track_load_memory, c.zozzFloatTrackLoadMemory(image.ptr, image.len, &handle, &refusal), refusal);
         return .{ .handle = handle };
     }
 
@@ -106,8 +108,8 @@ fn decodeSteps(step_bits: []const u8, num_keys: u32, out: []c.TrackInterpolation
 fn VectorOps(comptime Handle: type, comptime n: usize) type {
     return struct {
         call: []const u8,
-        loadFile: fn ([*:0]const u8, **Handle) callconv(.c) c.Result,
-        loadMemory: fn ([*]const u8, usize, **Handle) callconv(.c) c.Result,
+        loadFile: fn ([*:0]const u8, **Handle, ?*c.Refusal) callconv(.c) c.Result,
+        loadMemory: fn ([*]const u8, usize, **Handle, ?*c.Refusal) callconv(.c) c.Result,
         destroy: fn (?*Handle) callconv(.c) void,
         name: fn (?*const Handle) callconv(.c) [*:0]const u8,
         sample: fn (*const Handle, f32, *[n]f32) callconv(.c) c.Result,
@@ -127,7 +129,8 @@ fn VectorTrack(comptime Handle: type, comptime n: usize, comptime ops: VectorOps
         /// Loads a track from a `.ozz` file on disk.
         pub fn initFromFile(path: [*:0]const u8, failure: *err.Failure) err.Error!Self {
             var handle: *Handle = undefined;
-            try err.check(failure, @field(err.Call, ops.call ++ "_load_file"), ops.loadFile(path, &handle));
+            var refusal: c.Refusal = .{};
+            try err.checkLoad(failure, @field(err.Call, ops.call ++ "_load_file"), ops.loadFile(path, &handle, &refusal), refusal);
             return .{ .handle = handle };
         }
 
@@ -136,7 +139,8 @@ fn VectorTrack(comptime Handle: type, comptime n: usize, comptime ops: VectorOps
         pub fn initFromMemory(bytes: err.Bytes, failure: *err.Failure) err.Error!Self {
             const image = bytes.readForParse();
             var handle: *Handle = undefined;
-            try err.check(failure, @field(err.Call, ops.call ++ "_load_memory"), ops.loadMemory(image.ptr, image.len, &handle));
+            var refusal: c.Refusal = .{};
+            try err.checkLoad(failure, @field(err.Call, ops.call ++ "_load_memory"), ops.loadMemory(image.ptr, image.len, &handle, &refusal), refusal);
             return .{ .handle = handle };
         }
 

@@ -208,29 +208,36 @@ ZOZZ_API ZozzResult zozzIArchiveLoadFloat(ZozzIArchive* archive, float* out);
 /// must identify a skeleton (ZOZZ_RESULT_BAD_FORMAT otherwise) and the parsed
 /// result must pass the same joint-count and array-shape sanity check.
 ZOZZ_API ZozzResult zozzIArchiveLoadSkeleton(ZozzIArchive* archive,
-                                             ZozzSkeleton** out);
+                                             ZozzSkeleton** out,
+                                             ZozzRefusal* refusal);
 
 /// Reads one tagged, versioned animation clip, with the same tag and
 /// sanity checks zozzAnimationLoadFile / zozzAnimationLoadMemory apply.
 ZOZZ_API ZozzResult zozzIArchiveLoadAnimation(ZozzIArchive* archive,
-                                              ZozzAnimation** out);
+                                              ZozzAnimation** out,
+                                              ZozzRefusal* refusal);
 
 /// Reads one tagged, versioned runtime track — the read twin of
 /// zozzOArchiveSaveFloatTrack and the type-specific entry points below it.
 ZOZZ_API ZozzResult zozzIArchiveLoadFloatTrack(ZozzIArchive* archive,
-                                               ZozzFloatTrack** out);
+                                               ZozzFloatTrack** out,
+                                               ZozzRefusal* refusal);
 
 ZOZZ_API ZozzResult zozzIArchiveLoadFloat2Track(ZozzIArchive* archive,
-                                                ZozzFloat2Track** out);
+                                                ZozzFloat2Track** out,
+                                                ZozzRefusal* refusal);
 
 ZOZZ_API ZozzResult zozzIArchiveLoadFloat3Track(ZozzIArchive* archive,
-                                                ZozzFloat3Track** out);
+                                                ZozzFloat3Track** out,
+                                                ZozzRefusal* refusal);
 
 ZOZZ_API ZozzResult zozzIArchiveLoadFloat4Track(ZozzIArchive* archive,
-                                                ZozzFloat4Track** out);
+                                                ZozzFloat4Track** out,
+                                                ZozzRefusal* refusal);
 
 ZOZZ_API ZozzResult zozzIArchiveLoadQuaternionTrack(
-    ZozzIArchive* archive, ZozzQuaternionTrack** out);
+    ZozzIArchive* archive, ZozzQuaternionTrack** out,
+    ZozzRefusal* refusal);
 
 //===----------------------------------------------------------------------===//
 // Tag sniffing
@@ -353,7 +360,8 @@ ZOZZ_API ZozzResult zozzOArchiveSaveRawQuaternionTrack(
 /// zozzIArchiveLoadSkeleton checks its own: an archive claiming more is
 /// ZOZZ_RESULT_BAD_FORMAT, not a handle nothing can build.
 ZOZZ_API ZozzResult zozzIArchiveLoadRawSkeleton(ZozzIArchive* archive,
-                                                ZozzRawSkeleton** out);
+                                                ZozzRawSkeleton** out,
+                                                ZozzRefusal* refusal);
 
 /// Reads one tagged, versioned raw animation. Track count and duration are
 /// checked after the parse the same way. The clip is NOT required to pass
@@ -361,27 +369,33 @@ ZOZZ_API ZozzResult zozzIArchiveLoadRawSkeleton(ZozzIArchive* archive,
 /// data a cook is entitled to load and repair, and zozzRawAnimationValidate
 /// is how it asks.
 ZOZZ_API ZozzResult zozzIArchiveLoadRawAnimation(ZozzIArchive* archive,
-                                                 ZozzRawAnimation** out);
+                                                 ZozzRawAnimation** out,
+                                                 ZozzRefusal* refusal);
 
 /// Reads one tagged, versioned raw track — the read twin of
 /// zozzOArchiveSaveRawFloatTrack and its four siblings. Like the raw
 /// animation above, a track that would fail RawTrack::Validate still loads;
 /// zozzRawFloatTrackValidate is how a caller asks.
 ZOZZ_API ZozzResult zozzIArchiveLoadRawFloatTrack(ZozzIArchive* archive,
-                                                  ZozzRawFloatTrack** out);
+                                                  ZozzRawFloatTrack** out,
+                                                  ZozzRefusal* refusal);
 
 ZOZZ_API ZozzResult zozzIArchiveLoadRawFloat2Track(ZozzIArchive* archive,
-                                                   ZozzRawFloat2Track** out);
+                                                   ZozzRawFloat2Track** out,
+                                                   ZozzRefusal* refusal);
 
 ZOZZ_API ZozzResult zozzIArchiveLoadRawFloat3Track(ZozzIArchive* archive,
-                                                   ZozzRawFloat3Track** out);
+                                                   ZozzRawFloat3Track** out,
+                                                   ZozzRefusal* refusal);
 
 ZOZZ_API ZozzResult zozzIArchiveLoadRawFloat4Track(ZozzIArchive* archive,
-                                                   ZozzRawFloat4Track** out);
+                                                   ZozzRawFloat4Track** out,
+                                                   ZozzRefusal* refusal);
 
 ZOZZ_API ZozzResult zozzIArchiveLoadRawQuaternionTrack(
     ZozzIArchive* archive,
-    ZozzRawQuaternionTrack** out);
+    ZozzRawQuaternionTrack** out,
+    ZozzRefusal* refusal);
 
 /// True if the next object is a raw skeleton. Leaves the read position
 /// exactly where it was, like every other tag test here.
@@ -440,63 +454,77 @@ ZOZZ_API ZozzResult zozzRawQuaternionTrackSaveFile(
 /// zozzRawSkeletonSaveFile, applying the same tag test, truncation check and
 /// post-parse sanity check zozzIArchiveLoadRawSkeleton does.
 ZOZZ_API ZozzResult zozzRawSkeletonLoadFile(const char* path,
-                                            ZozzRawSkeleton** out);
+                                            ZozzRawSkeleton** out,
+                                            ZozzRefusal* refusal);
 
 /// Reads one raw skeleton from a borrowed memory image. `data` is not kept:
 /// everything the handle needs is copied out before this returns.
 ZOZZ_API ZozzResult zozzRawSkeletonLoadMemory(const void* data, size_t size,
-                                              ZozzRawSkeleton** out);
+                                              ZozzRawSkeleton** out,
+                                              ZozzRefusal* refusal);
 
 /// See zozzRawSkeletonLoadFile.
 ZOZZ_API ZozzResult zozzRawAnimationLoadFile(const char* path,
-                                             ZozzRawAnimation** out);
+                                             ZozzRawAnimation** out,
+                                             ZozzRefusal* refusal);
 
 /// See zozzRawSkeletonLoadMemory.
 ZOZZ_API ZozzResult zozzRawAnimationLoadMemory(const void* data, size_t size,
-                                               ZozzRawAnimation** out);
+                                               ZozzRawAnimation** out,
+                                               ZozzRefusal* refusal);
 
 /// See zozzRawSkeletonLoadFile.
 ZOZZ_API ZozzResult zozzRawFloatTrackLoadFile(const char* path,
-                                              ZozzRawFloatTrack** out);
+                                              ZozzRawFloatTrack** out,
+                                              ZozzRefusal* refusal);
 
 /// See zozzRawSkeletonLoadMemory.
 ZOZZ_API ZozzResult zozzRawFloatTrackLoadMemory(const void* data, size_t size,
-                                                ZozzRawFloatTrack** out);
+                                                ZozzRawFloatTrack** out,
+                                                ZozzRefusal* refusal);
 
 /// See zozzRawSkeletonLoadFile.
 ZOZZ_API ZozzResult zozzRawFloat2TrackLoadFile(const char* path,
-                                               ZozzRawFloat2Track** out);
+                                               ZozzRawFloat2Track** out,
+                                               ZozzRefusal* refusal);
 
 /// See zozzRawSkeletonLoadMemory.
 ZOZZ_API ZozzResult zozzRawFloat2TrackLoadMemory(const void* data, size_t size,
-                                                 ZozzRawFloat2Track** out);
+                                                 ZozzRawFloat2Track** out,
+                                                 ZozzRefusal* refusal);
 
 /// See zozzRawSkeletonLoadFile.
 ZOZZ_API ZozzResult zozzRawFloat3TrackLoadFile(const char* path,
-                                               ZozzRawFloat3Track** out);
+                                               ZozzRawFloat3Track** out,
+                                               ZozzRefusal* refusal);
 
 /// See zozzRawSkeletonLoadMemory.
 ZOZZ_API ZozzResult zozzRawFloat3TrackLoadMemory(const void* data, size_t size,
-                                                 ZozzRawFloat3Track** out);
+                                                 ZozzRawFloat3Track** out,
+                                                 ZozzRefusal* refusal);
 
 /// See zozzRawSkeletonLoadFile.
 ZOZZ_API ZozzResult zozzRawFloat4TrackLoadFile(const char* path,
-                                               ZozzRawFloat4Track** out);
+                                               ZozzRawFloat4Track** out,
+                                               ZozzRefusal* refusal);
 
 /// See zozzRawSkeletonLoadMemory.
 ZOZZ_API ZozzResult zozzRawFloat4TrackLoadMemory(const void* data, size_t size,
-                                                 ZozzRawFloat4Track** out);
+                                                 ZozzRawFloat4Track** out,
+                                                 ZozzRefusal* refusal);
 
 /// See zozzRawSkeletonLoadFile.
 ZOZZ_API ZozzResult zozzRawQuaternionTrackLoadFile(
     const char* path,
-    ZozzRawQuaternionTrack** out);
+    ZozzRawQuaternionTrack** out,
+    ZozzRefusal* refusal);
 
 /// See zozzRawSkeletonLoadMemory.
 ZOZZ_API ZozzResult zozzRawQuaternionTrackLoadMemory(
     const void* data,
     size_t size,
-    ZozzRawQuaternionTrack** out);
+    ZozzRawQuaternionTrack** out,
+    ZozzRefusal* refusal);
 
 
 #ifdef __cplusplus

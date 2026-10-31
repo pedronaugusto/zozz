@@ -210,11 +210,15 @@ ZozzResult SaveToFile(const char* path, const T& object) {
 /// file/memory loaders — then parses, checking `failed()` at every step
 /// since none of this throws.
 template <typename T>
-ZozzResult LoadTaggedObject(ZozzIArchive* archive, T* object) {
+ZozzResult LoadTaggedObject(ZozzIArchive* archive, T* object,
+                            ZozzRefusal* refusal) {
   if (archive == nullptr) return ZOZZ_RESULT_INVALID_ARGUMENT;
   if (archive->stream.failed()) return ZOZZ_RESULT_IO;
   if (!archive->archive.TestTag<T>()) return ZOZZ_RESULT_BAD_FORMAT;
   if (archive->stream.failed()) return ZOZZ_RESULT_IO;
+  // As zozz::LoadTagged: ozz's Load reports no content refusal of its own
+  // yet, and `refusal` reaches this parse so that one has a place to land.
+  static_cast<void>(refusal);
   archive->archive >> *object;
   return archive->stream.failed() ? ZOZZ_RESULT_IO : ZOZZ_RESULT_OK;
 }
@@ -225,13 +229,14 @@ ZozzResult LoadTaggedObject(ZozzIArchive* archive, T* object) {
 /// skeleton and the raw animation each need a sanity check afterwards (see
 /// zozzIArchiveLoadSkeleton and the offline section below) and do not.
 template <typename Handle>
-ZozzResult LoadTrack(ZozzIArchive* archive, Handle** out) {
+ZozzResult LoadTrack(ZozzIArchive* archive, Handle** out,
+                     ZozzRefusal* refusal) {
   if (out == nullptr) return ZOZZ_RESULT_INVALID_ARGUMENT;
   *out = nullptr;
   Handle* handle = zozz::New<Handle>();
   if (handle == nullptr) return ZOZZ_RESULT_OUT_OF_MEMORY;
 
-  const ZozzResult result = LoadTaggedObject(archive, &handle->impl);
+  const ZozzResult result = LoadTaggedObject(archive, &handle->impl, refusal);
   if (result != ZOZZ_RESULT_OK) {
     zozz::Delete(handle);
     return result;
@@ -265,9 +270,11 @@ bool PeekTag(ZozzIArchive* archive) {
 /// handle nothing can build. This is ozz's RawSkeleton::Validate condition,
 /// answered as a result code.
 ZozzResult ValidateRawSkeleton(
-    const ozz::animation::offline::RawSkeleton& raw) {
-  return raw.num_joints() > zozz::kMaxJoints ? ZOZZ_RESULT_BAD_FORMAT
-                                             : ZOZZ_RESULT_OK;
+    const ozz::animation::offline::RawSkeleton& raw, ZozzRefusal* refusal) {
+  const int joints = raw.num_joints();
+  if (joints <= zozz::kMaxJoints) return ZOZZ_RESULT_OK;
+  return zozz::Refuse(refusal, "RawSkeleton.num_joints",
+                      static_cast<uint64_t>(joints), zozz::kMaxJoints);
 }
 
 /// Post-parse sanity for a raw animation. Deliberately NOT
@@ -277,8 +284,12 @@ ZozzResult ValidateRawSkeleton(
 /// makes the handle usable at all — a track count within ozz's own limit, and
 /// a duration every push entry point compares against.
 ZozzResult ValidateRawAnimation(
-    const ozz::animation::offline::RawAnimation& raw) {
-  if (raw.num_tracks() > zozz::kMaxJoints) return ZOZZ_RESULT_BAD_FORMAT;
+    const ozz::animation::offline::RawAnimation& raw, ZozzRefusal* refusal) {
+  const int tracks = raw.num_tracks();
+  if (tracks > zozz::kMaxJoints) {
+    return zozz::Refuse(refusal, "RawAnimation.num_tracks",
+                        static_cast<uint64_t>(tracks), zozz::kMaxJoints);
+  }
   if (!std::isfinite(raw.duration) || raw.duration <= 0.f) {
     return ZOZZ_RESULT_BAD_FORMAT;
   }
@@ -295,8 +306,8 @@ ZozzResult SaveRawSkeletonTree(
 
 /// Load half: sanity-check the parsed tree, then flatten it into a handle.
 ZozzResult FinishRawSkeleton(const ozz::animation::offline::RawSkeleton& nested,
-                             ZozzRawSkeleton** out) {
-  const ZozzResult valid = ValidateRawSkeleton(nested);
+                             ZozzRawSkeleton** out, ZozzRefusal* refusal) {
+  const ZozzResult valid = ValidateRawSkeleton(nested, refusal);
   if (valid != ZOZZ_RESULT_OK) return valid;
   return zozz::BuildFlatSkeleton(nested, out);
 }
@@ -307,9 +318,10 @@ ZozzResult FinishRawSkeleton(const ozz::animation::offline::RawSkeleton& nested,
 template <typename Handle, typename Impl>
 ZozzResult LoadCheckedHandle(Handle** out, ZozzResult load_result,
                              Handle* handle,
-                             ZozzResult (*validate)(const Impl&)) {
+                             ZozzResult (*validate)(const Impl&, ZozzRefusal*),
+                             ZozzRefusal* refusal) {
   ZozzResult result = load_result;
-  if (result == ZOZZ_RESULT_OK) result = validate(handle->impl);
+  if (result == ZOZZ_RESULT_OK) result = validate(handle->impl, refusal);
   if (result != ZOZZ_RESULT_OK) {
     zozz::Delete(handle);
     return result;
@@ -443,15 +455,17 @@ ZozzResult zozzIArchiveLoadFloat(ZozzIArchive* archive, float* out) {
 }
 
 ZozzResult zozzIArchiveLoadSkeleton(ZozzIArchive* archive,
-                                    ZozzSkeleton** out) {
+                                    ZozzSkeleton** out,
+                                    ZozzRefusal* refusal) {
+  zozz::ClearRefusal(refusal);
   if (out == nullptr) return ZOZZ_RESULT_INVALID_ARGUMENT;
   *out = nullptr;
   ZozzSkeleton* skeleton = zozz::New<ZozzSkeleton>();
   if (skeleton == nullptr) return ZOZZ_RESULT_OUT_OF_MEMORY;
 
-  ZozzResult result = LoadTaggedObject(archive, &skeleton->impl);
+  ZozzResult result = LoadTaggedObject(archive, &skeleton->impl, refusal);
   if (result == ZOZZ_RESULT_OK) {
-    result = zozz::ValidateSkeleton(skeleton->impl);
+    result = zozz::ValidateSkeleton(skeleton->impl, refusal);
   }
   if (result != ZOZZ_RESULT_OK) {
     zozz::Delete(skeleton);
@@ -462,15 +476,17 @@ ZozzResult zozzIArchiveLoadSkeleton(ZozzIArchive* archive,
 }
 
 ZozzResult zozzIArchiveLoadAnimation(ZozzIArchive* archive,
-                                     ZozzAnimation** out) {
+                                     ZozzAnimation** out,
+                                     ZozzRefusal* refusal) {
+  zozz::ClearRefusal(refusal);
   if (out == nullptr) return ZOZZ_RESULT_INVALID_ARGUMENT;
   *out = nullptr;
   ZozzAnimation* animation = zozz::New<ZozzAnimation>();
   if (animation == nullptr) return ZOZZ_RESULT_OUT_OF_MEMORY;
 
-  ZozzResult result = LoadTaggedObject(archive, &animation->impl);
+  ZozzResult result = LoadTaggedObject(archive, &animation->impl, refusal);
   if (result == ZOZZ_RESULT_OK) {
-    result = zozz::ValidateAnimation(animation->impl);
+    result = zozz::ValidateAnimation(animation->impl, refusal);
   }
   if (result != ZOZZ_RESULT_OK) {
     zozz::Delete(animation);
@@ -481,28 +497,38 @@ ZozzResult zozzIArchiveLoadAnimation(ZozzIArchive* archive,
 }
 
 ZozzResult zozzIArchiveLoadFloatTrack(ZozzIArchive* archive,
-                                      ZozzFloatTrack** out) {
-  return LoadTrack(archive, out);
+                                      ZozzFloatTrack** out,
+                                      ZozzRefusal* refusal) {
+  zozz::ClearRefusal(refusal);
+  return LoadTrack(archive, out, refusal);
 }
 
 ZozzResult zozzIArchiveLoadFloat2Track(ZozzIArchive* archive,
-                                       ZozzFloat2Track** out) {
-  return LoadTrack(archive, out);
+                                       ZozzFloat2Track** out,
+                                       ZozzRefusal* refusal) {
+  zozz::ClearRefusal(refusal);
+  return LoadTrack(archive, out, refusal);
 }
 
 ZozzResult zozzIArchiveLoadFloat3Track(ZozzIArchive* archive,
-                                       ZozzFloat3Track** out) {
-  return LoadTrack(archive, out);
+                                       ZozzFloat3Track** out,
+                                       ZozzRefusal* refusal) {
+  zozz::ClearRefusal(refusal);
+  return LoadTrack(archive, out, refusal);
 }
 
 ZozzResult zozzIArchiveLoadFloat4Track(ZozzIArchive* archive,
-                                       ZozzFloat4Track** out) {
-  return LoadTrack(archive, out);
+                                       ZozzFloat4Track** out,
+                                       ZozzRefusal* refusal) {
+  zozz::ClearRefusal(refusal);
+  return LoadTrack(archive, out, refusal);
 }
 
 ZozzResult zozzIArchiveLoadQuaternionTrack(ZozzIArchive* archive,
-                                           ZozzQuaternionTrack** out) {
-  return LoadTrack(archive, out);
+                                           ZozzQuaternionTrack** out,
+                                           ZozzRefusal* refusal) {
+  zozz::ClearRefusal(refusal);
+  return LoadTrack(archive, out, refusal);
 }
 
 bool zozzIArchiveTestSkeleton(ZozzIArchive* archive) {
@@ -625,48 +651,63 @@ ZozzResult zozzOArchiveSaveRawQuaternionTrack(
 }
 
 ZozzResult zozzIArchiveLoadRawSkeleton(ZozzIArchive* archive,
-                                       ZozzRawSkeleton** out) {
+                                       ZozzRawSkeleton** out,
+                                       ZozzRefusal* refusal) {
+  zozz::ClearRefusal(refusal);
   if (out == nullptr) return ZOZZ_RESULT_INVALID_ARGUMENT;
   *out = nullptr;
   ozz::animation::offline::RawSkeleton nested;
-  const ZozzResult result = LoadTaggedObject(archive, &nested);
+  const ZozzResult result = LoadTaggedObject(archive, &nested, refusal);
   if (result != ZOZZ_RESULT_OK) return result;
-  return FinishRawSkeleton(nested, out);
+  return FinishRawSkeleton(nested, out, refusal);
 }
 
 ZozzResult zozzIArchiveLoadRawAnimation(ZozzIArchive* archive,
-                                        ZozzRawAnimation** out) {
+                                        ZozzRawAnimation** out,
+                                        ZozzRefusal* refusal) {
+  zozz::ClearRefusal(refusal);
   if (out == nullptr) return ZOZZ_RESULT_INVALID_ARGUMENT;
   *out = nullptr;
   ZozzRawAnimation* handle = zozz::New<ZozzRawAnimation>();
   if (handle == nullptr) return ZOZZ_RESULT_OUT_OF_MEMORY;
-  return LoadCheckedHandle(out, LoadTaggedObject(archive, &handle->impl),
-                           handle, &ValidateRawAnimation);
+  return LoadCheckedHandle(out,
+                           LoadTaggedObject(archive, &handle->impl, refusal),
+                           handle, &ValidateRawAnimation, refusal);
 }
 
 ZozzResult zozzIArchiveLoadRawFloatTrack(ZozzIArchive* archive,
-                                         ZozzRawFloatTrack** out) {
-  return LoadTrack(archive, out);
+                                         ZozzRawFloatTrack** out,
+                                         ZozzRefusal* refusal) {
+  zozz::ClearRefusal(refusal);
+  return LoadTrack(archive, out, refusal);
 }
 
 ZozzResult zozzIArchiveLoadRawFloat2Track(ZozzIArchive* archive,
-                                          ZozzRawFloat2Track** out) {
-  return LoadTrack(archive, out);
+                                          ZozzRawFloat2Track** out,
+                                          ZozzRefusal* refusal) {
+  zozz::ClearRefusal(refusal);
+  return LoadTrack(archive, out, refusal);
 }
 
 ZozzResult zozzIArchiveLoadRawFloat3Track(ZozzIArchive* archive,
-                                          ZozzRawFloat3Track** out) {
-  return LoadTrack(archive, out);
+                                          ZozzRawFloat3Track** out,
+                                          ZozzRefusal* refusal) {
+  zozz::ClearRefusal(refusal);
+  return LoadTrack(archive, out, refusal);
 }
 
 ZozzResult zozzIArchiveLoadRawFloat4Track(ZozzIArchive* archive,
-                                          ZozzRawFloat4Track** out) {
-  return LoadTrack(archive, out);
+                                          ZozzRawFloat4Track** out,
+                                          ZozzRefusal* refusal) {
+  zozz::ClearRefusal(refusal);
+  return LoadTrack(archive, out, refusal);
 }
 
 ZozzResult zozzIArchiveLoadRawQuaternionTrack(ZozzIArchive* archive,
-                                              ZozzRawQuaternionTrack** out) {
-  return LoadTrack(archive, out);
+                                              ZozzRawQuaternionTrack** out,
+                                              ZozzRefusal* refusal) {
+  zozz::ClearRefusal(refusal);
+  return LoadTrack(archive, out, refusal);
 }
 
 bool zozzIArchiveTestRawSkeleton(ZozzIArchive* archive) {
@@ -741,92 +782,123 @@ ZozzResult zozzRawQuaternionTrackSaveFile(const ZozzRawQuaternionTrack* raw,
   return SaveToFile(path, raw->impl);
 }
 
-ZozzResult zozzRawSkeletonLoadFile(const char* path, ZozzRawSkeleton** out) {
+ZozzResult zozzRawSkeletonLoadFile(const char* path, ZozzRawSkeleton** out,
+                                   ZozzRefusal* refusal) {
+  zozz::ClearRefusal(refusal);
   if (out == nullptr) return ZOZZ_RESULT_INVALID_ARGUMENT;
   *out = nullptr;
   ozz::animation::offline::RawSkeleton nested;
-  const ZozzResult result = zozz::LoadFromFile(path, &nested);
+  const ZozzResult result = zozz::LoadFromFile(path, &nested, refusal);
   if (result != ZOZZ_RESULT_OK) return result;
-  return FinishRawSkeleton(nested, out);
+  return FinishRawSkeleton(nested, out, refusal);
 }
 
 ZozzResult zozzRawSkeletonLoadMemory(const void* data, size_t size,
-                                     ZozzRawSkeleton** out) {
+                                     ZozzRawSkeleton** out,
+                                     ZozzRefusal* refusal) {
+  zozz::ClearRefusal(refusal);
   if (out == nullptr) return ZOZZ_RESULT_INVALID_ARGUMENT;
   *out = nullptr;
   ozz::animation::offline::RawSkeleton nested;
-  const ZozzResult result = zozz::LoadFromMemory(data, size, &nested);
+  const ZozzResult result =
+      zozz::LoadFromMemory(data, size, &nested, refusal);
   if (result != ZOZZ_RESULT_OK) return result;
-  return FinishRawSkeleton(nested, out);
+  return FinishRawSkeleton(nested, out, refusal);
 }
 
-ZozzResult zozzRawAnimationLoadFile(const char* path, ZozzRawAnimation** out) {
+ZozzResult zozzRawAnimationLoadFile(const char* path, ZozzRawAnimation** out,
+                                    ZozzRefusal* refusal) {
+  zozz::ClearRefusal(refusal);
   if (out == nullptr) return ZOZZ_RESULT_INVALID_ARGUMENT;
   *out = nullptr;
   ZozzRawAnimation* handle = zozz::New<ZozzRawAnimation>();
   if (handle == nullptr) return ZOZZ_RESULT_OUT_OF_MEMORY;
-  return LoadCheckedHandle(out, zozz::LoadFromFile(path, &handle->impl),
-                           handle, &ValidateRawAnimation);
+  return LoadCheckedHandle(out,
+                           zozz::LoadFromFile(path, &handle->impl, refusal),
+                           handle, &ValidateRawAnimation, refusal);
 }
 
 ZozzResult zozzRawAnimationLoadMemory(const void* data, size_t size,
-                                      ZozzRawAnimation** out) {
+                                      ZozzRawAnimation** out,
+                                      ZozzRefusal* refusal) {
+  zozz::ClearRefusal(refusal);
   if (out == nullptr) return ZOZZ_RESULT_INVALID_ARGUMENT;
   *out = nullptr;
   ZozzRawAnimation* handle = zozz::New<ZozzRawAnimation>();
   if (handle == nullptr) return ZOZZ_RESULT_OUT_OF_MEMORY;
-  return LoadCheckedHandle(out, zozz::LoadFromMemory(data, size, &handle->impl),
-                           handle, &ValidateRawAnimation);
+  return LoadCheckedHandle(
+      out, zozz::LoadFromMemory(data, size, &handle->impl, refusal), handle,
+      &ValidateRawAnimation, refusal);
 }
 
 ZozzResult zozzRawFloatTrackLoadFile(const char* path,
-                                     ZozzRawFloatTrack** out) {
-  return zozz::LoadHandleFromFile(path, out);
+                                     ZozzRawFloatTrack** out,
+                                     ZozzRefusal* refusal) {
+  zozz::ClearRefusal(refusal);
+  return zozz::LoadHandleFromFile(path, out, refusal);
 }
 
 ZozzResult zozzRawFloatTrackLoadMemory(const void* data, size_t size,
-                                       ZozzRawFloatTrack** out) {
-  return zozz::LoadHandleFromMemory(data, size, out);
+                                       ZozzRawFloatTrack** out,
+                                       ZozzRefusal* refusal) {
+  zozz::ClearRefusal(refusal);
+  return zozz::LoadHandleFromMemory(data, size, out, refusal);
 }
 
 ZozzResult zozzRawFloat2TrackLoadFile(const char* path,
-                                      ZozzRawFloat2Track** out) {
-  return zozz::LoadHandleFromFile(path, out);
+                                      ZozzRawFloat2Track** out,
+                                      ZozzRefusal* refusal) {
+  zozz::ClearRefusal(refusal);
+  return zozz::LoadHandleFromFile(path, out, refusal);
 }
 
 ZozzResult zozzRawFloat2TrackLoadMemory(const void* data, size_t size,
-                                        ZozzRawFloat2Track** out) {
-  return zozz::LoadHandleFromMemory(data, size, out);
+                                        ZozzRawFloat2Track** out,
+                                        ZozzRefusal* refusal) {
+  zozz::ClearRefusal(refusal);
+  return zozz::LoadHandleFromMemory(data, size, out, refusal);
 }
 
 ZozzResult zozzRawFloat3TrackLoadFile(const char* path,
-                                      ZozzRawFloat3Track** out) {
-  return zozz::LoadHandleFromFile(path, out);
+                                      ZozzRawFloat3Track** out,
+                                      ZozzRefusal* refusal) {
+  zozz::ClearRefusal(refusal);
+  return zozz::LoadHandleFromFile(path, out, refusal);
 }
 
 ZozzResult zozzRawFloat3TrackLoadMemory(const void* data, size_t size,
-                                        ZozzRawFloat3Track** out) {
-  return zozz::LoadHandleFromMemory(data, size, out);
+                                        ZozzRawFloat3Track** out,
+                                        ZozzRefusal* refusal) {
+  zozz::ClearRefusal(refusal);
+  return zozz::LoadHandleFromMemory(data, size, out, refusal);
 }
 
 ZozzResult zozzRawFloat4TrackLoadFile(const char* path,
-                                      ZozzRawFloat4Track** out) {
-  return zozz::LoadHandleFromFile(path, out);
+                                      ZozzRawFloat4Track** out,
+                                      ZozzRefusal* refusal) {
+  zozz::ClearRefusal(refusal);
+  return zozz::LoadHandleFromFile(path, out, refusal);
 }
 
 ZozzResult zozzRawFloat4TrackLoadMemory(const void* data, size_t size,
-                                        ZozzRawFloat4Track** out) {
-  return zozz::LoadHandleFromMemory(data, size, out);
+                                        ZozzRawFloat4Track** out,
+                                        ZozzRefusal* refusal) {
+  zozz::ClearRefusal(refusal);
+  return zozz::LoadHandleFromMemory(data, size, out, refusal);
 }
 
 ZozzResult zozzRawQuaternionTrackLoadFile(const char* path,
-                                          ZozzRawQuaternionTrack** out) {
-  return zozz::LoadHandleFromFile(path, out);
+                                          ZozzRawQuaternionTrack** out,
+                                          ZozzRefusal* refusal) {
+  zozz::ClearRefusal(refusal);
+  return zozz::LoadHandleFromFile(path, out, refusal);
 }
 
 ZozzResult zozzRawQuaternionTrackLoadMemory(const void* data, size_t size,
-                                            ZozzRawQuaternionTrack** out) {
-  return zozz::LoadHandleFromMemory(data, size, out);
+                                            ZozzRawQuaternionTrack** out,
+                                            ZozzRefusal* refusal) {
+  zozz::ClearRefusal(refusal);
+  return zozz::LoadHandleFromMemory(data, size, out, refusal);
 }
 
 }  // extern "C"

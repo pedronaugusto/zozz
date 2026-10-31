@@ -82,13 +82,14 @@ const TriggeringState* StateOf(const ZozzTrackTriggeringIterator* iterator) {
 // shape, and one home is what keeps the unwind from being wrong in one of two
 // copies.
 template <typename Handle>
-ZozzResult TrackLoadFile(const char* path, Handle** out) {
-  return zozz::LoadHandleFromFile(path, out);
+ZozzResult TrackLoadFile(const char* path, Handle** out, ZozzRefusal* refusal) {
+  return zozz::LoadHandleFromFile(path, out, refusal);
 }
 
 template <typename Handle>
-ZozzResult TrackLoadMemory(const void* data, size_t size, Handle** out) {
-  return zozz::LoadHandleFromMemory(data, size, out);
+ZozzResult TrackLoadMemory(const void* data, size_t size, Handle** out,
+                           ZozzRefusal* refusal) {
+  return zozz::LoadHandleFromMemory(data, size, out, refusal);
 }
 
 template <typename Handle>
@@ -222,13 +223,17 @@ ZozzResult zozzTrackInterpolations(const uint8_t* steps, size_t bytes,
 // FloatTrack
 //===----------------------------------------------------------------------===//
 
-ZozzResult zozzFloatTrackLoadFile(const char* path, ZozzFloatTrack** out) {
-  return TrackLoadFile(path, out);
+ZozzResult zozzFloatTrackLoadFile(const char* path, ZozzFloatTrack** out,
+                                  ZozzRefusal* refusal) {
+  zozz::ClearRefusal(refusal);
+  return TrackLoadFile(path, out, refusal);
 }
 
 ZozzResult zozzFloatTrackLoadMemory(const void* data, size_t size,
-                                    ZozzFloatTrack** out) {
-  return TrackLoadMemory(data, size, out);
+                                    ZozzFloatTrack** out,
+                                    ZozzRefusal* refusal) {
+  zozz::ClearRefusal(refusal);
+  return TrackLoadMemory(data, size, out, refusal);
 }
 
 void zozzFloatTrackDestroy(ZozzFloatTrack* track) { zozz::Delete(track); }
@@ -266,13 +271,17 @@ const uint8_t* zozzFloatTrackSteps(const ZozzFloatTrack* track,
 // Float2Track
 //===----------------------------------------------------------------------===//
 
-ZozzResult zozzFloat2TrackLoadFile(const char* path, ZozzFloat2Track** out) {
-  return TrackLoadFile(path, out);
+ZozzResult zozzFloat2TrackLoadFile(const char* path, ZozzFloat2Track** out,
+                                   ZozzRefusal* refusal) {
+  zozz::ClearRefusal(refusal);
+  return TrackLoadFile(path, out, refusal);
 }
 
 ZozzResult zozzFloat2TrackLoadMemory(const void* data, size_t size,
-                                     ZozzFloat2Track** out) {
-  return TrackLoadMemory(data, size, out);
+                                     ZozzFloat2Track** out,
+                                     ZozzRefusal* refusal) {
+  zozz::ClearRefusal(refusal);
+  return TrackLoadMemory(data, size, out, refusal);
 }
 
 void zozzFloat2TrackDestroy(ZozzFloat2Track* track) { zozz::Delete(track); }
@@ -310,13 +319,17 @@ const uint8_t* zozzFloat2TrackSteps(const ZozzFloat2Track* track,
 // Float3Track
 //===----------------------------------------------------------------------===//
 
-ZozzResult zozzFloat3TrackLoadFile(const char* path, ZozzFloat3Track** out) {
-  return TrackLoadFile(path, out);
+ZozzResult zozzFloat3TrackLoadFile(const char* path, ZozzFloat3Track** out,
+                                   ZozzRefusal* refusal) {
+  zozz::ClearRefusal(refusal);
+  return TrackLoadFile(path, out, refusal);
 }
 
 ZozzResult zozzFloat3TrackLoadMemory(const void* data, size_t size,
-                                     ZozzFloat3Track** out) {
-  return TrackLoadMemory(data, size, out);
+                                     ZozzFloat3Track** out,
+                                     ZozzRefusal* refusal) {
+  zozz::ClearRefusal(refusal);
+  return TrackLoadMemory(data, size, out, refusal);
 }
 
 void zozzFloat3TrackDestroy(ZozzFloat3Track* track) { zozz::Delete(track); }
@@ -354,13 +367,17 @@ const uint8_t* zozzFloat3TrackSteps(const ZozzFloat3Track* track,
 // Float4Track
 //===----------------------------------------------------------------------===//
 
-ZozzResult zozzFloat4TrackLoadFile(const char* path, ZozzFloat4Track** out) {
-  return TrackLoadFile(path, out);
+ZozzResult zozzFloat4TrackLoadFile(const char* path, ZozzFloat4Track** out,
+                                   ZozzRefusal* refusal) {
+  zozz::ClearRefusal(refusal);
+  return TrackLoadFile(path, out, refusal);
 }
 
 ZozzResult zozzFloat4TrackLoadMemory(const void* data, size_t size,
-                                     ZozzFloat4Track** out) {
-  return TrackLoadMemory(data, size, out);
+                                     ZozzFloat4Track** out,
+                                     ZozzRefusal* refusal) {
+  zozz::ClearRefusal(refusal);
+  return TrackLoadMemory(data, size, out, refusal);
 }
 
 void zozzFloat4TrackDestroy(ZozzFloat4Track* track) { zozz::Delete(track); }
@@ -399,13 +416,17 @@ const uint8_t* zozzFloat4TrackSteps(const ZozzFloat4Track* track,
 //===----------------------------------------------------------------------===//
 
 ZozzResult zozzQuaternionTrackLoadFile(const char* path,
-                                       ZozzQuaternionTrack** out) {
-  return TrackLoadFile(path, out);
+                                       ZozzQuaternionTrack** out,
+                                       ZozzRefusal* refusal) {
+  zozz::ClearRefusal(refusal);
+  return TrackLoadFile(path, out, refusal);
 }
 
 ZozzResult zozzQuaternionTrackLoadMemory(const void* data, size_t size,
-                                         ZozzQuaternionTrack** out) {
-  return TrackLoadMemory(data, size, out);
+                                         ZozzQuaternionTrack** out,
+                                         ZozzRefusal* refusal) {
+  zozz::ClearRefusal(refusal);
+  return TrackLoadMemory(data, size, out, refusal);
 }
 
 void zozzQuaternionTrackDestroy(ZozzQuaternionTrack* track) {

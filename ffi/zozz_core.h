@@ -96,6 +96,21 @@ typedef enum ZozzResult {
 /// Static, never-NULL description of a result code. Borrowed; do not free.
 ZOZZ_API const char* zozzResultName(ZozzResult result);
 
+/// Why a load was refused for the archive's content: the count or invariant
+/// that failed, what the archive held and the bound it broke. Every loader
+/// (each *LoadMemory, *LoadFile and zozzIArchiveLoad<Type>) takes one as its
+/// LAST parameter; NULL is allowed and asks for none. A loader clears it on
+/// entry, so `what` is NULL after every outcome but a content refusal, and
+/// it is filled only with ZOZZ_RESULT_BAD_FORMAT.
+typedef struct ZozzRefusal {
+  /// Static, never freed: "Skeleton.num_joints". NULL when there is none.
+  const char* what;
+  /// What the archive held.
+  uint64_t value;
+  /// The bound it broke.
+  uint64_t limit;
+} ZozzRefusal;
+
 //===----------------------------------------------------------------------===//
 // Allocator seam
 //

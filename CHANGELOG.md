@@ -16,6 +16,16 @@ could not express, so a port has the reason and not only the diff.
   `zozz.Call` that refused and its result. An error alone said what went
   wrong but not which call, and a load, a bake or a frame makes several.
   Declare one with `var failure: zozz.Failure = .{};` and pass `&failure`.
+- Every archive loader takes a `ZozzRefusal*` as its last parameter (C): each
+  `*LoadMemory`, `*LoadFile` and `zozzIArchiveLoad<Type>`, NULL allowed. A
+  loader clears it on entry, and a refusal for the archive's content fills it
+  with the count that failed (`what`, a static string such as
+  `Skeleton.num_joints`), what the archive held (`value`) and the bound it
+  broke (`limit`), only ever with `ZOZZ_RESULT_BAD_FORMAT`. In Zig a
+  `zozz.Frame` carries it as `refusal` (`frame.refusal.named()`, `value`,
+  `limit`). `BadFormat` alone could not say which count broke or by how much:
+  a skeleton one joint over ozz's limit and bytes that are not an archive at
+  all gave the same answer.
 - Every loader of bytes takes `zozz.Bytes` (aegis's untrusted-input type):
   every `initFromMemory` and `decodeGV4`/`decodeGV4Stream`; wrap a
   slice with `.init(bytes)`. `IArchive.init` takes a `zozz.InputStream`.

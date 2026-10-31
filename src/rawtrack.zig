@@ -79,7 +79,8 @@ pub const RawFloatTrack = struct {
     /// the cook-stage cache the runtime `FloatTrack` is built from.
     pub fn initFromFile(path: [*:0]const u8, failure: *err.Failure) err.Error!RawFloatTrack {
         var handle: *c.RawFloatTrack = undefined;
-        try err.check(failure, .raw_float_track_load_file, c.zozzRawFloatTrackLoadFile(path, &handle));
+        var refusal: c.Refusal = .{};
+        try err.checkLoad(failure, .raw_float_track_load_file, c.zozzRawFloatTrackLoadFile(path, &handle, &refusal), refusal);
         return .{ .handle = handle };
     }
 
@@ -88,7 +89,8 @@ pub const RawFloatTrack = struct {
     pub fn initFromMemory(bytes: err.Bytes, failure: *err.Failure) err.Error!RawFloatTrack {
         const image = bytes.readForParse();
         var handle: *c.RawFloatTrack = undefined;
-        try err.check(failure, .raw_float_track_load_memory, c.zozzRawFloatTrackLoadMemory(image.ptr, image.len, &handle));
+        var refusal: c.Refusal = .{};
+        try err.checkLoad(failure, .raw_float_track_load_memory, c.zozzRawFloatTrackLoadMemory(image.ptr, image.len, &handle, &refusal), refusal);
         return .{ .handle = handle };
     }
 
@@ -171,7 +173,8 @@ pub const RawFloat2Track = struct {
     /// See `RawFloatTrack.initFromFile`.
     pub fn initFromFile(path: [*:0]const u8, failure: *err.Failure) err.Error!RawFloat2Track {
         var handle: *c.RawFloat2Track = undefined;
-        try err.check(failure, .raw_float2_track_load_file, c.zozzRawFloat2TrackLoadFile(path, &handle));
+        var refusal: c.Refusal = .{};
+        try err.checkLoad(failure, .raw_float2_track_load_file, c.zozzRawFloat2TrackLoadFile(path, &handle, &refusal), refusal);
         return .{ .handle = handle };
     }
 
@@ -179,7 +182,8 @@ pub const RawFloat2Track = struct {
     pub fn initFromMemory(bytes: err.Bytes, failure: *err.Failure) err.Error!RawFloat2Track {
         const image = bytes.readForParse();
         var handle: *c.RawFloat2Track = undefined;
-        try err.check(failure, .raw_float2_track_load_memory, c.zozzRawFloat2TrackLoadMemory(image.ptr, image.len, &handle));
+        var refusal: c.Refusal = .{};
+        try err.checkLoad(failure, .raw_float2_track_load_memory, c.zozzRawFloat2TrackLoadMemory(image.ptr, image.len, &handle, &refusal), refusal);
         return .{ .handle = handle };
     }
 
@@ -252,7 +256,8 @@ pub const RawFloat3Track = struct {
     /// See `RawFloatTrack.initFromFile`.
     pub fn initFromFile(path: [*:0]const u8, failure: *err.Failure) err.Error!RawFloat3Track {
         var handle: *c.RawFloat3Track = undefined;
-        try err.check(failure, .raw_float3_track_load_file, c.zozzRawFloat3TrackLoadFile(path, &handle));
+        var refusal: c.Refusal = .{};
+        try err.checkLoad(failure, .raw_float3_track_load_file, c.zozzRawFloat3TrackLoadFile(path, &handle, &refusal), refusal);
         return .{ .handle = handle };
     }
 
@@ -260,7 +265,8 @@ pub const RawFloat3Track = struct {
     pub fn initFromMemory(bytes: err.Bytes, failure: *err.Failure) err.Error!RawFloat3Track {
         const image = bytes.readForParse();
         var handle: *c.RawFloat3Track = undefined;
-        try err.check(failure, .raw_float3_track_load_memory, c.zozzRawFloat3TrackLoadMemory(image.ptr, image.len, &handle));
+        var refusal: c.Refusal = .{};
+        try err.checkLoad(failure, .raw_float3_track_load_memory, c.zozzRawFloat3TrackLoadMemory(image.ptr, image.len, &handle, &refusal), refusal);
         return .{ .handle = handle };
     }
 
@@ -333,7 +339,8 @@ pub const RawFloat4Track = struct {
     /// See `RawFloatTrack.initFromFile`.
     pub fn initFromFile(path: [*:0]const u8, failure: *err.Failure) err.Error!RawFloat4Track {
         var handle: *c.RawFloat4Track = undefined;
-        try err.check(failure, .raw_float4_track_load_file, c.zozzRawFloat4TrackLoadFile(path, &handle));
+        var refusal: c.Refusal = .{};
+        try err.checkLoad(failure, .raw_float4_track_load_file, c.zozzRawFloat4TrackLoadFile(path, &handle, &refusal), refusal);
         return .{ .handle = handle };
     }
 
@@ -341,7 +348,8 @@ pub const RawFloat4Track = struct {
     pub fn initFromMemory(bytes: err.Bytes, failure: *err.Failure) err.Error!RawFloat4Track {
         const image = bytes.readForParse();
         var handle: *c.RawFloat4Track = undefined;
-        try err.check(failure, .raw_float4_track_load_memory, c.zozzRawFloat4TrackLoadMemory(image.ptr, image.len, &handle));
+        var refusal: c.Refusal = .{};
+        try err.checkLoad(failure, .raw_float4_track_load_memory, c.zozzRawFloat4TrackLoadMemory(image.ptr, image.len, &handle, &refusal), refusal);
         return .{ .handle = handle };
     }
 
@@ -415,7 +423,8 @@ pub const RawQuaternionTrack = struct {
     /// See `RawFloatTrack.initFromFile`.
     pub fn initFromFile(path: [*:0]const u8, failure: *err.Failure) err.Error!RawQuaternionTrack {
         var handle: *c.RawQuaternionTrack = undefined;
-        try err.check(failure, .raw_quaternion_track_load_file, c.zozzRawQuaternionTrackLoadFile(path, &handle));
+        var refusal: c.Refusal = .{};
+        try err.checkLoad(failure, .raw_quaternion_track_load_file, c.zozzRawQuaternionTrackLoadFile(path, &handle, &refusal), refusal);
         return .{ .handle = handle };
     }
 
@@ -423,7 +432,8 @@ pub const RawQuaternionTrack = struct {
     pub fn initFromMemory(bytes: err.Bytes, failure: *err.Failure) err.Error!RawQuaternionTrack {
         const image = bytes.readForParse();
         var handle: *c.RawQuaternionTrack = undefined;
-        try err.check(failure, .raw_quaternion_track_load_memory, c.zozzRawQuaternionTrackLoadMemory(image.ptr, image.len, &handle));
+        var refusal: c.Refusal = .{};
+        try err.checkLoad(failure, .raw_quaternion_track_load_memory, c.zozzRawQuaternionTrackLoadMemory(image.ptr, image.len, &handle, &refusal), refusal);
         return .{ .handle = handle };
     }
 

@@ -277,20 +277,24 @@ static void test_log_level(void) {
 static void test_bad_input(void) {
   ZozzSkeleton* skeleton = (ZozzSkeleton*)0x1;
   const char garbage[64] = "not an ozz archive, not even close, honestly";
+  ZozzRefusal refusal = {"stale", 7, 9};
 
-  CHECK(zozzSkeletonLoadMemory(garbage, sizeof(garbage), &skeleton) ==
-        ZOZZ_RESULT_BAD_FORMAT);
+  CHECK(zozzSkeletonLoadMemory(garbage, sizeof(garbage), &skeleton,
+                               &refusal) == ZOZZ_RESULT_BAD_FORMAT);
   // The out-parameter must be cleared even on failure.
   CHECK(skeleton == NULL);
+  // A wrong tag is not a content refusal: the record is cleared, not filled.
+  CHECK(refusal.what == NULL && refusal.value == 0 && refusal.limit == 0);
 
-  CHECK(zozzSkeletonLoadMemory(NULL, 0, &skeleton) ==
+  CHECK(zozzSkeletonLoadMemory(NULL, 0, &skeleton, NULL) ==
         ZOZZ_RESULT_INVALID_ARGUMENT);
-  CHECK(zozzSkeletonLoadFile("/nonexistent/zozz.ozz", &skeleton) ==
+  CHECK(zozzSkeletonLoadFile("/nonexistent/zozz.ozz", &skeleton, NULL) ==
         ZOZZ_RESULT_FILE_NOT_FOUND);
-  CHECK(zozzSkeletonLoadFile(NULL, &skeleton) == ZOZZ_RESULT_INVALID_ARGUMENT);
+  CHECK(zozzSkeletonLoadFile(NULL, &skeleton, NULL) ==
+        ZOZZ_RESULT_INVALID_ARGUMENT);
 
   ZozzAnimation* animation = (ZozzAnimation*)0x1;
-  CHECK(zozzAnimationLoadMemory(garbage, sizeof(garbage), &animation) ==
+  CHECK(zozzAnimationLoadMemory(garbage, sizeof(garbage), &animation, NULL) ==
         ZOZZ_RESULT_BAD_FORMAT);
   CHECK(animation == NULL);
 
@@ -606,7 +610,7 @@ static void test_archive_round_trip(void) {
     CHECK(zozzIArchiveTestSkeleton(in_archive));
 
     ZozzSkeleton* loaded_skeleton = NULL;
-    CHECK(zozzIArchiveLoadSkeleton(in_archive, &loaded_skeleton) ==
+    CHECK(zozzIArchiveLoadSkeleton(in_archive, &loaded_skeleton, NULL) ==
           ZOZZ_RESULT_OK);
     CHECK(loaded_skeleton != NULL);
     if (loaded_skeleton != NULL) {
@@ -644,7 +648,7 @@ static void test_archive_round_trip(void) {
     CHECK(zozzIArchiveTestAnimation(in_archive));
 
     ZozzAnimation* loaded_animation = NULL;
-    CHECK(zozzIArchiveLoadAnimation(in_archive, &loaded_animation) ==
+    CHECK(zozzIArchiveLoadAnimation(in_archive, &loaded_animation, NULL) ==
           ZOZZ_RESULT_OK);
     CHECK(loaded_animation != NULL);
     if (loaded_animation != NULL) {
@@ -733,7 +737,7 @@ static void test_raw_archive_round_trip(void) {
     CHECK(zozzIArchiveTestRawSkeleton(in_archive));
 
     ZozzRawSkeleton* loaded_skeleton = NULL;
-    CHECK(zozzIArchiveLoadRawSkeleton(in_archive, &loaded_skeleton) ==
+    CHECK(zozzIArchiveLoadRawSkeleton(in_archive, &loaded_skeleton, NULL) ==
           ZOZZ_RESULT_OK);
     if (loaded_skeleton != NULL) {
       CHECK(zozzRawSkeletonNumJoints(loaded_skeleton) == 3);
@@ -747,7 +751,7 @@ static void test_raw_archive_round_trip(void) {
 
     ZozzRawAnimation* loaded_animation = NULL;
     CHECK(zozzIArchiveTestRawAnimation(in_archive));
-    CHECK(zozzIArchiveLoadRawAnimation(in_archive, &loaded_animation) ==
+    CHECK(zozzIArchiveLoadRawAnimation(in_archive, &loaded_animation, NULL) ==
           ZOZZ_RESULT_OK);
     if (loaded_animation != NULL) {
       CHECK(strcmp(zozzRawAnimationName(loaded_animation), "raw-smoke") == 0);

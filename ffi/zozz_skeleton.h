@@ -20,12 +20,14 @@ extern "C" {
 typedef struct ZozzSkeleton ZozzSkeleton;
 
 /// Loads a skeleton from a .ozz file produced by an ozz offline tool.
-ZOZZ_API ZozzResult zozzSkeletonLoadFile(const char* path, ZozzSkeleton** out);
+ZOZZ_API ZozzResult zozzSkeletonLoadFile(const char* path, ZozzSkeleton** out,
+                                         ZozzRefusal* refusal);
 
 /// Loads a skeleton from a memory image of a .ozz file. The buffer is read
 /// during the call only and is not retained.
 ZOZZ_API ZozzResult zozzSkeletonLoadMemory(const void* data, size_t size,
-                                           ZozzSkeleton** out);
+                                           ZozzSkeleton** out,
+                                           ZozzRefusal* refusal);
 
 ZOZZ_API void zozzSkeletonDestroy(ZozzSkeleton* skeleton);
 

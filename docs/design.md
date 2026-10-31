@@ -155,7 +155,10 @@ in `src/c.zig`, the file the guard walks.
   which pushes one `Frame` naming the entry point and its result; a refusal
   the wrapper makes before calling C goes through `err.refuse` or
   `err.narrow` and names the call it was about to make. A call that only
-  passes a refusal on pushes nothing, so one refusal is one frame. Tests in
+  passes a refusal on pushes nothing, so one refusal is one frame. A loader
+  goes through `err.checkLoad` instead, which carries the loader's
+  `c.Refusal` into its frame and stops in every build if one arrives beside a
+  result other than `bad_format`. Tests in
   `src/error.zig` read the modules and fail when a frame names another call,
   when an error leaves any other way, or when a module makes a `Failure` of
   its own. `err.map`, which pushes none, is only for a result
@@ -250,6 +253,20 @@ object, with no error returned.
   allocation, so a failed allocation constructs at address zero.
   `ffi/zozz_internal.h` replaces it with a checked `zozz::New`, which makes
   the `OutOfMemory` paths reachable.
+
+**The refusal record.** Every loader (`*LoadMemory`, `*LoadFile`,
+`zozzIArchiveLoad<Type>`) takes a `ZozzRefusal*` last, NULL allowed, and
+clears it on entry. A post-parse check that refuses a count fills it with the
+count's name (`Skeleton.num_joints`), what the archive held and the bound it
+broke, through `zozz::Refuse` (`ffi/zozz_internal.h`), which returns
+`ZOZZ_RESULT_BAD_FORMAT`: no other result ever carries one. `what` is a static
+string, never freed. A wrong tag, a truncated archive or a missing file leave
+the record empty, as does a duration that is not positive, which has no count
+to report. The Zig wrapper copies the record into the refusal's frame
+(`Frame.refusal`), so `error.BadFormat` says which count broke and by how
+much. The parse itself receives the record too (`zozz::LoadTagged`,
+`LoadTaggedObject`) and fills none yet: ozz's `Load` functions return nothing
+to fill it from.
 
 NaN ratios are refused, and every entry point taking SoA memory or a matrix
 buffer checks the 16-byte boundary and returns

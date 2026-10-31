@@ -533,3 +533,175 @@ test "an animation written through the archive and read back compares equal to t
         }
     }
 }
+
+//=============================================================================
+// The refusal record
+//=============================================================================
+
+/// An honest skeleton archive of `joints` joints, laid out as ozz's
+/// `Skeleton::Save` writes one (src/animation/runtime/skeleton.cc): the
+/// endianness byte, the tag with its NUL, version 2, the joint and name-byte
+/// counts, an empty name and a root parent per joint, and zeroed SoA rest
+/// poses, one block per four joints.
+fn skeletonArchive(gpa: std.mem.Allocator, comptime joints: u16) ![]u8 {
+    var bytes: std.ArrayList(u8) = .empty;
+    errdefer bytes.deinit(gpa);
+    try bytes.append(gpa, switch (std.lang.Endian.native) {
+        .big => 0,
+        .little => 1,
+    });
+    try bytes.appendSlice(gpa, "ozz-skeleton\x00");
+    const version: u32 = 2;
+    const count: i32 = joints;
+    try bytes.appendSlice(gpa, std.mem.asBytes(&version));
+    try bytes.appendSlice(gpa, std.mem.asBytes(&count));
+    try bytes.appendSlice(gpa, std.mem.asBytes(&count));
+    try bytes.appendNTimes(gpa, 0, joints);
+    const root: i16 = zozz.c.no_parent;
+    for (0..joints) |_| try bytes.appendSlice(gpa, std.mem.asBytes(&root));
+    try bytes.appendNTimes(gpa, 0, (joints + 3) / 4 * @sizeOf(zozz.SoaTransform));
+    return bytes.toOwnedSlice(gpa);
+}
+
+/// A read-only `zozz.Stream` over borrowed bytes, for the IArchive path.
+const ReadBuffer = struct {
+    bytes: []const u8,
+    pos: usize = 0,
+
+    fn opened(user: ?*anyopaque) callconv(.c) c_int {
+        _ = user;
+        return 1;
+    }
+
+    fn read(user: ?*anyopaque, buffer: ?*anyopaque, size: usize) callconv(.c) usize {
+        const self: *ReadBuffer = @ptrCast(@alignCast(user orelse return 0));
+        const out: [*]u8 = @ptrCast(buffer orelse return 0);
+        const n = @min(self.bytes.len - self.pos, size);
+        @memcpy(out[0..n], self.bytes[self.pos..][0..n]);
+        self.pos += n;
+        return n;
+    }
+
+    fn seek(user: ?*anyopaque, offset: c_int, origin: zozz.SeekOrigin) callconv(.c) c_int {
+        const self: *ReadBuffer = @ptrCast(@alignCast(user orelse return -1));
+        const base: i64 = switch (origin) {
+            .current => @intCast(self.pos),
+            .end => @intCast(self.bytes.len),
+            .set => 0,
+        };
+        const target = base + offset;
+        if (target < 0 or target > @as(i64, @intCast(self.bytes.len))) return -1;
+        self.pos = @intCast(target);
+        return 0;
+    }
+
+    fn tell(user: ?*anyopaque) callconv(.c) c_int {
+        const self: *ReadBuffer = @ptrCast(@alignCast(user orelse return -1));
+        return @intCast(self.pos);
+    }
+
+    fn stream(self: *ReadBuffer) zozz.Stream {
+        return .{ .opened = &opened, .write = null, .read = &read, .seek = &seek, .tell = &tell, .user = self };
+    }
+};
+
+/// What a caller left in its record before a load, which the load must not
+/// hand back.
+const stale_refusal: zozz.c.Refusal = .{ .what = "stale", .value = 7, .limit = 9 };
+
+fn expectCleared(refusal: zozz.c.Refusal) !void {
+    try std.testing.expectEqual(@as(?[*:0]const u8, null), refusal.what);
+    try std.testing.expectEqual(@as(u64, 0), refusal.value);
+    try std.testing.expectEqual(@as(u64, 0), refusal.limit);
+}
+
+fn expectRefusal(frame: zozz.Frame, call: err.Call, what: []const u8, value: u64, limit: u64) !void {
+    try std.testing.expectEqual(call, frame.call);
+    try std.testing.expectEqual(zozz.c.Result.bad_format, frame.result);
+    try std.testing.expectEqualStrings(what, frame.refusal.named() orelse return error.TestUnexpectedResult);
+    try std.testing.expectEqual(value, frame.refusal.value);
+    try std.testing.expectEqual(limit, frame.refusal.limit);
+}
+
+test "a loader clears the caller's refusal record on every outcome but a content refusal" {
+    var failure: zozz.Failure = .{};
+    const gpa = std.testing.allocator;
+    try zozz.setAllocator(gpa, &failure);
+    defer zozz.resetAllocator(&failure) catch |e| std.debug.panic("zozz: {s}", .{@errorName(e)});
+
+    const blob = try FixtureBlob.init(zozzFixtureSkeleton);
+    defer blob.deinit();
+    const bytes = blob.bytes;
+    var handle: *zozz.c.Skeleton = undefined;
+
+    var refusal = stale_refusal;
+    try std.testing.expectEqual(zozz.c.Result.ok, zozz.c.zozzSkeletonLoadMemory(bytes.ptr, bytes.len, &handle, &refusal));
+    zozz.c.zozzSkeletonDestroy(handle);
+    try expectCleared(refusal);
+
+    // A truncated archive is refused, but not for its content.
+    refusal = stale_refusal;
+    const cut = zozz.c.zozzSkeletonLoadMemory(bytes.ptr, bytes.len / 2, &handle, &refusal);
+    try std.testing.expect(cut == .io or cut == .bad_format);
+    try expectCleared(refusal);
+
+    refusal = stale_refusal;
+    try std.testing.expectEqual(zozz.c.Result.file_not_found, zozz.c.zozzSkeletonLoadFile("/nonexistent/zozz/skeleton.ozz", &handle, &refusal));
+    try expectCleared(refusal);
+
+    refusal = stale_refusal;
+    try std.testing.expectEqual(zozz.c.Result.invalid_argument, zozz.c.zozzSkeletonLoadMemory(bytes.ptr, 0, &handle, &refusal));
+    try expectCleared(refusal);
+
+    // NULL asks for no record.
+    try std.testing.expectEqual(zozz.c.Result.ok, zozz.c.zozzSkeletonLoadMemory(bytes.ptr, bytes.len, &handle, null));
+    zozz.c.zozzSkeletonDestroy(handle);
+
+    // Through the wrapper, a refusal that is not about content carries none.
+    if (zozz.Skeleton.initFromMemory(.init(bytes[0 .. bytes.len / 2]), &failure)) |accepted| {
+        var skeleton = accepted;
+        skeleton.deinit();
+        return error.TestUnexpectedResult;
+    } else |_| {}
+    try std.testing.expectEqual(@as(usize, 1), failure.frames().len);
+    try std.testing.expectEqual(@as(?[]const u8, null), failure.frames()[0].refusal.named());
+}
+
+test "a content refusal names the count, what the archive held and the bound it broke" {
+    var failure: zozz.Failure = .{};
+    const gpa = std.testing.allocator;
+    try zozz.setAllocator(gpa, &failure);
+    defer zozz.resetAllocator(&failure) catch |e| std.debug.panic("zozz: {s}", .{@errorName(e)});
+
+    // At the limit the same layout loads, so what refuses the next archive is
+    // its count and nothing else about it.
+    const at_limit = try skeletonArchive(gpa, zozz.c.max_joints);
+    defer gpa.free(at_limit);
+    var loaded = try zozz.Skeleton.initFromMemory(.init(at_limit), &failure);
+    try std.testing.expectEqual(@as(u32, zozz.c.max_joints), loaded.numJoints());
+    loaded.deinit();
+
+    const over = try skeletonArchive(gpa, zozz.c.max_joints + 1);
+    defer gpa.free(over);
+    try std.testing.expectError(err.Error.BadFormat, zozz.Skeleton.initFromMemory(.init(over), &failure));
+    try std.testing.expectEqual(@as(usize, 1), failure.frames().len);
+    try expectRefusal(failure.frames()[0], .skeleton_load_memory, "Skeleton.num_joints", zozz.c.max_joints + 1, zozz.c.max_joints);
+    failure.reset();
+
+    // The C ABI fills the caller's record itself.
+    var refusal = stale_refusal;
+    var handle: *zozz.c.Skeleton = undefined;
+    try std.testing.expectEqual(zozz.c.Result.bad_format, zozz.c.zozzSkeletonLoadMemory(over.ptr, over.len, &handle, &refusal));
+    try std.testing.expectEqualStrings("Skeleton.num_joints", std.mem.span(refusal.what orelse return error.TestUnexpectedResult));
+    try std.testing.expectEqual(@as(u64, zozz.c.max_joints + 1), refusal.value);
+    try std.testing.expectEqual(@as(u64, zozz.c.max_joints), refusal.limit);
+
+    // And so does a host's stream, through IArchive.
+    var reader: ReadBuffer = .{ .bytes = over };
+    const bridge = reader.stream();
+    var in_archive = try zozz.IArchive.init(.init(&bridge), &failure);
+    defer in_archive.deinit();
+    try std.testing.expectError(err.Error.BadFormat, in_archive.loadSkeleton(&failure));
+    try std.testing.expectEqual(@as(usize, 1), failure.frames().len);
+    try expectRefusal(failure.frames()[0], .i_archive_load_skeleton, "Skeleton.num_joints", zozz.c.max_joints + 1, zozz.c.max_joints);
+}

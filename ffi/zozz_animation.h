@@ -20,10 +20,12 @@ extern "C" {
 typedef struct ZozzAnimation ZozzAnimation;
 
 ZOZZ_API ZozzResult zozzAnimationLoadFile(const char* path,
-                                          ZozzAnimation** out);
+                                          ZozzAnimation** out,
+                                          ZozzRefusal* refusal);
 
 ZOZZ_API ZozzResult zozzAnimationLoadMemory(const void* data, size_t size,
-                                            ZozzAnimation** out);
+                                            ZozzAnimation** out,
+                                            ZozzRefusal* refusal);
 
 ZOZZ_API void zozzAnimationDestroy(ZozzAnimation* animation);
 

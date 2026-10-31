@@ -278,11 +278,32 @@ pub const Call = enum {
     track_triggering_iterator_next,
 };
 
-/// One refusal: the call, and the result it returned or was refused with.
+/// Why a load was refused for the archive's content, copied out of the C
+/// boundary's `c.Refusal`: the count or invariant that failed, what the
+/// archive held and the bound it broke. A frame's record is empty (`named`
+/// is null) for every refusal but a content one. A frame holds no pointer,
+/// so `what` is a copy of the static C string, not a borrow of it.
+pub const Refusal = struct {
+    pub const aegis_public_frame = true;
+    /// Capacity of `what`; a longer name is kept truncated and says so.
+    pub const Name = aegis.err.PublicText(48);
+    what: Name = .{},
+    value: u64 = 0,
+    limit: u64 = 0,
+
+    /// The count or invariant that failed, or null when there is no record.
+    pub fn named(self: *const Refusal) ?[]const u8 {
+        return if (self.what.len == 0) null else self.what.view();
+    }
+};
+
+/// One refusal: the call, the result it returned or was refused with, and,
+/// for a load refused for its content, the record of why.
 pub const Frame = struct {
     pub const aegis_public_frame = true;
     call: Call,
     result: c.Result,
+    refusal: Refusal = .{},
 };
 
 /// What refused, oldest first. Every call that can fail takes one and pushes
@@ -340,6 +361,22 @@ pub fn resultOf(e: Error) c.Result {
 pub fn check(failure: *Failure, call: Call, result: c.Result) Error!void {
     map(result) catch |e| {
         failure.push(.{ .call = call, .result = result });
+        return e;
+    };
+}
+
+/// `check` for a loader: its frame carries `refusal`, the record the loader
+/// filled, when it names one. The boundary fills one only with `bad_format`,
+/// so a record beside any other result stops in every build.
+pub fn checkLoad(failure: *Failure, call: Call, result: c.Result, refusal: c.Refusal) Error!void {
+    const what = refusal.what orelse return check(failure, call, result);
+    if (result != .bad_format) aegis.assert.never("zozz: a loader filled its refusal record with a result other than BAD_FORMAT");
+    map(result) catch |e| {
+        failure.push(.{ .call = call, .result = result, .refusal = .{
+            .what = Refusal.Name.copy(aegis.err.PublicSource.classify("a static name the C boundary's loader filled", std.mem.span(what))),
+            .value = refusal.value,
+            .limit = refusal.limit,
+        } });
         return e;
     };
 }
@@ -449,27 +486,86 @@ const sources = [_][]const u8{
     @embedFile("zozz.zig"),
 };
 
+/// Whether the extern `c_name` takes a `c.Refusal` as its last parameter:
+/// a loader, whose record only `checkLoad` carries into the frame.
+fn takesRefusal(c_name: []const u8) bool {
+    @setEvalBranchQuota(100_000);
+    inline for (@typeInfo(c).@"struct".decl_names) |d| {
+        const T = @TypeOf(@field(c, d));
+        if (@typeInfo(T) == .@"fn") {
+            const params = @typeInfo(T).@"fn".param_types;
+            if (params.len > 0 and params[params.len - 1] == ?*c.Refusal and std.mem.eql(u8, d, c_name)) return true;
+        }
+    }
+    return false;
+}
+
 test "every frame a checked C call pushes names that call" {
     // `err.check(failure, .x, c.zozzY(` must name `.x` as `zozzY` spells it,
-    // so a frame can never name a call other than the one that refused. The
-    // compiler proves both exist.
+    // so a frame can never name a call other than the one that refused, and
+    // `err.checkLoad(` is read the same way. A loader goes through
+    // `checkLoad` and nothing else does, or its record would be dropped.
     var checked: usize = 0;
+    var loads: usize = 0;
     for (sources) |source| {
-        var rest: []const u8 = source;
-        const marker = "err.check(failure, .";
-        while (std.mem.find(u8, rest, marker)) |at| {
-            rest = rest[at + marker.len ..];
-            const end = std.mem.findScalar(u8, rest, ',') orelse return error.TestUnexpectedResult;
-            const named = rest[0..end];
-            const after = std.mem.trimStart(u8, rest[end + 1 ..], " \n");
-            if (!std.mem.startsWith(u8, after, "c.zozz")) continue;
-            const paren = std.mem.findScalar(u8, after, '(') orelse return error.TestUnexpectedResult;
-            var buf: [128]u8 = undefined;
-            try std.testing.expectEqualStrings(callName(after["c.".len..paren], &buf), named);
-            checked += 1;
+        for ([_][]const u8{ "err.check(failure, .", "err.checkLoad(failure, ." }) |marker| {
+            const load = std.mem.startsWith(u8, marker, "err.checkLoad(");
+            var rest: []const u8 = source;
+            while (std.mem.find(u8, rest, marker)) |at| {
+                rest = rest[at + marker.len ..];
+                const end = std.mem.findScalar(u8, rest, ',') orelse return error.TestUnexpectedResult;
+                const named = rest[0..end];
+                const after = std.mem.trimStart(u8, rest[end + 1 ..], " \n");
+                if (!std.mem.startsWith(u8, after, "c.zozz")) continue;
+                const paren = std.mem.findScalar(u8, after, '(') orelse return error.TestUnexpectedResult;
+                var buf: [128]u8 = undefined;
+                try std.testing.expectEqualStrings(callName(after["c.".len..paren], &buf), named);
+                try std.testing.expectEqual(load, takesRefusal(after["c.".len..paren]));
+                checked += 1;
+                if (load) loads += 1;
+            }
         }
     }
     try std.testing.expect(checked > 200);
+    try std.testing.expect(loads > 0);
+}
+
+test "a loader's record reaches the frame through checkLoad" {
+    // A record passed down as `&refusal` is the one handed to `checkLoad`
+    // on the same line, outside tests; a generic wrapper is held this way too.
+    var sites: usize = 0;
+    for (sources) |source| {
+        var in_test = false;
+        var lines = std.mem.splitScalar(u8, source, '\n');
+        while (lines.next()) |line| {
+            const code = std.mem.trimStart(u8, line, " ");
+            if (std.mem.startsWith(u8, code, "test \"")) in_test = true;
+            if (std.mem.startsWith(u8, code, "fn ") or std.mem.startsWith(u8, code, "pub fn ")) in_test = false;
+            const passes = std.mem.find(u8, line, "&refusal") != null;
+            const loads = std.mem.find(u8, line, "err.checkLoad(") != null;
+            if (loads) try std.testing.expect(std.mem.endsWith(u8, line, "&refusal), refusal);"));
+            if (passes and !in_test) try std.testing.expect(loads);
+            if (loads) sites += 1;
+        }
+    }
+    try std.testing.expect(sites > 0);
+}
+
+test "checkLoad carries a content refusal into the frame, and nothing else" {
+    var failure: Failure = .{};
+    try checkLoad(&failure, .skeleton_load_memory, .ok, .{});
+    try std.testing.expectError(Error.ReadFailed, checkLoad(&failure, .skeleton_load_file, .io, .{}));
+    try std.testing.expectError(Error.BadFormat, checkLoad(&failure, .skeleton_load_memory, .bad_format, .{
+        .what = "Skeleton.num_joints",
+        .value = 1025,
+        .limit = 1024,
+    }));
+    const frames = failure.frames();
+    try std.testing.expectEqual(2, frames.len);
+    try std.testing.expectEqual(@as(?[]const u8, null), frames[0].refusal.named());
+    try std.testing.expectEqualStrings("Skeleton.num_joints", frames[1].refusal.named().?);
+    try std.testing.expectEqual(1025, frames[1].refusal.value);
+    try std.testing.expectEqual(1024, frames[1].refusal.limit);
 }
 
 test "no module refuses without a frame" {
