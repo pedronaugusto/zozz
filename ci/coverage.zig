@@ -1393,7 +1393,7 @@ fn containerDeclares(text: []const u8, c: []const u8, m: []const u8) bool {
 
 /// The Zig surface. An entry point declared in C and never wrapped is
 /// unreachable for a Zig host. src/c/ and c.zig are the extern layer; tests
-/// and sweeps do not count as use.
+/// and sweeps, src/testing/ among them, do not count as use.
 fn checkSurface(t: Tree, r: *Report, entry_points: []const []const u8) !void {
     var calls: std.ArrayList([]const u8) = .empty;
     for (try t.walk("src", max_depth)) |e| {
@@ -1422,7 +1422,7 @@ fn checkSurface(t: Tree, r: *Report, entry_points: []const []const u8) !void {
 /// A Zig source under src/ outside the extern layer, the tests and sweeps.
 fn wrapperSource(path: []const u8) bool {
     const name = basename(path);
-    if (!mem.endsWith(u8, name, ".zig") or mem.startsWith(u8, path, "src/c/")) return false;
+    if (!mem.endsWith(u8, name, ".zig") or mem.startsWith(u8, path, "src/c/") or mem.startsWith(u8, path, "src/testing/")) return false;
     if (eql(name, "c.zig") or mem.endsWith(u8, name, "_test.zig")) return false;
     return mem.find(u8, name[0 .. name.len - 4], "_sweep") == null;
 }
@@ -2138,6 +2138,7 @@ test "an entry point no Zig source calls is stranded, unless excused" {
         .{ "src/c.zig", "pub extern fn zozzB() void;\n" },
         .{ "src/c/x.zig", "zozzB" },
         .{ "src/a_test.zig", "c.zozzB();\n" },
+        .{ "src/testing/e.zig", "c.zozzB();\n" },
         .{ "src/b_sweep2.zig", "zozzB" },
         .{ "src/sub/d.zig", "zozzC" },
         .{ exceptions_path, "# header\nzozzA\tcalled after all, so not excusable\nzozzQ\tshort\nzozzD\tthe reason is long enough\nbad line\n" },
