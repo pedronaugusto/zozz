@@ -90,6 +90,11 @@ could not express, so a port has the reason and not only the diff.
   block ozz allocated for it, on a seek to its last iframe: ozz's group-varint
   decoder loads four bytes per value and only a name after the entries
   covered them (`libs/patches/ozz-gv4-padding.patch`).
+- `decodeGV4` and `decodeGV4Stream` read past the bytes they were given:
+  they checked only the minimum size, then let ozz's decoder read the length
+  a group's first byte claims plus the three bytes it loads past every group,
+  and reported a consumed count from past the end. They read nothing past the
+  buffer now, and a group longer than what is left is `BufferTooSmall`.
 - A caller's `u32` or `usize` past what the C boundary's `int` carries
   (`SamplingContext.init(1 << 31)`, a joint, track or vertex count) was
   `@intCast`, a panic in a safe build and undefined in ReleaseFast; it is

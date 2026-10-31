@@ -126,3 +126,42 @@ test "decodeGV4Stream decodes a buffer ozz's own EncodeGV4Stream produced" {
     try std.testing.expectEqual(@as(usize, buf.len), consumed);
     try std.testing.expectEqualSlices(u32, &.{ 0, 1, 200, 70000, 16777216, 42, 0xffffffff, 3 }, &out);
 }
+
+const shakedown = @import("shakedown");
+
+/// `bytes` copied into a block that ends at an inaccessible page, so a read
+/// one byte past them faults.
+fn atGuard(quarantine: *shakedown.alloc.Quarantine, bytes: []const u8) ![]u8 {
+    const block = try quarantine.allocator().alloc(u8, bytes.len);
+    @memcpy(block, bytes);
+    return block;
+}
+
+test "decodeGV4 reads nothing past the buffer, a group ending it included" {
+    var failure: zozz.Failure = .{};
+    var quarantine: shakedown.alloc.Quarantine = .init(.{ .guard = .after });
+    defer quarantine.deinit();
+    // Four one-byte values: the group is the whole buffer.
+    const whole = try atGuard(&quarantine, &.{ 0x00, 1, 2, 3, 4 });
+    var out: [4]u32 = undefined;
+    try std.testing.expectEqual(@as(usize, 5), try encode.decodeGV4(.init(whole), &out, &failure));
+    try std.testing.expectEqual([4]u32{ 1, 2, 3, 4 }, out);
+    // A prefix claiming four four-byte values, seventeen bytes, in five.
+    const short = try atGuard(&quarantine, &.{ 0xff, 1, 2, 3, 4 });
+    try std.testing.expectError(error.BufferTooSmall, encode.decodeGV4(.init(short), &out, &failure));
+    try std.testing.expectEqualSlices(zozz.Frame, &.{.{ .call = .decode_gv4, .result = .buffer_too_small }}, failure.frames());
+}
+
+test "decodeGV4Stream reads nothing past the buffer, a group ending it included" {
+    var failure: zozz.Failure = .{};
+    var quarantine: shakedown.alloc.Quarantine = .init(.{ .guard = .after });
+    defer quarantine.deinit();
+    const whole = try atGuard(&quarantine, &.{ 0x00, 1, 2, 3, 4, 0x01, 0x34, 0x12, 6, 7, 8 });
+    var values: [8]u32 = undefined;
+    try std.testing.expectEqual(@as(usize, 11), try encode.decodeGV4Stream(.init(whole), &values, &failure));
+    try std.testing.expectEqual([8]u32{ 1, 2, 3, 4, 0x1234, 6, 7, 8 }, values);
+    // The second group's prefix claims more than the ten bytes hold.
+    const short = try atGuard(&quarantine, &.{ 0x00, 1, 2, 3, 4, 0x55, 1, 2, 3, 4 });
+    try std.testing.expectError(error.BufferTooSmall, encode.decodeGV4Stream(.init(short), &values, &failure));
+    try std.testing.expectEqualSlices(zozz.Frame, &.{.{ .call = .decode_gv4_stream, .result = .buffer_too_small }}, failure.frames());
+}

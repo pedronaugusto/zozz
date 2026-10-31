@@ -16,10 +16,9 @@ pub fn encodeGV4(values: [4]u32, out: []u8, failure: *err.Failure) err.Error!usi
     return used;
 }
 
-/// Decodes 4 values encoded by `encodeGV4`. `buffer` must be at least 5
-/// bytes; per the format, up to 3 bytes past what this group actually needs
-/// may be read (and must be valid to read, even though their value is
-/// discarded). Returns the number of bytes this group actually occupied.
+/// Decodes 4 values encoded by `encodeGV4`, reading nothing past `buffer`:
+/// `error.BufferTooSmall` when it holds less than the group its first byte
+/// describes (5-17 bytes). Returns the bytes the group occupied.
 pub fn decodeGV4(buffer: err.Bytes, out: *[4]u32, failure: *err.Failure) err.Error!usize {
     const bytes = buffer.readForParse();
     var consumed: usize = undefined;
@@ -45,10 +44,10 @@ pub fn encodeGV4Stream(values: []const u32, out: []u8, failure: *err.Failure) er
 }
 
 /// Decodes a stream produced by `encodeGV4Stream`. `values.len` must be a
-/// multiple of 4; `buffer` must hold at least `values.len + values.len / 4`
-/// bytes (the minimum possible encoding) — and, per `decodeGV4`, a few bytes
-/// past that minimum must be valid to read for the last group. Returns the
-/// number of bytes consumed.
+/// multiple of 4. Nothing past `buffer` is read: `error.BufferTooSmall` when
+/// it holds less than `values.len + values.len / 4` bytes (the minimum
+/// encoding) or than the groups' first bytes describe. Returns the bytes
+/// consumed.
 pub fn decodeGV4Stream(buffer: err.Bytes, values: []u32, failure: *err.Failure) err.Error!usize {
     const bytes = buffer.readForParse();
     var consumed: usize = undefined;
