@@ -254,11 +254,11 @@ ZozzResult zozzRawSkeletonJointRest(const ZozzRawSkeleton* raw, int32_t joint,
 
 bool zozzRawSkeletonValidate(const ZozzRawSkeleton* raw) {
   if (raw == nullptr) return false;
-  // ozz's RawSkeleton::Validate is `num_joints() > kMaxJoints` and nothing
-  // else (raw_skeleton.cc:40-45), and flattening is a bijection on joints, so
-  // this handle's size IS that num_joints(). zozz::kMaxJoints is ozz's own
-  // constant, not a copy of its value.
-  return raw->joints.size() <= static_cast<size_t>(zozz::kMaxJoints);
+  // ozz's own answer, on the tree the build hands its builder. An empty
+  // handle is the empty tree, which the build refuses and ozz validates.
+  ozz::animation::offline::RawSkeleton raw_ozz;
+  if (!raw->joints.empty()) zozz::FlattenToNestedSkeleton(raw, &raw_ozz);
+  return raw_ozz.Validate();
 }
 
 ZozzResult zozzRawSkeletonIterateJointsBreadthFirst(const ZozzRawSkeleton* raw,
@@ -277,22 +277,12 @@ ZozzResult zozzRawSkeletonIterateJointsBreadthFirst(const ZozzRawSkeleton* raw,
 ZozzResult zozzSkeletonBuild(const ZozzRawSkeleton* raw, ZozzSkeleton** out) {
   if (raw == nullptr || out == nullptr) return ZOZZ_RESULT_INVALID_ARGUMENT;
   *out = nullptr;
-  if (raw->joints.empty()) return ZOZZ_RESULT_INVALID_DATA;
 
-  // Materialise the nested tree: bucket children per parent, then fill
-  // depth-first from the roots. Insertion order is preserved within each
-  // child list, which is what makes a depth-first insertion sequence come
-  // out with identical indices.
-  ozz::vector<ozz::vector<int32_t>> children;
-  ozz::vector<int32_t> roots;
-  ComputeChildren(raw->joints, &children, &roots);
-
+  // Insertion order is preserved within each child list, which is what
+  // makes a depth-first insertion sequence come out with identical indices.
   ozz::animation::offline::RawSkeleton raw_ozz;
-  raw_ozz.roots.resize(roots.size());
-  for (size_t i = 0; i < roots.size(); ++i) {
-    FillChildren(raw->joints, children, roots[i], &raw_ozz.roots[i]);
-  }
-
+  const ZozzResult nested = zozz::FlattenToNestedSkeleton(raw, &raw_ozz);
+  if (nested != ZOZZ_RESULT_OK) return nested;
   if (!raw_ozz.Validate()) return ZOZZ_RESULT_INVALID_DATA;
 
   ozz::animation::offline::SkeletonBuilder builder;

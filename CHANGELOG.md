@@ -105,6 +105,11 @@ could not express, so a port has the reason and not only the diff.
   then failed ozz's assert in `LocalToModelJob`, aborting the host. Such a
   skeleton is `BadFormat` now, its record `Skeleton.joint_rest_poses`
   naming the SoA block (`libs/patches/ozz-rest-pose-rotations.patch`).
+- A raw skeleton whose joint rotation is not a number, which an archive can
+  hold, or squares past a float, which `addJoint` takes, built into a
+  skeleton whose joints `LocalToModelJob` could not place without failing
+  ozz's assert. `RawSkeleton.validate` is false for it now, and `build`
+  `InvalidData` (`libs/patches/ozz-raw-skeleton-rotations.patch`).
 - `decodeGV4` and `decodeGV4Stream` read past the bytes they were given:
   they checked only the minimum size, then let ozz's decoder read the length
   a group's first byte claims plus the three bytes it loads past every group,

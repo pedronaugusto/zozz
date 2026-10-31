@@ -72,7 +72,7 @@ struct OZZ_ANIMOFFLINE_DLL RawSkeleton {
 
   // Tests for *this validity.
   // Returns true on success or false on failure if the number of joints exceeds
-  // ozz::Skeleton::kMaxJoints.
+  // ozz::Skeleton::kMaxJoints, or if a joint's rotation cannot be normalized.
   bool Validate() const;
 
   // Returns the number of joints of *this animation.

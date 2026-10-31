@@ -53,11 +53,13 @@ ZOZZ_API ZozzResult zozzRawSkeletonAddJoint(ZozzRawSkeleton* raw,
 ZOZZ_API int zozzRawSkeletonNumJoints(const ZozzRawSkeleton* raw);
 
 /// ozz::animation::offline::RawSkeleton::Validate(): true when the joint
-/// count is within ozz::animation::Skeleton::kMaxJoints. False for a NULL
-/// handle. zozzRawSkeletonAddJoint already refuses the joint that would
-/// exceed the limit, so only a skeleton filled by an importer
-/// (zozz_gltf.h) or read back from an archive can fail. zozzSkeletonBuild
-/// turns the same answer into ZOZZ_RESULT_INVALID_DATA.
+/// count is within ozz::animation::Skeleton::kMaxJoints and every joint's
+/// rotation is one the builder can normalize. False for a NULL handle.
+/// zozzRawSkeletonAddJoint refuses the joint past the limit and a transform
+/// that is not finite, not a rotation too long to square; a skeleton filled
+/// by an importer (zozz_gltf.h) or read back from an archive passed neither
+/// check. zozzSkeletonBuild turns the same answer into
+/// ZOZZ_RESULT_INVALID_DATA.
 ZOZZ_API bool zozzRawSkeletonValidate(const ZozzRawSkeleton* raw);
 
 //===----------------------------------------------------------------------===//

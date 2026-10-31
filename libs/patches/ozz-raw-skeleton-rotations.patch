@@ -1,0 +1,70 @@
+ozz-raw-skeleton-rotations: refuse a raw joint rotation the builder cannot
+normalize
+
+SkeletonBuilder normalizes each raw joint's rotation into the rest pose with
+NormalizeSafe4, which falls back to identity for a rotation of no length,
+and LocalToModelJob asserts every rotation of that pose is unit. A rotation
+that is not a number, or whose square overflows a float, normalizes to no
+unit rotation, and RawSkeleton::Validate checked only the joint count: the
+skeleton built, and placing its joints aborted at the assert.
+
+RawSkeleton::Validate is false for a joint whose rotation, normalized as
+SkeletonBuilder normalizes it, is not unit by the job's own estimate.
+
+Evidence: zozz's src/integration_test.zig builds a raw skeleton whose joint
+rotation is 1e30 on x, and one read from an archive whose joint rotation is
+not a number; upstream validates and builds both (measured, 2026-10-31).
+
+diff --git a/libs/ozz/include/ozz/animation/offline/raw_skeleton.h b/libs/ozz/include/ozz/animation/offline/raw_skeleton.h
+index 6b5348d..3c20ec9 100644
+--- a/libs/ozz/include/ozz/animation/offline/raw_skeleton.h
++++ b/libs/ozz/include/ozz/animation/offline/raw_skeleton.h
+@@ -72,7 +72,7 @@ struct OZZ_ANIMOFFLINE_DLL RawSkeleton {
+ 
+   // Tests for *this validity.
+   // Returns true on success or false on failure if the number of joints exceeds
+-  // ozz::Skeleton::kMaxJoints.
++  // ozz::Skeleton::kMaxJoints, or if a joint's rotation cannot be normalized.
+   bool Validate() const;
+ 
+   // Returns the number of joints of *this animation.
+diff --git a/libs/ozz/src/animation/offline/raw_skeleton.cc b/libs/ozz/src/animation/offline/raw_skeleton.cc
+index 23a32be..7cad81d 100644
+--- a/libs/ozz/src/animation/offline/raw_skeleton.cc
++++ b/libs/ozz/src/animation/offline/raw_skeleton.cc
+@@ -28,6 +28,7 @@
+ #include "ozz/animation/offline/raw_skeleton.h"
+ 
+ #include "ozz/animation/runtime/skeleton.h"
++#include "ozz/base/maths/simd_math.h"
+ 
+ namespace ozz {
+ namespace animation {
+@@ -37,11 +38,26 @@ RawSkeleton::RawSkeleton() {}
+ 
+ RawSkeleton::~RawSkeleton() {}
+ 
++namespace {
++// SkeletonBuilder normalizes each joint's rotation into the rest pose, and
++// LocalToModelJob asserts that pose's rotations are unit: a rotation it
++// cannot normalize, not a number or squaring past a float, is invalid.
++struct RotationChecker {
++  void operator()(const RawSkeleton::Joint& _joint, const RawSkeleton::Joint*) {
++    const math::SimdFloat4 rotation = math::NormalizeSafe4(
++        math::simd_float4::LoadPtrU(&_joint.transform.rotation.x),
++        math::simd_float4::w_axis());
++    valid = valid && math::AreAllTrue1(math::IsNormalizedEst4(rotation));
++  }
++  bool valid = true;
++};
++}  // namespace
++
+ bool RawSkeleton::Validate() const {
+   if (num_joints() > Skeleton::kMaxJoints) {
+     return false;
+   }
+-  return true;
++  return IterateJointsDF(*this, RotationChecker()).valid;
+ }
+ 
+ namespace {

@@ -934,6 +934,45 @@ test "a raw skeleton nests no deeper than ozz's joint limit" {
     try expectLoadRefused(zozz.RawSkeleton, over.bytes.items, .raw_skeleton_load_memory, err.Error.BadFormat, "RawSkeleton.depth", zozz.c.max_joints + 1, zozz.c.max_joints);
 }
 
+/// Builds `raw` expecting it refused as invalid, the skeleton it would make
+/// failing the unit rotation `LocalToModelJob` asserts.
+fn expectRotationRefused(raw: zozz.RawSkeleton) !void {
+    var failure: zozz.Failure = .{};
+    try std.testing.expect(!raw.validate());
+    try std.testing.expectError(err.Error.InvalidData, raw.build(&failure));
+    try std.testing.expectEqualSlices(zozz.Frame, &.{.{ .call = .skeleton_build, .result = .invalid_data }}, failure.frames());
+}
+
+test "a raw skeleton whose joint rotation the builder cannot normalize does not build" {
+    var failure: zozz.Failure = .{};
+    const gpa = std.testing.allocator;
+    try zozz.setAllocator(gpa, &failure);
+    defer zozz.resetAllocator(&failure) catch |e| std.debug.panic("zozz: {s}", .{@errorName(e)});
+    // Finite, as `addJoint` requires, and squaring past what a float holds.
+    var authored = try zozz.RawSkeleton.init(&failure);
+    defer authored.deinit();
+    var rest = zozz.transform_identity;
+    rest.rotation[0] = 1e30;
+    _ = try authored.addJoint(null, "root", rest, &failure);
+    try expectRotationRefused(authored);
+}
+
+test "a raw skeleton read with a joint rotation that is not a number does not build" {
+    var failure: zozz.Failure = .{};
+    const gpa = std.testing.allocator;
+    try zozz.setAllocator(gpa, &failure);
+    defer zozz.resetAllocator(&failure) catch |e| std.debug.panic("zozz: {s}", .{@errorName(e)});
+    // `addJoint` refuses it; an archive never passes there. Rotation x
+    // follows the name's length and the translation.
+    var chain = try archives.rawSkeletonChain(gpa, 1);
+    defer chain.deinit();
+    const nan = try overwritten(gpa, chain.bytes.items, 22 + 4 + 4 + 4 + 12, &std.mem.toBytes(std.math.nan(f32)));
+    defer gpa.free(nan);
+    var loaded = try zozz.RawSkeleton.initFromMemory(.init(nan), &failure);
+    defer loaded.deinit();
+    try expectRotationRefused(loaded);
+}
+
 test "a raw track's keyframe interpolates by a mode ozz has, or the track is refused" {
     var failure: zozz.Failure = .{};
     const gpa = std.testing.allocator;

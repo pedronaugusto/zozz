@@ -137,10 +137,10 @@ pub const RawSkeleton = struct {
     }
 
     /// ozz's `RawSkeleton::Validate()`: the joint count is within
-    /// `max_joints`. `addJoint` already refuses the joint that would exceed
-    /// it, so a skeleton authored through this API always validates — one
-    /// filled by an importer or read back from an archive did not go through
-    /// that door.
+    /// `max_joints`, and every joint's rotation is one the builder can
+    /// normalize. `addJoint` refuses the joint past the count and a transform
+    /// that is not finite, not a rotation too long to square; a skeleton read
+    /// from an archive passed neither check.
     pub fn validate(self: RawSkeleton) bool {
         return c.zozzRawSkeletonValidate(err.live(self.handle));
     }
@@ -913,8 +913,9 @@ test "raw skeleton: validate holds for anything this API can author" {
     var failure: err.Failure = .{};
     var raw = try RawSkeleton.init(&failure);
     defer raw.deinit();
-    // Empty is valid to ozz -- RawSkeleton::Validate is a joint-count bound
-    // and nothing else -- even though build refuses it for having no roots.
+    // Empty is valid to ozz -- RawSkeleton::Validate bounds the joints and
+    // checks their rotations -- even though build refuses it for having no
+    // roots.
     try std.testing.expect(raw.validate());
     try std.testing.expectError(error.InvalidData, raw.build(&failure));
     try std.testing.expectEqualSlices(err.Frame, &.{.{ .call = .skeleton_build, .result = .invalid_data }}, failure.frames());

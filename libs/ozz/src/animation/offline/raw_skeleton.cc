@@ -28,6 +28,7 @@
 #include "ozz/animation/offline/raw_skeleton.h"
 
 #include "ozz/animation/runtime/skeleton.h"
+#include "ozz/base/maths/simd_math.h"
 
 namespace ozz {
 namespace animation {
@@ -37,11 +38,26 @@ RawSkeleton::RawSkeleton() {}
 
 RawSkeleton::~RawSkeleton() {}
 
+namespace {
+// SkeletonBuilder normalizes each joint's rotation into the rest pose, and
+// LocalToModelJob asserts that pose's rotations are unit: a rotation it
+// cannot normalize, not a number or squaring past a float, is invalid.
+struct RotationChecker {
+  void operator()(const RawSkeleton::Joint& _joint, const RawSkeleton::Joint*) {
+    const math::SimdFloat4 rotation = math::NormalizeSafe4(
+        math::simd_float4::LoadPtrU(&_joint.transform.rotation.x),
+        math::simd_float4::w_axis());
+    valid = valid && math::AreAllTrue1(math::IsNormalizedEst4(rotation));
+  }
+  bool valid = true;
+};
+}  // namespace
+
 bool RawSkeleton::Validate() const {
   if (num_joints() > Skeleton::kMaxJoints) {
     return false;
   }
-  return true;
+  return IterateJointsDF(*this, RotationChecker()).valid;
 }
 
 namespace {
