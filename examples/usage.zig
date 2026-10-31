@@ -38,7 +38,8 @@ fn authorAssets() !void {
         try raw_clip.pushScale(@intCast(track), 0.0, .{ 1, 1, 1 }, &failure);
     }
 
-    var clip = try raw_clip.build(&failure);
+    // 0 builds no iframes: a clip this short has few keys to walk on a seek.
+    var clip = try raw_clip.build(0, &failure);
     defer clip.deinit();
     try zozz.saveAnimationToFile(clip, "walk.ozz", &failure);
 }

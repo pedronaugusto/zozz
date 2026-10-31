@@ -385,7 +385,7 @@ test "the compressed control streams size and read back for every channel" {
 
     var raw = try buildDenseAnimation();
     defer raw.deinit();
-    var animation = try raw.build(&failure);
+    var animation = try raw.build(0, &failure);
     defer animation.deinit();
 
     for ([_]zozz.Animation.Channel{ .translation, .rotation, .scale }) |channel| {

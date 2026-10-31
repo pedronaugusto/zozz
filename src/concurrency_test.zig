@@ -49,7 +49,7 @@ const Fixture = struct {
         defer raw_animation.deinit();
         try raw_animation.pushTranslation(0, 0.0, .{ 0, 0, 0 }, &failure);
         try raw_animation.pushTranslation(0, 1.0, .{ travel, 0, 0 }, &failure);
-        const animation = try raw_animation.build(&failure);
+        const animation = try raw_animation.build(0, &failure);
 
         return .{ .skeleton = skeleton, .animation = animation };
     }

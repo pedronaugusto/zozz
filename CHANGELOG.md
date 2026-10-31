@@ -28,6 +28,12 @@ could not express, so a port has the reason and not only the diff.
   `limit`). `BadFormat` alone could not say which count broke or by how much:
   a skeleton one joint over ozz's limit and bytes that are not an archive at
   all gave the same answer.
+- `zozzAnimationBuild` and `RawAnimation.build` take the iframe interval,
+  AnimationBuilder's `iframe_interval`: seconds between the cache snapshots
+  the sampler seeks to when its ratio jumps, 0 for none. Negative,
+  non-finite, or dividing the clip more ways than a `uint32_t` counts is
+  `INVALID_ARGUMENT`. The old shape always built none, so every seek walked
+  the keys from the start or from where the last sample left off.
 - Every loader of bytes takes `zozz.Bytes` (aegis's untrusted-input type):
   every `initFromMemory` and `decodeGV4`/`decodeGV4Stream`; wrap a
   slice with `.init(bytes)`. `IArchive.init` takes a `zozz.InputStream`.

@@ -139,8 +139,13 @@ ZOZZ_API ZozzResult zozzRawAnimationPushScale(ZozzRawAnimation* raw, int track,
                                               const float value[3]);
 
 /// Validates and builds a compressed runtime animation. The raw animation is
-/// not consumed.
+/// not consumed. `iframe_interval` is AnimationBuilder's: seconds between
+/// the cache snapshots (iframes) the sampler seeks to when a ratio jumps, the
+/// clip's end always holding one; 0 builds none, and a jump then walks the
+/// keys from the start. ZOZZ_RESULT_INVALID_ARGUMENT for an interval that is
+/// negative, not finite, or divides the clip more ways than a uint32_t counts.
 ZOZZ_API ZozzResult zozzAnimationBuild(const ZozzRawAnimation* raw,
+                                       float iframe_interval,
                                        ZozzAnimation** out);
 
 //===----------------------------------------------------------------------===//

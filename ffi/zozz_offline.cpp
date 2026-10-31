@@ -15,6 +15,7 @@
 
 #include <cmath>
 #include <cstdint>
+#include <limits>
 
 #include "ozz/animation/offline/animation_builder.h"
 #include "ozz/animation/offline/raw_animation.h"
@@ -392,12 +393,20 @@ ZozzResult zozzRawAnimationPushScale(ZozzRawAnimation* raw, int track,
 }
 
 ZozzResult zozzAnimationBuild(const ZozzRawAnimation* raw,
-                              ZozzAnimation** out) {
+                              float iframe_interval, ZozzAnimation** out) {
   if (raw == nullptr || out == nullptr) return ZOZZ_RESULT_INVALID_ARGUMENT;
   *out = nullptr;
+  // The builder converts duration / interval to an integer count.
+  if (!std::isfinite(iframe_interval) || iframe_interval < 0.f ||
+      (iframe_interval > 0.f &&
+       !(raw->impl.duration / iframe_interval <=
+         static_cast<float>(std::numeric_limits<uint32_t>::max())))) {
+    return ZOZZ_RESULT_INVALID_ARGUMENT;
+  }
   if (!raw->impl.Validate()) return ZOZZ_RESULT_INVALID_DATA;
 
   ozz::animation::offline::AnimationBuilder builder;
+  builder.iframe_interval = iframe_interval;
   ozz::unique_ptr<ozz::animation::Animation> built = builder(raw->impl);
   if (!built) return ZOZZ_RESULT_OUT_OF_MEMORY;
 

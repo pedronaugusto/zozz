@@ -563,7 +563,7 @@ static void test_archive_round_trip(void) {
   }
 
   ZozzAnimation* animation = NULL;
-  CHECK(zozzAnimationBuild(raw_animation, &animation) == ZOZZ_RESULT_OK);
+  CHECK(zozzAnimationBuild(raw_animation, 0.f, &animation) == ZOZZ_RESULT_OK);
   zozzRawAnimationDestroy(raw_animation);
   CHECK(animation != NULL);
   if (animation == NULL) {

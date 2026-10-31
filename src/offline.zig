@@ -334,10 +334,12 @@ pub const RawAnimation = struct {
     }
 
     /// Validates and builds a compressed runtime animation. The raw animation
-    /// is not consumed.
-    pub fn build(self: RawAnimation, failure: *err.Failure) err.Error!animation_mod.Animation {
+    /// is not consumed. `iframe_interval` is seconds between the snapshots
+    /// the sampler seeks to when its ratio jumps; 0 builds none. Negative,
+    /// non-finite, or dividing the clip more ways than a u32 counts is refused.
+    pub fn build(self: RawAnimation, iframe_interval: f32, failure: *err.Failure) err.Error!animation_mod.Animation {
         var handle: *c.Animation = undefined;
-        try err.check(failure, .animation_build, c.zozzAnimationBuild(err.live(self.handle), &handle));
+        try err.check(failure, .animation_build, c.zozzAnimationBuild(err.live(self.handle), iframe_interval, &handle));
         return .{ .handle = handle };
     }
 
@@ -586,7 +588,7 @@ test "builder: a built animation samples what was authored" {
         try raw_anim.pushRotation(@intCast(track), 0.0, .{ 0, 0, 0, 1 }, &failure);
         try raw_anim.pushScale(@intCast(track), 0.0, .{ 1, 1, 1 }, &failure);
     }
-    var clip = try raw_anim.build(&failure);
+    var clip = try raw_anim.build(0, &failure);
     defer clip.deinit();
     try std.testing.expectEqual(@as(f32, 2.0), clip.duration());
     try std.testing.expectEqual(@as(u32, 2), clip.numTracks());
@@ -609,6 +611,62 @@ test "builder: a built animation samples what was authored" {
     try std.testing.expectApproxEqAbs(@as(f32, 4), locals[0].translation[0], 1e-2);
 }
 
+test "builder: an iframe interval builds iframes, and a clip sampled by seeking them samples what a walk does" {
+    var failure: err.Failure = .{};
+    var raw_anim = try RawAnimation.init(2, 4.0, null, &failure);
+    defer raw_anim.deinit();
+    // A key every quarter second, so there is a walk to skip.
+    for (0..17) |k| {
+        const time: f32 = @as(f32, @floatFromInt(k)) * 0.25;
+        for (0..2) |track| {
+            const value: f32 = @floatFromInt((k * 7 + track * 3) % 11);
+            try raw_anim.pushTranslation(@intCast(track), time, .{ value, -value, 0 }, &failure);
+        }
+    }
+    var walked = try raw_anim.build(0, &failure);
+    defer walked.deinit();
+    var seeking = try raw_anim.build(0.5, &failure);
+    defer seeking.deinit();
+
+    try std.testing.expectEqual(@as(usize, 0), (try walked.keyframesCtrl(.translation, &failure)).num_iframe_desc);
+    const ctrl = try seeking.keyframesCtrl(.translation, &failure);
+    // Two words per iframe, and the interval ozz stores is a ratio of the clip.
+    try std.testing.expect(ctrl.num_iframe_desc >= 2);
+    try std.testing.expectEqual(@as(f32, 1) / @as(f32, @floatFromInt(ctrl.num_iframe_desc / 2)), ctrl.iframe_interval);
+
+    var walk_context = try sampling_mod.SamplingContext.init(2, &failure);
+    defer walk_context.deinit();
+    var seek_context = try sampling_mod.SamplingContext.init(2, &failure);
+    defer seek_context.deinit();
+    var walk_pose: [1]math.SoaTransform = undefined;
+    var seek_pose: [1]math.SoaTransform = undefined;
+    var walk_locals: [2]math.Transform = undefined;
+    var seek_locals: [2]math.Transform = undefined;
+    // Jumps far enough, both ways, that the seeking clip starts from an iframe.
+    for ([_]f32{ 0.9, 0.1, 0.6, 1.0, 0.3, 0.0, 0.75 }) |ratio| {
+        try (sampling_mod.SamplingJob{ .animation = walked, .context = walk_context, .ratio = ratio, .out = &walk_pose }).run(&failure);
+        try pose_mod.toLocalTransforms(&walk_pose, &walk_locals, &failure);
+        try (sampling_mod.SamplingJob{ .animation = seeking, .context = seek_context, .ratio = ratio, .out = &seek_pose }).run(&failure);
+        try pose_mod.toLocalTransforms(&seek_pose, &seek_locals, &failure);
+        for (walk_locals, seek_locals) |w, s| try std.testing.expectEqual(w.translation, s.translation);
+    }
+}
+
+test "builder: an iframe interval that is not a finite, non-negative span of the clip is refused" {
+    var failure: err.Failure = .{};
+    var raw_anim = try RawAnimation.init(1, 4.0, null, &failure);
+    defer raw_anim.deinit();
+    try raw_anim.pushTranslation(0, 0.0, .{ 0, 0, 0 }, &failure);
+    // NaN and infinities reach a float-to-integer conversion in ozz's
+    // builder, as does an interval dividing the clip more ways than a u32
+    // counts; a negative interval means nothing ozz defines.
+    for ([_]f32{ std.math.nan(f32), std.math.inf(f32), -std.math.inf(f32), -0.5, 4.0 / 0x1p33 }) |interval| {
+        try std.testing.expectError(error.InvalidArgument, raw_anim.build(interval, &failure));
+        try std.testing.expectEqualSlices(err.Frame, &.{.{ .call = .animation_build, .result = .invalid_argument }}, failure.frames());
+        failure.reset();
+    }
+}
+
 test "builder: an empty track bakes identity, not the rest pose" {
     var failure: err.Failure = .{};
     // The contract this test pins is load-bearing for consumers whose rule is
@@ -626,7 +684,7 @@ test "builder: an empty track bakes identity, not the rest pose" {
     defer raw_anim.deinit();
     try raw_anim.pushTranslation(0, 0.0, .{ 1, 0, 0 }, &failure);
     // Track 1: no keys at all.
-    var clip = try raw_anim.build(&failure);
+    var clip = try raw_anim.build(0, &failure);
     defer clip.deinit();
 
     var pose: [1]math.SoaTransform = undefined;
@@ -691,7 +749,7 @@ test "builder: validation failures are errors, not asserts" {
     // without forbidding legitimate equal-time replaces) and fail at build.
     try raw_anim.pushTranslation(0, 0.75, .{ 0, 0, 0 }, &failure);
     try raw_anim.pushTranslation(0, 0.25, .{ 1, 0, 0 }, &failure);
-    try std.testing.expectError(error.InvalidData, raw_anim.build(&failure));
+    try std.testing.expectError(error.InvalidData, raw_anim.build(0, &failure));
     try std.testing.expectEqualSlices(err.Frame, &.{.{ .call = .animation_build, .result = .invalid_data }}, failure.frames());
 }
 
@@ -781,7 +839,7 @@ test "raw animation: clearing one channel leaves the other two alone" {
     // The TRACK survives a clear — only its keys go. A clip's track count is
     // fixed at creation, so this still builds, with identity keys baked in.
     try std.testing.expectEqual(@as(u32, 1), raw.numTracks());
-    var clip = try raw.build(&failure);
+    var clip = try raw.build(0, &failure);
     defer clip.deinit();
     try std.testing.expectEqual(@as(u32, 1), clip.numTracks());
 }
@@ -828,7 +886,7 @@ test "raw animation: validate, size, name and retiming" {
     // Keys out of ascending order fail validate before build refuses them.
     try raw.pushTranslation(0, 0.5, .{ 2, 0, 0 }, &failure);
     try std.testing.expect(!raw.validate());
-    try std.testing.expectError(error.InvalidData, raw.build(&failure));
+    try std.testing.expectError(error.InvalidData, raw.build(0, &failure));
     try std.testing.expectEqualSlices(err.Frame, &.{.{ .call = .animation_build, .result = .invalid_data }}, failure.frames());
     failure.reset();
 

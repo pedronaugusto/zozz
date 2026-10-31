@@ -500,7 +500,7 @@ pub extern fn zozzRawAnimationClearScales(raw: ?*RawAnimation, track: c_int) Res
 // aegis: boundary: ffi/zozz.h's function; src/abi_test.zig holds this signature to the header at compile time
 pub extern fn zozzRawAnimationClearTrack(raw: ?*RawAnimation, track: c_int) Result;
 // aegis: boundary: ffi/zozz.h's function; src/abi_test.zig holds this signature to the header at compile time
-pub extern fn zozzAnimationBuild(raw: *const RawAnimation, out: **Animation) Result;
+pub extern fn zozzAnimationBuild(raw: *const RawAnimation, iframe_interval: f32, out: **Animation) Result;
 
 //=============================================================================
 // Animation optimizer (ffi/zozz_optimizer.h)

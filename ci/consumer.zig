@@ -54,7 +54,7 @@ pub fn main() !void {
         try raw_clip.pushScale(@intCast(track), 0.0, .{ 1, 1, 1 }, &failure);
     }
 
-    var clip = try raw_clip.build(&failure);
+    var clip = try raw_clip.build(0, &failure);
     defer clip.deinit();
 
     // The caller owns the pose: two joints are one SoA block, on the stack.

@@ -206,7 +206,7 @@ test "an animation written and read back compares equal, in metadata and in samp
         try raw.pushRotation(@intCast(track), 2.0, .{ 0, 0, 0.7071068, 0.7071068 }, &failure);
         try raw.pushScale(@intCast(track), 0.0, .{ 1, 1, 1 }, &failure);
     }
-    var original = try raw.build(&failure);
+    var original = try raw.build(0, &failure);
     defer original.deinit();
 
     var sink: MemorySink = .{ .gpa = gpa };
@@ -367,7 +367,7 @@ test "a skeleton and an animation written into one archive round-trip back throu
     try raw_animation.pushTranslation(0, 1.0, .{ 1, 0, 0 }, &failure);
     try raw_animation.pushRotation(0, 0.0, .{ 0, 0, 0, 1 }, &failure);
     try raw_animation.pushScale(0, 0.0, .{ 1, 1, 1 }, &failure);
-    var original_animation = try raw_animation.build(&failure);
+    var original_animation = try raw_animation.build(0, &failure);
     defer original_animation.deinit();
 
     var mem: MemoryStream = .{ .gpa = gpa };
