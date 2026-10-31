@@ -10,3 +10,23 @@
 #              this build compiles no source for it.
 #              `ci/coverage.zig --classify` computes this; nothing else may claim it.
 #   GAP        work. ci/coverage.zig fails while any remain.
+geometry/runtime	in_normals	BOUND	ZozzSkinningJob zozzSkinningJobRun
+geometry/runtime	in_normals_stride	BOUND	ZozzSkinningJob zozzSkinningJobRun
+geometry/runtime	in_positions	BOUND	ZozzSkinningJob zozzSkinningJobRun
+geometry/runtime	in_positions_stride	BOUND	ZozzSkinningJob zozzSkinningJobRun
+geometry/runtime	in_tangents	BOUND	ZozzSkinningJob zozzSkinningJobRun
+geometry/runtime	in_tangents_stride	BOUND	ZozzSkinningJob zozzSkinningJobRun
+geometry/runtime	influences_count	BOUND	ZozzSkinningJob zozzSkinningJobRun
+geometry/runtime	joint_indices	BOUND	ZozzSkinningJob zozzSkinningJobRun
+geometry/runtime	joint_indices_stride	BOUND	ZozzSkinningJob zozzSkinningJobRun
+geometry/runtime	joint_inverse_transpose_matrices	BOUND	ZozzSkinningJob zozzSkinningJobRun
+geometry/runtime	joint_matrices	BOUND	ZozzSkinningJob zozzSkinningJobRun
+geometry/runtime	joint_weights	BOUND	ZozzSkinningJob zozzSkinningJobRun
+geometry/runtime	joint_weights_stride	BOUND	ZozzSkinningJob zozzSkinningJobRun
+geometry/runtime	out_normals	BOUND	ZozzSkinningJob zozzSkinningJobRun
+geometry/runtime	out_normals_stride	BOUND	ZozzSkinningJob zozzSkinningJobRun
+geometry/runtime	out_positions	BOUND	ZozzSkinningJob zozzSkinningJobRun
+geometry/runtime	out_positions_stride	BOUND	ZozzSkinningJob zozzSkinningJobRun
+geometry/runtime	out_tangents	BOUND	ZozzSkinningJob zozzSkinningJobRun
+geometry/runtime	out_tangents_stride	BOUND	ZozzSkinningJob zozzSkinningJobRun
+geometry/runtime	vertex_count	BOUND	ZozzSkinningJob zozzSkinningJobRun

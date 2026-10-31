@@ -222,7 +222,9 @@ const Named = struct { name: []const u8, ref: []const u8 };
 // act on (Float4x4::operator*). An indented operator is a member and takes its
 // class; one at column zero takes its first parameter's type, which ozz may
 // wrap onto the next line. State carries across one area's headers as it did
-// when one awk process read them all.
+// when one awk process read them all. The public data members of a class or
+// struct outside `namespace internal` are names too, read by AccessScanner
+// one header at a time: the parameters a caller sets on a builder or a job.
 //===========================================================================
 
 /// Reads public names out of one area's headers.
@@ -608,7 +610,11 @@ fn coverage(t: Tree) !Coverage {
         for (try t.walk(area.dir, area.depth)) |e| {
             if (e.kind == .directory or !mem.endsWith(u8, e.path, ".h")) continue;
             if (mem.startsWith(u8, basename(e.path), "gtest_")) continue;
-            try scanner.file((try t.read(e.path)) orelse continue);
+            const text = (try t.read(e.path)) orelse continue;
+            try scanner.file(text);
+            var members: AccessScanner = .{ .a = t.a };
+            try members.file(text);
+            try scanner.names.appendSlice(t.a, members.members.items);
         }
         const public = unique(scanner.names.items);
         if (public.len == 0) continue;
@@ -654,23 +660,60 @@ const AccessScanner = struct {
     /// Each open class scope: the depth its body opened at, and its access.
     scopes: std.ArrayList(struct { depth: isize, public: bool }) = .empty,
     in_comment: bool = false,
+    /// The previous line continues a preprocessor directive, which declares
+    /// no member: a macro body is not a class body.
+    macro: bool = false,
     pending: bool = false,
     /// A class header seen whose `{` has not; it ends with its header.
     pendopen: bool = false,
+    /// The data members declared in public scope outside `namespace
+    /// internal`: what a caller sets on a builder, a job or a raw struct.
+    members: std.ArrayList([]const u8) = .empty,
+    /// The depth outside an open `namespace internal`.
+    internal: ?isize = null,
+    /// A class-body statement read so far, which may span lines.
+    stmt: std.ArrayList(u8) = .empty,
 
     fn file(s: *AccessScanner, text: []const u8) !void {
         s.depth = 0;
         s.scopes.clearRetainingCapacity();
         s.in_comment = false;
+        s.macro = false;
         s.pending = false;
         s.pendopen = false;
+        s.internal = null;
+        s.stmt.clearRetainingCapacity();
         var lines: Lines = .init(text);
         while (lines.next()) |raw| try s.line(raw);
     }
 
+    /// Adds one line to the class-body statement it starts or continues.
+    /// Back at the body's depth, a statement ending in `;` is read for data
+    /// members and one ending in `}` (a method's body) is dropped; a class
+    /// opening or closing drops it too. `in_body`: the line began there.
+    fn statement(s: *AccessScanner, code: []const u8, public: bool, in_body: bool, reshaped: bool) !void {
+        const n = s.scopes.items.len;
+        if (n == 0 or s.pendopen or reshaped or !(in_body or s.stmt.items.len > 0)) return s.stmt.clearRetainingCapacity();
+        try s.stmt.print(s.a, "{s} ", .{code});
+        if (s.scopes.items[n - 1].depth != s.depth) return;
+        const t = trimEnd(s.stmt.items);
+        if (mem.endsWith(u8, t, ";")) {
+            for (try memberNames(s.a, try s.a.dupe(u8, t))) |name| {
+                try s.out.append(s.a, .{ .name = name, .ref = if (public) "public" else "nonpublic" });
+                if (public and s.internal == null and harvestable(name)) try s.members.append(s.a, name);
+            }
+        } else if (!mem.endsWith(u8, t, "}")) return;
+        s.stmt.clearRetainingCapacity();
+    }
+
     fn line(s: *AccessScanner, raw: []const u8) !void {
+        const continued = s.macro;
+        s.macro = (continued or mem.startsWith(u8, trimStart(raw), "#")) and mem.endsWith(u8, trimEnd(raw), "\\");
         const code = cutText((try stripBlockComments(s.a, raw, &s.in_comment)) orelse return, "//");
         if (mem.startsWith(u8, trimStart(code), "#")) return;
+        if (s.internal == null and internalNamespace(code)) s.internal = s.depth;
+        const scopes_before = s.scopes.items.len;
+        const in_body = scopes_before > 0 and s.scopes.items[scopes_before - 1].depth == s.depth;
         const header = afterTemplateParameters(code);
         if (keywordAt(header, &.{ "class", "struct", "union" }, true) and !mem.endsWith(u8, trimEnd(header), ";")) {
             s.pending = keywordAt(header, &.{ "struct", "union" }, false);
@@ -678,6 +721,7 @@ const AccessScanner = struct {
         }
         if (accessLabel(code)) |public| {
             if (s.scopes.items.len > 0) s.scopes.items[s.scopes.items.len - 1].public = public;
+            s.stmt.clearRetainingCapacity();
             return;
         }
         for (0..mem.countScalar(u8, code, '{')) |_| {
@@ -690,15 +734,79 @@ const AccessScanner = struct {
             if (n > 0 and s.scopes.items[n - 1].depth == s.depth) _ = s.scopes.pop();
             s.depth -= 1;
         }
-        if (noFields(code)) return;
-        const id = identParen(code) orelse return;
-        if (id.start > 0 and mem.findScalar(u8, ".>:", code[id.start - 1]) != null) return;
+        if (s.internal) |d| if (s.depth <= d) {
+            s.internal = null;
+        };
         const public = for (s.scopes.items) |sc| {
             if (!sc.public) break false;
         } else true;
+        if (!continued) try s.statement(code, public, in_body, s.scopes.items.len != scopes_before);
+        if (noFields(code)) return;
+        const id = identParen(code) orelse return;
+        if (id.start > 0 and mem.findScalar(u8, ".>:", code[id.start - 1]) != null) return;
         try s.out.append(s.a, .{ .name = code[id.start..id.end], .ref = if (public) "public" else "nonpublic" });
     }
 };
+
+/// Words that open a class-body line declaring no member a caller sets: a
+/// `static` member in ozz is a constant.
+const nonmember_keywords = [_][]const u8{
+    "typedef", "using", "friend", "enum", "static", "template", "return", "class", "struct", "union", "namespace",
+};
+
+/// The names a class-body line declares as data members: a declaration
+/// ending in `;` with no parameter list before its initializer (calls after
+/// it are fine), each declarator's last identifier before its initializer,
+/// array bound or bit width. Empty for anything else.
+fn memberNames(a: Allocator, code: []const u8) ![]const []const u8 {
+    var out: std.ArrayList([]const u8) = .empty;
+    const l = trimEnd(trimStart(code));
+    if (!mem.endsWith(u8, l, ";") or mem.countScalar(u8, l, '(') != mem.countScalar(u8, l, ')')) return out.items;
+    if (mem.findAny(u8, l[0 .. mem.findAny(u8, l, "={") orelse l.len], "()") != null) return out.items;
+    if (keywordThenSpace(l, &nonmember_keywords) or !isIdentStart(l[0]) or operatorAhead(l)) return out.items;
+    const body = l[0 .. l.len - 1];
+    var nest: usize = 0;
+    var start: usize = 0;
+    for (0..body.len + 1) |i| {
+        const c: u8 = if (i == body.len) ',' else body[i];
+        switch (c) {
+            '<', '{', '[', '(' => nest += 1,
+            '>', '}', ']', ')' => nest -|= 1,
+            ',' => if (nest == 0) {
+                if (declaratorName(body[start..i], start == 0)) |name| try out.append(a, name);
+                start = i + 1;
+            },
+            else => {},
+        }
+    }
+    return out.items;
+}
+
+/// The identifier a declarator names, before its initializer, array bound
+/// or bit width; the first declarator of a line also needs a type before it.
+fn declaratorName(d: []const u8, typed: bool) ?[]const u8 {
+    var end = d.len;
+    for (d, 0..) |c, i| {
+        const scope = c == ':' and ((i + 1 < d.len and d[i + 1] == ':') or (i > 0 and d[i - 1] == ':'));
+        if (c == '=' or c == '{' or c == '[' or (c == ':' and !scope)) {
+            end = i;
+            break;
+        }
+    }
+    const t = trimEnd(d[0..end]);
+    var i = t.len;
+    while (i > 0 and isWord(t[i - 1])) i -= 1;
+    if (i == t.len or !isIdentStart(t[i])) return null;
+    if (typed and trimEnd(t[0..i]).len == 0) return null;
+    return t[i..];
+}
+
+/// Whether a data member's name passes a method's filters but the length
+/// one: `IKAimJob::up` and `LocalToModelJob::to` are knobs a caller sets.
+fn harvestable(name: []const u8) bool {
+    if (name[0] == '_' or name[name.len - 1] == '_') return false;
+    return !oneOf(name, "", &method_keywords) and !macroCase(name);
+}
 
 /// `l` past a leading `template <...>`, whose `class` and `typename` name
 /// parameters rather than open a class; empty when the list runs on.
@@ -1686,6 +1794,91 @@ test "a private section lasts until the next class or public label" {
         \\  Next();
         \\};
     }));
+}
+
+/// AREA: NAMES for each area `coverage` harvests from a tree of `files`.
+fn treeNames(a: Allocator, files: []const [2][]const u8) ![]const u8 {
+    var tmp = testing.tmpDir(.{});
+    defer tmp.cleanup();
+    try plant(tmp.dir, files);
+    var out: std.ArrayList(u8) = .empty;
+    for ((try coverage(.{ .io = testing.io, .dir = tmp.dir, .a = a })).areas) |area| {
+        try out.print(a, "{s}: {s}\n", .{ area.label, try joined(a, area.public) });
+    }
+    return out.items;
+}
+
+test "a struct's public data members are names, its private ones are not" {
+    var arena: std.heap.ArenaAllocator = .init(testing.allocator);
+    defer arena.deinit();
+    try testing.expectEqualStrings("base: Inline,Run,Validate,input,num_soa,settings,shown,skeleton,target,to,transform,x,y,z\n", try treeNames(arena.allocator(), &.{.{
+        ozz ++ "/base/job.h",
+        \\namespace ozz {
+        \\struct Job {
+        \\  bool Run() const;
+        \\  bool operator==(const Job& _other) const;
+        \\  math::SimdFloat4 target = math::simd_float4::zero();
+        \\  const Skeleton* skeleton;
+        \\  span<const math::SoaTransform> input;
+        \\  int num_soa = 0;
+        \\  int to = Skeleton::kMaxJoints;
+        \\  math::Transform transform{};
+        \\  typedef ozz::vector<int> Children;
+        \\  static const int kMaxJoints = 1024;
+        \\  enum { kOne = 1 };
+        \\#define OZZ_MEMBER(_t) \
+        \\  _t in_macro;
+        \\  struct Settings {
+        \\    bool x, y, z;  // Extract X, Y, Z components.
+        \\  };
+        \\  Settings settings = {true,
+        \\                       false,  // Y
+        \\                       true};
+        \\  bool Validate(const Skeleton& _a,
+        \\                const Skeleton& _b) const;
+        \\  void Inline() {
+        \\    float local = 0.f;
+        \\  }
+        \\ private:
+        \\  float hidden;
+        \\};
+        \\class Store {
+        \\  float secret;
+        \\ public:
+        \\  float shown;
+        \\};
+        \\namespace internal {
+        \\struct Raw {
+        \\  float keyframes;
+        \\};
+        \\}
+        \\float global_value;
+        \\}
+    }}));
+}
+
+test "a builder's parameter is a name: AnimationBuilder::iframe_interval" {
+    var arena: std.heap.ArenaAllocator = .init(testing.allocator);
+    defer arena.deinit();
+    try testing.expectEqualStrings("animation/offline: iframe_interval\n", try treeNames(arena.allocator(), &.{.{
+        ozz ++ "/animation/offline/animation_builder.h",
+        \\namespace ozz {
+        \\namespace animation {
+        \\namespace offline {
+        \\struct RawAnimation;
+        \\class OZZ_ANIMOFFLINE_DLL AnimationBuilder {
+        \\ public:
+        \\  // Creates an Animation based on _raw_animation and *this builder parameters.
+        \\  unique_ptr<Animation> operator()(const RawAnimation& _raw_animation) const;
+        \\
+        \\  // the interval between iframes, with a guaranteed one at the end of the
+        \\  // animation (even if interval is smaller than animation duration).
+        \\  float iframe_interval = 0.f;
+        \\};
+        \\}  // namespace offline
+        \\}  // namespace animation
+        \\}  // namespace ozz
+    }}));
 }
 
 test "names match an entry point's words as whole words, in order" {

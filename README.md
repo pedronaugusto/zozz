@@ -273,12 +273,12 @@ docs/design.md records.
 | **0.5.0** | version, the same in `build.zig.zon` and `ffi/zozz_core.h` |
 | **359** | C entry points (`ZOZZ_API` in `ffi/*.h`), each with its Zig extern |
 | **19** | installed public headers: `zozz.h` and those it includes |
-| **334** | public ozz names no entry point spells out, each carrying a verdict in `ci/coverage/` |
-| **49** | of them reachable through the C boundary under another name (`BOUND`) |
+| **414** | public ozz names no entry point spells out, each carrying a verdict in `ci/coverage/` |
+| **122** | of them reachable through the C boundary under another name (`BOUND`) |
 | **5** | C++ virtuals delivered as C callbacks (`EXTENSION`) |
-| **212** | provided in Zig without crossing the boundary (`ZIG`) |
+| **217** | provided in Zig without crossing the boundary (`ZIG`) |
 | **38** | provided by the Zig language (`LANGUAGE`) |
-| **30** | internal to ozz or compiled by no source here (`INTERNAL`) |
+| **32** | internal to ozz or compiled by no source here (`INTERNAL`) |
 | **207** | assertions in the standalone C smoke test |
 | **41** | vendored ozz translation units `build.zig` compiles |
 | **20** | zozz C++ translation units (`ffi/*.cpp`) |

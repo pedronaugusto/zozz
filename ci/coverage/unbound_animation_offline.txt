@@ -26,8 +26,28 @@ animation/offline	LerpRotation	ZIG	src/math.zig:lerpRotation
 animation/offline	LerpScale	ZIG	src/math.zig:lerpScale
 animation/offline	LerpTranslation	ZIG	src/math.zig:lerpTranslation
 animation/offline	SampleAnimation	BOUND	zozzRawAnimationSample
+animation/offline	any	BOUND	ZozzImportNodeType, the gltf importer's node filter
+animation/offline	bake	BOUND	ZozzMotionSettings zozzMotionExtractorSetPositionSettings zozzMotionExtractorSetRotationSettings
+animation/offline	camera	BOUND	ZozzImportNodeType, the gltf importer's node filter
+animation/offline	children	BOUND	zozzRawSkeletonAddJoint zozzRawSkeletonJointParent: a joint added under a parent is one of its children
 animation/offline	converter	INTERNAL	declared only by no source directory vendored for animation/offline/fbx, which this build does not compile
+animation/offline	distance	BOUND	ZozzOptimizerSetting zozzAnimationOptimizerSetSetting
+animation/offline	geometry	BOUND	ZozzImportNodeType, the gltf importer's node filter
+animation/offline	iframe_interval	BOUND	zozzAnimationBuild
+animation/offline	interpolation	BOUND	ZozzRawFloatKeyframe ZozzTrackInterpolation zozzRawFloatTrackPushKeyframe, and the other four keyframe types
+animation/offline	joints_setting_override	BOUND	zozzAnimationOptimizerSetJointOverride zozzAnimationOptimizerClearJointOverride
+animation/offline	light	BOUND	ZozzImportNodeType, the gltf importer's node filter
+animation/offline	loop	BOUND	ZozzMotionSettings zozzMotionExtractorSetPositionSettings zozzMotionExtractorSetRotationSettings
+animation/offline	marker	BOUND	ZozzImportNodeType, the gltf importer's node filter
+animation/offline	null	BOUND	ZozzImportNodeType, the gltf importer's node filter
+animation/offline	ratio	BOUND	ZozzRawFloatKeyframe zozzRawFloatTrackPushKeyframe, and the other four keyframe types
+animation/offline	roots	BOUND	zozzRawSkeletonAddJoint with ZOZZ_NO_PARENT adds a root
 animation/offline	scene	INTERNAL	declared only by no source directory vendored for animation/offline/fbx, which this build does not compile
 animation/offline	tolerance	BOUND	ZozzOptimizerSetting
+animation/offline	transform	BOUND	zozzRawSkeletonAddJoint zozzRawSkeletonJointRest ZozzTransform
+animation/offline	type	BOUND	ZozzNodeProperty ZozzNodePropertyType
+animation/offline	x	BOUND	ZozzMotionSettings zozzMotionExtractorSetPositionSettings zozzMotionExtractorSetRotationSettings
+animation/offline	y	BOUND	ZozzMotionSettings zozzMotionExtractorSetPositionSettings zozzMotionExtractorSetRotationSettings
+animation/offline	z	BOUND	ZozzMotionSettings zozzMotionExtractorSetPositionSettings zozzMotionExtractorSetRotationSettings
 animation/offline	AnimationOptimizer::operator()	BOUND	zozzAnimationOptimizerRun
 animation/offline	MotionExtractor::operator()	BOUND	zozzMotionExtractorRun

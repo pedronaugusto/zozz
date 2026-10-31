@@ -110,6 +110,12 @@ could not express, so a port has the reason and not only the diff.
   only ever added NDEBUG, never removed it, so the C++ was built without its
   asserts while `zozz.options` and `zozzBuildFeatures` disagreed about it.
   NDEBUG now follows the option in every mode.
+- The coverage check harvested only names followed by `(`, so it never saw
+  the public data members of upstream's structs: the parameters a caller
+  sets on a builder or a job, and raw data fields. That hid
+  `AnimationBuilder::iframe_interval`, which no entry point reaches. It reads
+  them now (outside `namespace internal`), and every member no entry point
+  spells out carries a verdict in `ci/coverage/unbound_*.txt`.
 
 ## [0.5.0] - 2026-09-04
 

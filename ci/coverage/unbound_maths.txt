@@ -186,9 +186,14 @@ base/maths	Xor	ZIG	src/math.zig:xor
 base/maths	alignas	INTERNAL	declared only under libs/ozz/include/ozz/base/maths/internal/simd_math_config.h, an internal directory
 base/maths	all_false	ZIG	src/math.zig:all_false
 base/maths	all_true	ZIG	src/math.zig:all_true
+base/maths	bottom	ZIG	src/math.zig:Rect
+base/maths	cols	BOUND	ZozzFloat4x4, column-major: m[0..3] is cols[0]
 base/maths	floor	INTERNAL	declared only under libs/ozz/include/ozz/base/maths/internal/simd_math_ref-inl.h, an internal directory
+base/maths	height	ZIG	src/math.zig:Rect
+base/maths	i	INTERNAL	declared only under libs/ozz/include/ozz/base/maths/internal/simd_math_ref-inl.h, an internal directory
 base/maths	is_inside	LANGUAGE	Zig slices and std.ArrayList
 base/maths	is_valid	LANGUAGE	Zig slices and std.ArrayList
+base/maths	left	ZIG	src/math.zig:Rect
 base/maths	lerp	LANGUAGE	std.mem and std.math
 base/maths	mask_0000	ZIG	src/math.zig:mask_0000
 base/maths	mask_000f	ZIG	src/math.zig:mask_000f
@@ -205,9 +210,16 @@ base/maths	min	LANGUAGE	std.mem and std.math
 base/maths	one	ZIG	src/math.zig:simd_float4
 base/maths	right	ZIG	src/math.zig:Rect
 base/maths	top	LANGUAGE	Zig slices and std.ArrayList
+base/maths	u	INTERNAL	declared only under libs/ozz/include/ozz/base/maths/internal/simd_math_ref-inl.h, an internal directory
+base/maths	w	BOUND	ZozzSoaQuaternion; an AoS quaternion is ZozzTransform's rotation[4]
 base/maths	w_axis	ZIG	src/math.zig:simd_float4
+base/maths	width	ZIG	src/math.zig:Rect
+base/maths	x	BOUND	ZozzSoaFloat3 ZozzSoaQuaternion; AoS lanes are ZozzTransform's arrays
 base/maths	x_axis	ZIG	src/math.zig:simd_float4
+base/maths	xyzw	ZIG	src/math.zig:SimdFloat4
+base/maths	y	BOUND	ZozzSoaFloat3 ZozzSoaQuaternion; AoS lanes are ZozzTransform's arrays
 base/maths	y_axis	ZIG	src/math.zig:simd_float4
+base/maths	z	BOUND	ZozzSoaFloat3 ZozzSoaQuaternion; AoS lanes are ZozzTransform's arrays
 base/maths	z_axis	ZIG	src/math.zig:simd_float4
 base/maths	zero	ZIG	src/math.zig:simd_float4
 base/maths	Float4x4::operator*	ZIG	src/math.zig:mat4.mul src/math.zig:mat4.mulVec
