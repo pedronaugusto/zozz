@@ -524,7 +524,52 @@ joints whose model matrix matches their local translation, a clip that
 moves, and a refused NaN ratio.
 
 `bay probe` breaks each invariant in `ci/probes/` on purpose and requires
-the failure it names; it runs outside the gate, a rebuild per probe.
+the failure it names; it runs outside the gate, a rebuild per probe. The gate
+also runs the bench once, each row a single unit (`--smoke`): it is held to
+running, never to a time. [Measured cost](#measured-cost) has its rows.
+
+## Measured cost
+
+`bay dev bench` builds `bench/binding.zig` in ReleaseFast and times each
+binding through shakedown, beside the same ozz work written in C++
+(`bench/baseline.cpp`). The C++ twin loops inside C++, so it pays no crossing
+per unit, and sets ozz up as the boundary does: its objects come from ozz's
+allocator, a load reads a borrowed image through an `IArchive`, and every job
+is ozz's own, built over the caller's buffers. It repeats none of the
+boundary's checks, so the gap between a row and its twin is the binding's
+whole cost.
+
+The workload is generated at the start of a run, untimed, through zozz's own
+offline builders, so nothing third-party is shipped: a humanoid skeleton of a
+few dozen joints (a spine, a neck and head, two arms ending in five
+three-joint fingers each, and two legs) and a four-second clip that keys
+every joint's rotation thirty times a second while the root walks forward,
+each serialised once with `OArchive` for the load rows. Both sides read the
+same images and the same buffers.
+
+| rows | unit | the work |
+|---|---|---|
+| `load_skeleton_zig`, `_zig_allocator`, `_c` | skeleton | `Skeleton.initFromMemory` from the image, then destroy it |
+| `load_animation_zig`, `_zig_allocator`, `_c` | clip | `Animation.initFromMemory` from the image, then destroy it |
+| `sample_zig`, `_c` | sample | `SamplingJob.run`, forward through the clip at sixty frames a second, one context |
+| `local_to_model_zig`, `_c` | pose | `LocalToModelJob.run` over the whole skeleton |
+| `blend_zig`, `_c` | blend | `BlendingJob.run` of three layers, each the clip at its own ratio |
+| `skin_zig`, `_c` | mesh | `skinning.Job.run`: positions and normals of a grid of a few thousand vertices, four joints each |
+| `two_bone_ik_zig`, `_c` | solve | `ik.TwoBoneJob.run` on the left arm, reaching for a grid of targets around the wrist, some out of reach |
+
+The load rows run first, while no other ozz object exists: `setAllocator` is
+refused while a block of another allocator is live. The `_zig_allocator` rows
+install the bench's allocator for the row and restore ozz's after it.
+
+```sh
+bay dev bench               # every row, timed
+bay dev bench-build         # build it, run nothing
+```
+
+No timings are recorded yet. They go in only from runs on a quiet machine,
+each with its date, the machine and the medians of several runs, and
+`zig build check-numbers` holds every figure to an allowance in
+`ci/numbers.zig`.
 
 ## Contributing
 

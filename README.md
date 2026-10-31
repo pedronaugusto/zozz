@@ -263,7 +263,8 @@ with the asserts flipped, with each optional half and both, and on ozz's scalar
 SIMD backend) and builds its assets at test time through ozz's own offline
 builders, so it ships no third-party clips. `-Dsanitize_c=true` skips the
 truncated-archive test, for an upstream null-pointer member access
-docs/design.md records.
+docs/design.md records. `bay dev bench` times each binding beside the same ozz
+work in C++.
 
 ## By the numbers
 

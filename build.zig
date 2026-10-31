@@ -512,7 +512,16 @@ pub fn dev(b: *std.Build, tools: type) void {
     const recon = tool(b, p, test_step, "recon", "ci/recon.zig", "Print what decides the binding of an ozz class (`zig build recon -- <Class>`)");
     recon.addPassthruArgs();
 
-    preflight.addCi(b, p, .{ .tests = test_step });
+    preflight.addCi(b, p, .{
+        .tests = test_step,
+        // Each binding against the same ozz work written in C++.
+        .bench = .{
+            .programs = &.{.{ .name = "zozz-bench", .source = "bench/binding.zig" }},
+            .imports = benchImports,
+            .target = target,
+            .optimize = optimize,
+        },
+    });
     // The build a consumer gets: the module and the library, fetching
     // nothing.
     preflight.addConsumerCheck(b, p, .{
@@ -520,6 +529,33 @@ pub fn dev(b: *std.Build, tools: type) void {
         .program = p.path("ci/consumer.zig"),
         .packages = &.{p.dependency("aegis", .{})},
     });
+}
+
+/// What the bench imports, in the mode it builds in: an imported module keeps
+/// its own mode, so a ReleaseFast bench over a Debug zozz would time the Debug
+/// one. `baseline` is the bench's C++ twin, bench/baseline.cpp, compiled
+/// against ozz's public headers with the flags zozz's own C++ takes, as a
+/// consumer's defaults build it, and linked to the same library.
+fn benchImports(b: *std.Build, target: std.Build.ResolvedTarget, optimize: std.lang.Optimize) []const std.Build.Module.Import {
+    const package = b.dependency("zozz", .{ .target = target, .optimize = optimize });
+    const p = package.builder;
+    const defaults: Options = .{ .shared = false, .enable_asserts = optimize == .debug, .sanitize_c = false, .options = false, .gltf = false, .simd_ref = false };
+    const baseline = b.createModule(.{
+        .root_source_file = p.path("bench/baseline.zig"),
+        .target = target,
+        .optimize = optimize,
+        .link_libc = true,
+    });
+    if (target.result.abi != .msvc) baseline.link_libcpp = true;
+    baseline.addIncludePath(p.path("libs/ozz/include"));
+    baseline.addCSourceFile(.{ .file = p.path("bench/baseline.cpp"), .flags = cxxFlags(b, target, defaults, false) });
+    baseline.linkLibrary(package.artifact("zozz"));
+    // Its poses, matrices and targets are the binding's types, ozz's layout.
+    baseline.addImport("zozz", package.module("zozz"));
+    return b.allocator.dupe(std.Build.Module.Import, &.{
+        .{ .name = "zozz", .module = package.module("zozz") },
+        .{ .name = "baseline", .module = baseline },
+    }) catch @panic("OOM");
 }
 
 /// The on-disk assets an optional integration test reads.

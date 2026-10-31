@@ -21,7 +21,7 @@ const max_contract = 16;
 const max_file_bytes = 1 << 20;
 
 /// The directories checked, each read one level deep, and the suffixes.
-const directories = [_][]const u8{ "ffi", "src" };
+const directories = [_][]const u8{ "ffi", "src", "bench" };
 const suffixes = [_][]const u8{ ".h", ".cpp", ".zig" };
 
 /// Phrases that read as a person talking, not as documentation. Matched

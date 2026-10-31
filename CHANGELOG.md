@@ -44,6 +44,14 @@ could not express, so a port has the reason and not only the diff.
   `ffi/zozz.h` through the build's translate-c step, since 0.17 removed
   `@cImport`, and the wrapper walks 0.17's reflection lists.
 
+### Added
+
+- `bench/` times each binding beside the same ozz work written in C++
+  (`bay dev bench`): a load from memory, sampling, local-to-model, blending,
+  skinning and two-bone IK, over a skeleton and clip it generates. Until now
+  the Zig layer's cost was not a number anyone could read. `bay test` runs it
+  once as a smoke test.
+
 ### Changed
 
 - The `zozz` module depends on aegis 0.2.4. The installed allocator is held
