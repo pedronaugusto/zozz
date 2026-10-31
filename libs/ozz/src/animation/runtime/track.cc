@@ -106,6 +106,10 @@ void Track<_ValueType>::Deallocate() {
   // Deallocate everything at once.
   memory::default_allocator()->Deallocate(allocation_);
   allocation_ = nullptr;
+  ratios_ = {};
+  values_ = {};
+  steps_ = {};
+  name_ = nullptr;
 }
 
 template <typename _ValueType>
@@ -162,6 +166,19 @@ void Track<_ValueType>::Load(ozz::io::IArchive& _archive, uint32_t _version) {
   }
 
   _archive >> ozz::io::MakeArray(ratios_);
+
+  // Sampling searches the ratios and steps back one key from the first above
+  // its input, so they start at 0, ascend and stay within [0,1].
+  for (size_t i = 0; i < ratios_.size(); ++i) {
+    const float ratio = ratios_[i];
+    const float floor = i == 0 ? 0.f : ratios_[i - 1];
+    if (!(ratio >= floor && ratio <= 1.f) || (i == 0 && ratio != 0.f)) {
+      _archive.Refuse("Track.ratios", i, ratios_.size());
+      Deallocate();
+      return;
+    }
+  }
+
   _archive >> ozz::io::MakeArray(values_);
   _archive >> ozz::io::MakeArray(steps_);
 

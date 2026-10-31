@@ -22,6 +22,7 @@ const excluded = [_][]const u8{ "CMakeLists.txt", "fbx" };
 const patches = [_][]const u8{
     "ozz-archive-counts.patch",
     "ozz-checked-allocation.patch",
+    "ozz-archive-invariants.patch",
 };
 /// Where a patch's file paths start.
 const patch_root = "libs/ozz/";

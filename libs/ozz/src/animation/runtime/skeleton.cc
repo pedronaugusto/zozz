@@ -104,6 +104,9 @@ char* Skeleton::Allocate(size_t _chars_size, size_t _num_joints) {
 void Skeleton::Deallocate() {
   memory::default_allocator()->Deallocate(allocation_);
   allocation_ = nullptr;
+  joint_rest_poses_ = {};
+  joint_names_ = {};
+  joint_parents_ = {};
 }
 
 void Skeleton::Save(ozz::io::OArchive& _archive) const {
@@ -178,12 +181,34 @@ void Skeleton::Load(ozz::io::IArchive& _archive, uint32_t _version) {
   // Reads name's buffer, they are all contiguous in the same buffer.
   _archive >> ozz::io::MakeArray(cursor, chars_count);
 
-  // Fixes up array of pointers.
-  for (int i = 0; i < num_joints;
-       joint_names_[i] = cursor, cursor += std::strlen(cursor) + 1, ++i) {
+  // Fixes up array of pointers, each name ending inside the block.
+  const char* const end = cursor + chars_count;
+  for (int i = 0; i < num_joints; ++i) {
+    const char* nul = static_cast<const char*>(
+        std::memchr(cursor, 0, static_cast<size_t>(end - cursor)));
+    if (nul == nullptr) {
+      _archive.Refuse("Skeleton.joint_names", static_cast<uint32_t>(i),
+                      static_cast<uint32_t>(num_joints));
+      Deallocate();
+      return;
+    }
+    joint_names_[i] = cursor;
+    cursor = const_cast<char*>(nul) + 1;
   }
 
   _archive >> ozz::io::MakeArray(joint_parents_);
+
+  // Jobs index their outputs by parent: each is a joint before its child.
+  for (int i = 0; i < num_joints; ++i) {
+    const int16_t parent = joint_parents_[i];
+    if (parent != kNoParent && (parent < 0 || parent >= i)) {
+      _archive.Refuse("Skeleton.joint_parents", static_cast<uint16_t>(parent),
+                      static_cast<uint32_t>(i));
+      Deallocate();
+      return;
+    }
+  }
+
   _archive >> ozz::io::MakeArray(joint_rest_poses_);
 }
 }  // namespace animation

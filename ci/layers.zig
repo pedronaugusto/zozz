@@ -27,6 +27,7 @@ pub const references: []const gantry.rules.ReferenceRule = &.{
         "aegis",
         "builtin",
         "mathref_h",
+        "shakedown",
         "std",
         "test_options",
         "zozz_h",

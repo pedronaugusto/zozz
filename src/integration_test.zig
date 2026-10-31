@@ -968,3 +968,325 @@ test "a load refused any one allocation it makes is OutOfMemory" {
         try std.testing.expect(index >= 2);
     }
 }
+
+//=============================================================================
+// What a load hands the jobs
+//=============================================================================
+
+const shakedown = @import("shakedown");
+
+/// Loads `bytes` as a `T` with each of ozz's blocks ending at an
+/// inaccessible page, expecting it refused with the record named. A tree
+/// that loads it hands the object to `run` instead, which drives the job
+/// reading what the archive broke and frees it, and the test fails: there
+/// the guard page or ozz's span assert stops the job first.
+fn expectInvariantRefused(comptime T: type, bytes: []const u8, call: err.Call, what: []const u8, value: u64, limit: u64, run: *const fn (T, std.mem.Allocator) anyerror!void) !void {
+    var quarantine: shakedown.alloc.Quarantine = .init(.{ .guard = .after });
+    defer quarantine.deinit();
+    var failure: zozz.Failure = .{};
+    try zozz.setAllocator(quarantine.allocator(), &failure);
+    defer zozz.resetAllocator(&failure) catch |e| std.debug.panic("zozz: {s}", .{@errorName(e)});
+    if (T.initFromMemory(.init(bytes), &failure)) |object| {
+        try run(object, quarantine.allocator());
+        return error.TestUnexpectedResult;
+    } else |got| try std.testing.expectEqual(err.Error.BadFormat, got);
+    try std.testing.expectEqual(@as(usize, 1), failure.frames().len);
+    try expectRecord(failure.frames()[0], call, .bad_format, what, value, limit);
+}
+
+/// Places every joint in model space, into a block of the guarded allocator.
+fn placeJoints(loaded: zozz.Skeleton, a: std.mem.Allocator) !void {
+    var skeleton = loaded;
+    defer skeleton.deinit();
+    var failure: zozz.Failure = .{};
+    const locals = try a.alloc(zozz.SoaTransform, skeleton.numSoaJoints());
+    defer a.free(locals);
+    const out = try a.alloc(zozz.Mat4, skeleton.numJoints());
+    defer a.free(out);
+    try skeleton.restPoseSoa(locals, &failure);
+    try (zozz.LocalToModelJob{ .skeleton = skeleton, .locals = locals, .out = out }).run(&failure);
+}
+
+fn sampleTrack(loaded: zozz.FloatTrack, a: std.mem.Allocator) !void {
+    _ = a;
+    var track = loaded;
+    defer track.deinit();
+    var failure: zozz.Failure = .{};
+    for ([_]f32{ 0.25, 0.6, 0.9 }) |ratio| _ = try track.sample(ratio, &failure);
+}
+
+/// Samples forward, back, and far enough each way to seek an iframe.
+fn sampleClip(loaded: zozz.Animation, a: std.mem.Allocator) !void {
+    var animation = loaded;
+    defer animation.deinit();
+    var failure: zozz.Failure = .{};
+    var context = try zozz.SamplingContext.init(animation.numTracks(), &failure);
+    defer context.deinit();
+    const pose = try a.alloc(zozz.SoaTransform, animation.numSoaTracks());
+    defer a.free(pose);
+    for ([_]f32{ 0.0, 0.95, 0.1, 0.3, 1.0, 0.6 }) |ratio| {
+        try (zozz.SamplingJob{ .animation = animation, .context = context, .ratio = ratio, .out = pose }).run(&failure);
+    }
+}
+
+/// Two tracks keyed every quarter second over four, built with an iframe
+/// every half second, as the archive ozz saves.
+fn iframeClip(gpa: std.mem.Allocator) ![]u8 {
+    var failure: zozz.Failure = .{};
+    try zozz.setAllocator(gpa, &failure);
+    defer zozz.resetAllocator(&failure) catch |e| std.debug.panic("zozz: {s}", .{@errorName(e)});
+    var raw = try zozz.RawAnimation.init(2, 4.0, null, &failure);
+    defer raw.deinit();
+    for (0..17) |k| {
+        for (0..2) |track| {
+            const value: f32 = @floatFromInt((k * 7 + track * 3) % 11);
+            try raw.pushTranslation(@intCast(track), @as(f32, @floatFromInt(k)) * 0.25, .{ value, 0, 0 }, &failure);
+        }
+    }
+    var clip = try raw.build(0.5, &failure);
+    defer clip.deinit();
+    var buffer: WriteBuffer = .{ .gpa = gpa };
+    errdefer buffer.deinit();
+    const bridge = buffer.stream();
+    var archive = try zozz.OArchive.init(&bridge, zozz.nativeEndianness(), &failure);
+    try archive.saveAnimation(clip, &failure);
+    archive.deinit();
+    return buffer.list.toOwnedSlice(gpa);
+}
+
+/// `bytes` with `with` written over it at `at`.
+fn overwritten(gpa: std.mem.Allocator, bytes: []const u8, at: usize, with: []const u8) ![]u8 {
+    return archives.splice(gpa, bytes, at, with.len, with);
+}
+
+test "a joint name that runs past the name block is refused, not read past it" {
+    const gpa = std.testing.allocator;
+    // Four joints in a block of eight bytes, the last name unterminated.
+    var skeleton = try archives.skeletonWith(gpa, "a\x00b\x00c\x00dd", &.{ -1, 0, 1, 2 });
+    defer skeleton.deinit();
+    try expectInvariantRefused(zozz.Skeleton, skeleton.bytes.items, .skeleton_load_memory, "Skeleton.joint_names", 3, 4, placeJoints);
+}
+
+test "a joint parent that is not an earlier joint is refused before a job indexes by it" {
+    const gpa = std.testing.allocator;
+    var past = try archives.skeletonWith(gpa, "a\x00b\x00c\x00d\x00", &.{ -1, 0, 4, 1 });
+    defer past.deinit();
+    try expectInvariantRefused(zozz.Skeleton, past.bytes.items, .skeleton_load_memory, "Skeleton.joint_parents", 4, 2, placeJoints);
+    // Its 16 bits as stored, the record's value being unsigned.
+    var below = try archives.skeletonWith(gpa, "a\x00b\x00c\x00d\x00", &.{ -1, -2, 0, 1 });
+    defer below.deinit();
+    try expectInvariantRefused(zozz.Skeleton, below.bytes.items, .skeleton_load_memory, "Skeleton.joint_parents", 0xfffe, 1, placeJoints);
+}
+
+test "a track whose first key is past 0 is refused, not sampled from the key before it" {
+    const gpa = std.testing.allocator;
+    var track = try archives.floatTrack(gpa, &.{ 0.5, 1.0 });
+    defer track.deinit();
+    try expectInvariantRefused(zozz.FloatTrack, track.bytes.items, .float_track_load_memory, "Track.ratios", 0, 2, sampleTrack);
+}
+
+test "a track whose keys fall back, pass 1 or are not numbers is refused" {
+    const gpa = std.testing.allocator;
+    const cases = [_]struct { ratios: []const f32, at: u64 }{
+        .{ .ratios = &.{ 0, 0.75, 0.5, 1 }, .at = 2 },
+        .{ .ratios = &.{ 0, 2 }, .at = 1 },
+        .{ .ratios = &.{ 0, std.math.nan(f32), 1 }, .at = 1 },
+    };
+    for (cases) |case| {
+        var track = try archives.floatTrack(gpa, case.ratios);
+        defer track.deinit();
+        try expectInvariantRefused(zozz.FloatTrack, track.bytes.items, .float_track_load_memory, "Track.ratios", case.at, case.ratios.len, sampleTrack);
+    }
+}
+
+test "an animation whose timepoints fall back or pass 1 is refused" {
+    const gpa = std.testing.allocator;
+    const clip = try iframeClip(gpa);
+    defer gpa.free(clip);
+    const timepoints = (try archives.AnimationLayout.parse(clip)).timepoints;
+    const zero: f32 = 0;
+    const back = try overwritten(gpa, clip, timepoints.at + 2 * 4, std.mem.asBytes(&zero));
+    defer gpa.free(back);
+    try expectInvariantRefused(zozz.Animation, back, .animation_load_memory, "Animation.timepoints", 2, timepoints.count, sampleClip);
+    const past: f32 = 1.5;
+    const over = try overwritten(gpa, clip, timepoints.at + (timepoints.count - 1) * 4, std.mem.asBytes(&past));
+    defer gpa.free(over);
+    try expectInvariantRefused(zozz.Animation, over, .animation_load_memory, "Animation.timepoints", timepoints.count - 1, timepoints.count, sampleClip);
+}
+
+test "an animation with fewer keys than two per track is refused before sampling seeds its cache" {
+    const gpa = std.testing.allocator;
+    // Four tracks of two keys each, claiming a fifth track: eight lanes.
+    const blob = try FixtureBlob.init(zozzFixtureAnimation);
+    defer blob.deinit();
+    const tracks: u32 = 5;
+    const claimed = try overwritten(gpa, blob.bytes, 1 + "ozz-animation".len + 1 + 4 + 4, std.mem.asBytes(&tracks));
+    defer gpa.free(claimed);
+    try expectInvariantRefused(zozz.Animation, claimed, .animation_load_memory, "Animation.translations", 8, 16, sampleClip);
+}
+
+test "an animation key naming no timepoint, or a first key past 0, is refused" {
+    const gpa = std.testing.allocator;
+    const clip = try iframeClip(gpa);
+    defer gpa.free(clip);
+    const ratios = (try archives.AnimationLayout.parse(clip)).channels[0].ratios;
+    const missing = try overwritten(gpa, clip, ratios.at + 10, &.{200});
+    defer gpa.free(missing);
+    try expectInvariantRefused(zozz.Animation, missing, .animation_load_memory, "Animation.translations", 10, ratios.count, sampleClip);
+    const late = try overwritten(gpa, clip, ratios.at + 1, &.{1});
+    defer gpa.free(late);
+    try expectInvariantRefused(zozz.Animation, late, .animation_load_memory, "Animation.translations", 1, ratios.count, sampleClip);
+}
+
+test "an animation whose iframe descriptors do not come in pairs is refused" {
+    const gpa = std.testing.allocator;
+    const clip = try iframeClip(gpa);
+    defer gpa.free(clip);
+    const channel = (try archives.AnimationLayout.parse(clip)).channels[0];
+    const odd: u32 = @intCast(channel.desc.count - 1);
+    const counted = try overwritten(gpa, clip, channel.desc_count_at, std.mem.asBytes(&odd));
+    defer gpa.free(counted);
+    const cut = try archives.splice(gpa, counted, channel.desc.at + odd * 4, 4, &.{});
+    defer gpa.free(cut);
+    try expectInvariantRefused(zozz.Animation, cut, .animation_load_memory, "Animation.translations", odd, odd - 1, sampleClip);
+}
+
+test "an animation whose iframe interval reaches past its iframes is refused" {
+    const gpa = std.testing.allocator;
+    const clip = try iframeClip(gpa);
+    defer gpa.free(clip);
+    const channel = (try archives.AnimationLayout.parse(clip)).channels[0];
+    const iframes = channel.desc.count / 2;
+    const short: f32 = 1 / @as(f32, @floatFromInt(iframes * 4));
+    const shorter = try overwritten(gpa, clip, channel.interval_at, std.mem.asBytes(&short));
+    defer gpa.free(shorter);
+    try expectInvariantRefused(zozz.Animation, shorter, .animation_load_memory, "Animation.translations", iframes, iframes * 4, sampleClip);
+    // No interval that is not positive spaces any iframe.
+    const none: f32 = 0;
+    const zeroed = try overwritten(gpa, clip, channel.interval_at, std.mem.asBytes(&none));
+    defer gpa.free(zeroed);
+    try expectInvariantRefused(zozz.Animation, zeroed, .animation_load_memory, "Animation.translations", iframes, 0, sampleClip);
+}
+
+test "an animation whose second keys do not follow each track's first is refused" {
+    const gpa = std.testing.allocator;
+    const clip = try iframeClip(gpa);
+    defer gpa.free(clip);
+    const previouses = (try archives.AnimationLayout.parse(clip)).channels[0].previouses;
+    const three: u16 = 3;
+    const crossed = try overwritten(gpa, clip, previouses.at + 4 * 2, std.mem.asBytes(&three));
+    defer gpa.free(crossed);
+    try expectInvariantRefused(zozz.Animation, crossed, .animation_load_memory, "Animation.translations", 4, previouses.count, sampleClip);
+}
+
+test "an animation key stepping back to no track's latest key is refused, not searched for past the cache" {
+    const gpa = std.testing.allocator;
+    const clip = try iframeClip(gpa);
+    defer gpa.free(clip);
+    const previouses = (try archives.AnimationLayout.parse(clip)).channels[0].previouses;
+    // Key 8, the first after the two sets, stepping back to key 0, which
+    // the cache has already passed.
+    const eight: u16 = 8;
+    const stray = try overwritten(gpa, clip, previouses.at + 8 * 2, std.mem.asBytes(&eight));
+    defer gpa.free(stray);
+    try expectInvariantRefused(zozz.Animation, stray, .animation_load_memory, "Animation.translations", 8, previouses.count, sampleClip);
+}
+
+test "an iframe whose entries run past the entry bytes is refused" {
+    const gpa = std.testing.allocator;
+    const clip = try iframeClip(gpa);
+    defer gpa.free(clip);
+    const channel = (try archives.AnimationLayout.parse(clip)).channels[0];
+    const end: u32 = @intCast(channel.entries.count);
+    const past = try overwritten(gpa, clip, channel.desc.at, std.mem.asBytes(&end));
+    defer gpa.free(past);
+    try expectInvariantRefused(zozz.Animation, past, .animation_load_memory, "Animation.translations", 0, channel.desc.count / 2, sampleClip);
+}
+
+test "an iframe holding other keys than the walk to it reaches is refused" {
+    const gpa = std.testing.allocator;
+    const clip = try iframeClip(gpa);
+    defer gpa.free(clip);
+    const channel = (try archives.AnimationLayout.parse(clip)).channels[0];
+    // The first value of the first group, after its length prefix.
+    const wrong = try overwritten(gpa, clip, channel.entries.at + 1, &.{0xff});
+    defer gpa.free(wrong);
+    try expectInvariantRefused(zozz.Animation, wrong, .animation_load_memory, "Animation.translations", 0, channel.desc.count / 2, sampleClip);
+}
+
+test "an iframe naming a key past the last is refused" {
+    const gpa = std.testing.allocator;
+    const clip = try iframeClip(gpa);
+    defer gpa.free(clip);
+    const channel = (try archives.AnimationLayout.parse(clip)).channels[0];
+    const beyond: u32 = @intCast(channel.ratios.count + 10);
+    const named = try overwritten(gpa, clip, channel.desc.at + 4, std.mem.asBytes(&beyond));
+    defer gpa.free(named);
+    try expectInvariantRefused(zozz.Animation, named, .animation_load_memory, "Animation.translations", 0, channel.desc.count / 2, sampleClip);
+}
+
+extern fn zozzTestReloadRefused(object: c_int, held: [*]const u8, held_size: usize, refused: [*]const u8, refused_size: usize) c_long;
+
+test "a refused skeleton load into one that held joints leaves it empty" {
+    const gpa = std.testing.allocator;
+    var failure: zozz.Failure = .{};
+    try zozz.setAllocator(gpa, &failure);
+    defer zozz.resetAllocator(&failure) catch |e| std.debug.panic("zozz: {s}", .{@errorName(e)});
+    const skeleton = try FixtureBlob.init(zozzFixtureSkeleton);
+    defer skeleton.deinit();
+    var parents = try archives.skeletonWith(gpa, "a\x00b\x00c\x00d\x00", &.{ -1, 0, 4, 1 });
+    defer parents.deinit();
+    try std.testing.expectEqual(@as(c_long, 0), zozzTestReloadRefused(test_skeleton, skeleton.bytes.ptr, skeleton.bytes.len, parents.bytes.items.ptr, parents.bytes.items.len));
+}
+
+test "a refused track load into one that held keys leaves it empty" {
+    const gpa = std.testing.allocator;
+    var failure: zozz.Failure = .{};
+    try zozz.setAllocator(gpa, &failure);
+    defer zozz.resetAllocator(&failure) catch |e| std.debug.panic("zozz: {s}", .{@errorName(e)});
+    var held = try archives.floatTrack(gpa, &.{ 0, 1 });
+    defer held.deinit();
+    var late = try archives.floatTrack(gpa, &.{ 0.5, 1 });
+    defer late.deinit();
+    try std.testing.expectEqual(@as(c_long, 0), zozzTestReloadRefused(test_float_track, held.bytes.items.ptr, held.bytes.items.len, late.bytes.items.ptr, late.bytes.items.len));
+}
+
+test "a refused animation load into one that held a clip leaves it empty" {
+    const gpa = std.testing.allocator;
+    const clip = try iframeClip(gpa);
+    defer gpa.free(clip);
+    var failure: zozz.Failure = .{};
+    try zozz.setAllocator(gpa, &failure);
+    defer zozz.resetAllocator(&failure) catch |e| std.debug.panic("zozz: {s}", .{@errorName(e)});
+    const previouses = (try archives.AnimationLayout.parse(clip)).channels[0].previouses;
+    const eight: u16 = 8;
+    const stray = try overwritten(gpa, clip, previouses.at + 8 * 2, std.mem.asBytes(&eight));
+    defer gpa.free(stray);
+    try std.testing.expectEqual(@as(c_long, 0), zozzTestReloadRefused(test_animation, clip.ptr, clip.len, stray.ptr, stray.len));
+}
+
+/// Loads `bytes` as a `T` under the guard pages and runs `run` on it.
+fn expectRunsClean(comptime T: type, bytes: []const u8, run: *const fn (T, std.mem.Allocator) anyerror!void) !void {
+    var quarantine: shakedown.alloc.Quarantine = .init(.{ .guard = .after });
+    defer quarantine.deinit();
+    var failure: zozz.Failure = .{};
+    try zozz.setAllocator(quarantine.allocator(), &failure);
+    defer zozz.resetAllocator(&failure) catch |e| std.debug.panic("zozz: {s}", .{@errorName(e)});
+    try run(try T.initFromMemory(.init(bytes), &failure), quarantine.allocator());
+}
+
+test "the archives the tests above break load clean, and their jobs run under the guard pages" {
+    const gpa = std.testing.allocator;
+    var skeleton = try archives.skeletonWith(gpa, "a\x00b\x00c\x00dd\x00", &.{ -1, 0, 1, 0 });
+    defer skeleton.deinit();
+    try expectRunsClean(zozz.Skeleton, skeleton.bytes.items, placeJoints);
+    var track = try archives.floatTrack(gpa, &.{ 0, 0.5, 0.5, 1 });
+    defer track.deinit();
+    try expectRunsClean(zozz.FloatTrack, track.bytes.items, sampleTrack);
+    const clip = try iframeClip(gpa);
+    defer gpa.free(clip);
+    try expectRunsClean(zozz.Animation, clip, sampleClip);
+    const blob = try FixtureBlob.init(zozzFixtureAnimation);
+    defer blob.deinit();
+    try expectRunsClean(zozz.Animation, blob.bytes, sampleClip);
+}

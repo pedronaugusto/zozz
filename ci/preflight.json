@@ -1,7 +1,7 @@
 {
   "sources": ["src"],
   "test_roots": ["src/zozz.zig"],
-  "test_dependencies": ["zozz_h", "mathref_h", "test_options"],
+  "test_dependencies": ["zozz_h", "mathref_h", "test_options", "shakedown"],
   "shipped": {
     "ffi": "the C boundary: the library compiles its translation units, and the installed headers are ffi/*.h",
     "libs": "the vendored ozz-animation, which the library compiles"

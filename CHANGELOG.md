@@ -78,6 +78,14 @@ could not express, so a port has the reason and not only the diff.
   (`libs/patches/ozz-checked-allocation.patch`). Inside a standard
   container, which has no failure path, ozz aborts instead of constructing
   at null; every count an archive gives one is checked before it resizes.
+- An archive whose counts fit loaded whatever it held, and the jobs read
+  past a buffer on what ozz's builders never write: a joint name with no
+  terminator, a parent that is not an earlier joint, a track's first key past
+  0, animation keys naming no timepoint, broken previous-key chains, iframes
+  holding other keys or an interval seeking past the last. Each is
+  `BadFormat` now, its record naming the field (`Skeleton.joint_parents`,
+  `Track.ratios`, `Animation.translations`...) and where it broke
+  (`libs/patches/ozz-archive-invariants.patch`).
 - A caller's `u32` or `usize` past what the C boundary's `int` carries
   (`SamplingContext.init(1 << 31)`, a joint, track or vertex count) was
   `@intCast`, a panic in a safe build and undefined in ReleaseFast; it is

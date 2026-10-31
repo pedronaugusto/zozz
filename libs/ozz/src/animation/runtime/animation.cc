@@ -162,6 +162,14 @@ bool Animation::Allocate(const AllocateParams& _params) {
 void Animation::Deallocate() {
   memory::default_allocator()->Deallocate(allocation_);
   allocation_ = nullptr;
+  timepoints_ = {};
+  translations_ctrl_ = {};
+  rotations_ctrl_ = {};
+  scales_ctrl_ = {};
+  translations_values_ = {};
+  rotations_values_ = {};
+  scales_values_ = {};
+  name_ = nullptr;
 }
 
 size_t Animation::size() const {
@@ -279,6 +287,178 @@ void Animation::Save(ozz::io::OArchive& _archive) const {
   _archive << io::MakeArray(scales_values_);
 }
 
+namespace {
+// The timepoint a key's ratio index names, as sampling reads it.
+size_t RatioIndex(const span<const float>& _timepoints,
+                  const span<const byte>& _ratios, size_t _key) {
+  if (_timepoints.size() <= std::numeric_limits<uint8_t>::max()) {
+    return _ratios[_key];
+  }
+  uint16_t index;
+  std::memcpy(&index, _ratios.data() + _key * sizeof(uint16_t), sizeof(index));
+  return index;
+}
+
+// One group-varint group of four, bounds checked, as DecodeGV4 reads it.
+bool DecodeGroup(const span<const byte>& _in, size_t* _at, uint32_t* _out) {
+  if (*_at >= _in.size()) {
+    return false;
+  }
+  const uint8_t prefix = _in[(*_at)++];
+  for (int i = 0; i < 4; ++i) {
+    const size_t len = ((prefix >> (2 * i)) & 0x3) + 1;
+    if (len > _in.size() - *_at) {
+      return false;
+    }
+    uint32_t value = 0;
+    for (size_t b = 0; b < len; ++b) {
+      value |= static_cast<uint32_t>(_in[*_at + b]) << (8 * b);
+    }
+    _out[i] = value;
+    *_at += len;
+  }
+  return true;
+}
+
+// Scratch for one channel's walk, from ozz's allocator.
+struct Scratch {
+  explicit Scratch(size_t _count)
+      : words(static_cast<uint32_t*>(memory::default_allocator()->Allocate(
+            _count * sizeof(uint32_t), alignof(uint32_t)))) {}
+  ~Scratch() { memory::default_allocator()->Deallocate(words); }
+  Scratch(const Scratch&) = delete;
+  Scratch& operator=(const Scratch&) = delete;
+  uint32_t* const words;
+};
+
+// Whether one channel's keys form the chains sampling walks: two keys or
+// more per track, each track's first at time 0 and its second right after
+// the first set, every later key stepping back to its own track's latest
+// key, every ratio index a timepoint, and every iframe holding the cache
+// that walk reaches at its key, the interval reaching none past the last.
+// Refuses as _what otherwise.
+bool ValidateChannel(io::IArchive& _archive, const char* _what,
+                     size_t _num_tracks, const span<const float>& _timepoints,
+                     const Animation::KeyframesCtrlConst& _ctrl) {
+  const size_t num_keys = _ctrl.previouses.size();
+  const size_t n = (_num_tracks + 3) / 4 * 4;
+  if (n == 0 ? num_keys != 0 : num_keys < 2 * n) {
+    _archive.Refuse(_what, num_keys, 2 * n);
+    return false;
+  }
+  for (size_t k = 0; k < num_keys; ++k) {
+    const size_t index = RatioIndex(_timepoints, _ctrl.ratios, k);
+    if (index >= _timepoints.size() || (k < n && _timepoints[index] != 0.f)) {
+      _archive.Refuse(_what, k, num_keys);
+      return false;
+    }
+  }
+  const size_t desc = _ctrl.iframe_desc.size();
+  if (desc % 2 != 0) {
+    _archive.Refuse(_what, desc, desc - 1);
+    return false;
+  }
+  const size_t iframes = desc / 2;
+  if (iframes != 0) {
+    // Sampling seeks to iframe int(.5 + ratio / interval), ratio up to 1.
+    const float interval = _ctrl.iframe_interval;
+    const float reach = .5f + 1.f / interval;
+    if (!(interval > 0.f)) {
+      _archive.Refuse(_what, iframes, 0);
+      return false;
+    }
+    if (!(reach < static_cast<float>(std::numeric_limits<uint32_t>::max())) ||
+        static_cast<size_t>(reach) > iframes) {
+      _archive.Refuse(_what, iframes,
+                      reach < static_cast<float>(
+                                  std::numeric_limits<uint32_t>::max())
+                          ? static_cast<uint64_t>(reach)
+                          : std::numeric_limits<uint32_t>::max());
+      return false;
+    }
+  }
+  if (n == 0) {
+    return true;
+  }
+
+  // The walk: each key's track, each track's latest key, an iframe decoded.
+  Scratch scratch(num_keys + 2 * n);
+  if (scratch.words == nullptr) {
+    _archive.FailAllocation();
+    return false;
+  }
+  uint32_t* const owner = scratch.words;
+  uint32_t* const cache = owner + num_keys;
+  uint32_t* const decoded = cache + n;
+  for (size_t t = 0; t < n; ++t) {
+    if (_ctrl.previouses[n + t] != n) {
+      _archive.Refuse(_what, n + t, num_keys);
+      return false;
+    }
+    cache[t] = static_cast<uint32_t>(n + t);
+    owner[n + t] = static_cast<uint32_t>(t);
+  }
+  size_t iframe = 0;
+  for (size_t k = 2 * n - 1; k < num_keys; ++k) {
+    if (k >= 2 * n) {
+      const size_t previous = _ctrl.previouses[k];
+      const size_t t = previous == 0 || previous > k - n ? n : owner[k - previous];
+      if (t >= n || cache[t] != k - previous) {
+        _archive.Refuse(_what, k, num_keys);
+        return false;
+      }
+      cache[t] = static_cast<uint32_t>(k);
+      owner[k] = static_cast<uint32_t>(t);
+    }
+    // Every iframe whose last key is k holds this cache.
+    for (; iframe < iframes && _ctrl.iframe_desc[iframe * 2 + 1] == k;
+         ++iframe) {
+      size_t at = _ctrl.iframe_desc[iframe * 2];
+      for (size_t g = 0; g < n; g += 4) {
+        if (!DecodeGroup(_ctrl.iframe_entries, &at, decoded + g)) {
+          _archive.Refuse(_what, iframe, iframes);
+          return false;
+        }
+      }
+      if (std::memcmp(decoded, cache, n * sizeof(uint32_t)) != 0) {
+        _archive.Refuse(_what, iframe, iframes);
+        return false;
+      }
+    }
+  }
+  // An iframe left names no key the walk reached in order.
+  if (iframe != iframes) {
+    _archive.Refuse(_what, iframe, iframes);
+    return false;
+  }
+  return true;
+}
+
+// Whether what Load read holds the invariants sampling relies on; refuses
+// through _archive otherwise.
+bool ValidateLoaded(const Animation& _animation, io::IArchive& _archive) {
+  if (_archive.stopped()) {
+    return false;
+  }
+  // Sampling clamps its ratio to [0,1] and reads timepoints in order.
+  const span<const float> timepoints = _animation.timepoints();
+  for (size_t i = 0; i < timepoints.size(); ++i) {
+    const float t = timepoints[i];
+    if (!(t >= (i == 0 ? 0.f : timepoints[i - 1]) && t <= 1.f)) {
+      _archive.Refuse("Animation.timepoints", i, timepoints.size());
+      return false;
+    }
+  }
+  const size_t tracks = static_cast<size_t>(_animation.num_tracks());
+  return ValidateChannel(_archive, "Animation.translations", tracks,
+                         timepoints, _animation.translations_ctrl()) &&
+         ValidateChannel(_archive, "Animation.rotations", tracks, timepoints,
+                         _animation.rotations_ctrl()) &&
+         ValidateChannel(_archive, "Animation.scales", tracks, timepoints,
+                         _animation.scales_ctrl());
+}
+}  // namespace
+
 void Animation::Load(ozz::io::IArchive& _archive, uint32_t _version) {
   // Destroy animation in case it was already used before.
   Deallocate();
@@ -380,6 +560,12 @@ void Animation::Load(ozz::io::IArchive& _archive, uint32_t _version) {
   _archive >> io::MakeArray(rotations_values_);
   _archive >> scales_ctrl_;
   _archive >> io::MakeArray(scales_values_);
+
+  if (!ValidateLoaded(*this, _archive)) {
+    Deallocate();
+    duration_ = 0.f;
+    num_tracks_ = 0;
+  }
 }
 }  // namespace animation
 }  // namespace ozz

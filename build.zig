@@ -564,6 +564,8 @@ fn suite(b: *std.Build, p: *std.Build, target: std.Build.ResolvedTarget, optimiz
                 .{ .name = "zozz_options", .module = optionsModule(b, options) },
                 .{ .name = "test_options", .module = test_options.createModule() },
                 .{ .name = "aegis", .module = p.dependency("aegis", .{ .target = target, .optimize = optimize }).module("aegis") },
+                // The guard-page allocator the load-invariant tests read through.
+                .{ .name = "shakedown", .module = b.dependency("shakedown", .{ .target = target, .optimize = optimize }).module("shakedown") },
             },
         }),
     });
@@ -605,6 +607,7 @@ fn fixtureLibrary(b: *std.Build, p: *std.Build, target: std.Build.ResolvedTarget
     fixture.root_module.addIncludePath(p.path("tests"));
     fixture.root_module.addCSourceFile(.{ .file = p.path("tests/fixture.cpp"), .flags = cxxFlags(b, target, options, false) });
     fixture.root_module.addCSourceFile(.{ .file = p.path("tests/allocation.cpp"), .flags = cxxFlags(b, target, options, false) });
+    fixture.root_module.addCSourceFile(.{ .file = p.path("tests/reload.cpp"), .flags = cxxFlags(b, target, options, false) });
     fixture.root_module.addCSourceFile(.{ .file = p.path("tests/mathref.cpp"), .flags = cxxFlags(b, target, options, true) });
     fixture.root_module.sanitize_c = if (options.sanitize_c) .full else .off;
     fixture.root_module.linkLibrary(lib);

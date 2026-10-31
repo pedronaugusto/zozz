@@ -261,7 +261,9 @@ object, with no error returned.
 `zozzIArchiveLoad<Type>`) takes a `ZozzRefusal*` last, NULL allowed, and
 clears it on entry. It is filled with the name of the version, count or
 invariant that failed (`Skeleton.num_joints`), what the archive held and the
-bound it broke, from two places. ozz's own `Load` refuses through
+bound it broke, from two places. For an invariant the pair says where: the
+joint, key or iframe that broke it and how many there are, a parent and the
+joint it belongs to, or the iframes held and those the interval seeks to. ozz's own `Load` refuses through
 `IArchive`'s record ([Patches](#patches)), which `zozz::LoadTagged` and
 `LoadTaggedObject` carry out through `zozz::RefusedBy`; a post-parse check
 refuses through `zozz::Refuse` (`ffi/zozz_internal.h`). Either returns
@@ -298,9 +300,10 @@ nothing.
 
 ozz's parser is not hardened against arbitrary hostile input, and zozz cannot
 make it so from outside. What holds is that truncation and type confusion
-fail cleanly and deterministically, and that every version and count is
+fail cleanly and deterministically, that every version and count is
 checked against ozz's limits and the bytes left before anything is sized from
-it ([Patches](#patches)). To load `.ozz` from an untrusted source, put a
+it, and that what a job walks (names, parents, ratios, the key chains and
+iframes) is checked before a loaded object reaches one ([Patches](#patches)). To load `.ozz` from an untrusted source, put a
 length-and-checksum container around it and validate that first.
 
 Every prefix of a valid archive, across both fixtures, is tested to be
@@ -410,6 +413,7 @@ finds one fixed upstream drops it.
 |---|---|
 | `ozz-archive-counts.patch` | Every `Load` sized allocations from counts read off the archive unchecked, and an unsupported version loaded as an empty object. `IArchive` gains a refusal record, the bytes left and a count check; every version and count is checked against ozz's own limits and the bytes left before anything is allocated, and `RawSkeleton` nesting is bounded. |
 | `ozz-checked-allocation.patch` | Every allocation ozz made was written through unchecked: `Skeleton`, `Animation` and `Track` `Allocate`, `ozz::New`, a suppressed log line's stream, `MemoryStream::Resize`. Each now reports the failure (a load leaves its object empty and marks the archive out of memory, a builder returns null). `StdAllocator`, behind every standard container, aborts instead, since a container has no failure path. |
+| `ozz-archive-invariants.patch` | `Load` trusted what an archive held once its counts fit, and the jobs read past a buffer on what ozz's builders never produce: a name with no terminator, a parent that is not an earlier joint, a track's first ratio past 0, animation keys naming no timepoint, previous-key chains that break, iframes holding other keys or an interval seeking past the last. Each `Load` refuses those through the record, and a refused `Load` leaves its object empty: `Deallocate` clears every span over the block it frees. |
 
 ### What was taken, and what was left behind
 
