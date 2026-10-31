@@ -99,6 +99,11 @@ could not express, so a port has the reason and not only the diff.
   then read. A mode other than step or linear is `BadFormat` now, its
   record `RawTrackKeyframe.interpolation`
   (`libs/patches/ozz-raw-track-interpolation.patch`).
+- A skeleton archive's rest pose could hold rotations that are no unit
+  quaternion, in a joint's lane or a padding lane, and placing its joints
+  then failed ozz's assert in `LocalToModelJob`, aborting the host. Such a
+  skeleton is `BadFormat` now, its record `Skeleton.joint_rest_poses`
+  naming the SoA block (`libs/patches/ozz-rest-pose-rotations.patch`).
 - `decodeGV4` and `decodeGV4Stream` read past the bytes they were given:
   they checked only the minimum size, then let ozz's decoder read the length
   a group's first byte claims plus the three bytes it loads past every group,

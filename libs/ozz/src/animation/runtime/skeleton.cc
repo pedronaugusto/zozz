@@ -210,6 +210,18 @@ void Skeleton::Load(ozz::io::IArchive& _archive, uint32_t _version) {
   }
 
   _archive >> ozz::io::MakeArray(joint_rest_poses_);
+
+  // LocalToModelJob asserts every lane of a pose it converts holds a unit
+  // rotation, padding lanes included, and a rest pose is such a pose.
+  for (size_t i = 0; i < joint_rest_poses_.size(); ++i) {
+    const math::SoaQuaternion& rotation = joint_rest_poses_[i].rotation;
+    if (!math::AreAllTrue(math::IsNormalizedEst(rotation))) {
+      _archive.Refuse("Skeleton.joint_rest_poses", static_cast<uint32_t>(i),
+                      static_cast<uint32_t>(joint_rest_poses_.size()));
+      Deallocate();
+      return;
+    }
+  }
 }
 }  // namespace animation
 }  // namespace ozz

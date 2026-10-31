@@ -417,6 +417,7 @@ finds one fixed upstream drops it.
 | `ozz-gv4-padding.patch` | `DecodeGV4` loads four bytes per value, up to three past an iframe's entries, and `Animation::Allocate` relied on the name after them to cover that: an unnamed clip seeking its last iframe read past its block. Three bytes now follow everything a block with iframe entries holds. |
 | `ozz-key-arrays-of-none.patch` | A channel of no keys has an empty span, whose data is null, and saving or loading its keys took the address of the first key's values: a member access through null for an animation of no tracks, which ozz's builder makes from a raw one. A key array of none now returns before naming a member. |
 | `ozz-raw-track-interpolation.patch` | A raw track keyframe's interpolation is one byte in the archive, and `Load` cast any byte to `RawTrackInterpolation::Value`, which holds only `kStep` and `kLinear`: undefined to read back, and `TrackBuilder` reads it. A mode past `kLinear` is refused through the record. |
+| `ozz-rest-pose-rotations.patch` | `LocalToModelJob` asserts every lane of a pose it converts holds a unit rotation, padding lanes included, and `Skeleton::Load` took whatever rest pose an archive held: an archive aborted the host at the job. A rest pose block whose rotations are not unit by the job's own estimate is refused through the record. |
 
 ### What was taken, and what was left behind
 

@@ -1,0 +1,41 @@
+ozz-rest-pose-rotations: refuse a skeleton whose rest pose is not unit
+
+LocalToModelJob converts each SoA block of a pose to matrices through
+SoaFloat4x4::FromAffine, which asserts every lane's rotation is a unit
+quaternion, the lanes past the last joint included. The rest pose a host
+hands it is the skeleton's own, and Skeleton::Load took whatever rotations
+the archive held: an archive aborted the host at the job, in a build with
+asserts, and in one without, the job built matrices from rotations that
+are no rotation.
+
+Skeleton::Load refuses, through the archive's refusal record, a rest pose
+block whose rotations are not unit by the job's own estimate.
+
+Evidence: zozz's src/integration_test.zig loads a skeleton whose rest pose
+holds a zero rotation, at a joint and in a lane no joint uses, and places
+its joints; upstream aborts in FromAffine's assert, or with asserts off
+loads it (measured, 2026-10-31).
+
+diff --git a/libs/ozz/src/animation/runtime/skeleton.cc b/libs/ozz/src/animation/runtime/skeleton.cc
+index 403cd60..b3324cb 100644
+--- a/libs/ozz/src/animation/runtime/skeleton.cc
++++ b/libs/ozz/src/animation/runtime/skeleton.cc
+@@ -210,6 +210,18 @@ void Skeleton::Load(ozz::io::IArchive& _archive, uint32_t _version) {
+   }
+ 
+   _archive >> ozz::io::MakeArray(joint_rest_poses_);
++
++  // LocalToModelJob asserts every lane of a pose it converts holds a unit
++  // rotation, padding lanes included, and a rest pose is such a pose.
++  for (size_t i = 0; i < joint_rest_poses_.size(); ++i) {
++    const math::SoaQuaternion& rotation = joint_rest_poses_[i].rotation;
++    if (!math::AreAllTrue(math::IsNormalizedEst(rotation))) {
++      _archive.Refuse("Skeleton.joint_rest_poses", static_cast<uint32_t>(i),
++                      static_cast<uint32_t>(joint_rest_poses_.size()));
++      Deallocate();
++      return;
++    }
++  }
+ }
+ }  // namespace animation
+ }  // namespace ozz

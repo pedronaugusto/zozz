@@ -570,8 +570,8 @@ test "an animation of no tracks, as ozz builds one from a raw archive, saves and
 /// An honest skeleton archive of `joints` joints, laid out as ozz's
 /// `Skeleton::Save` writes one (src/animation/runtime/skeleton.cc): the
 /// endianness byte, the tag with its NUL, version 2, the joint and name-byte
-/// counts, an empty name and a root parent per joint, and zeroed SoA rest
-/// poses, one block per four joints.
+/// counts, an empty name and a root parent per joint, and SoA rest poses at
+/// the identity, one block per four joints.
 fn skeletonArchive(gpa: std.mem.Allocator, comptime joints: u16) ![]u8 {
     var bytes: std.ArrayList(u8) = .empty;
     errdefer bytes.deinit(gpa);
@@ -588,7 +588,13 @@ fn skeletonArchive(gpa: std.mem.Allocator, comptime joints: u16) ![]u8 {
     try bytes.appendNTimes(gpa, 0, joints);
     const root: i16 = zozz.c.no_parent;
     for (0..joints) |_| try bytes.appendSlice(gpa, std.mem.asBytes(&root));
-    try bytes.appendNTimes(gpa, 0, (joints + 3) / 4 * @sizeOf(zozz.SoaTransform));
+    const one = std.mem.toBytes(@as(f32, 1));
+    // Per four joints: translation and rotation's x, y and z, then
+    // rotation's w and scale.
+    for (0..(joints + 3) / 4) |_| {
+        try bytes.appendNTimes(gpa, 0, 3 * 16 + 3 * 16);
+        for (0..4 + 3 * 4) |_| try bytes.appendSlice(gpa, &one);
+    }
     return bytes.toOwnedSlice(gpa);
 }
 
@@ -1138,6 +1144,34 @@ test "a joint parent that is not an earlier joint is refused before a job indexe
     var below = try archives.skeletonWith(gpa, "a\x00b\x00c\x00d\x00", &.{ -1, -2, 0, 1 });
     defer below.deinit();
     try expectInvariantRefused(zozz.Skeleton, below.bytes.items, .skeleton_load_memory, "Skeleton.joint_parents", 0xfffe, 1, placeJoints);
+}
+
+/// Where lane `lane` of rest pose block `block`'s rotation w lies in a
+/// `skeletonWith` archive: a block holds translation, then rotation's x, y,
+/// z and w, then scale, four lanes each.
+fn restRotationW(names: []const u8, joints: usize, block: usize, lane: usize) usize {
+    return 1 + "ozz-skeleton".len + 1 + 4 + 8 + names.len + 2 * joints + block * 160 + 96 + 4 * lane;
+}
+
+test "a rest pose rotation that is not a unit quaternion is refused before a job converts it" {
+    const gpa = std.testing.allocator;
+    const zero = std.mem.toBytes(@as(f32, 0));
+    const names = "a\x00b\x00c\x00d\x00e\x00";
+    var five = try archives.skeletonWith(gpa, names, &.{ -1, 0, 1, 2, 3 });
+    defer five.deinit();
+    const joint = try overwritten(gpa, five.bytes.items, restRotationW(names, 5, 1, 0), &zero);
+    defer gpa.free(joint);
+    try expectInvariantRefused(zozz.Skeleton, joint, .skeleton_load_memory, "Skeleton.joint_rest_poses", 1, 2, placeJoints);
+}
+
+test "a rest pose rotation in a lane no joint uses is refused too, as the job converts every lane" {
+    const gpa = std.testing.allocator;
+    const zero = std.mem.toBytes(@as(f32, 0));
+    var one = try archives.skeletonWith(gpa, "a\x00", &.{-1});
+    defer one.deinit();
+    const padding = try overwritten(gpa, one.bytes.items, restRotationW("a\x00", 1, 0, 3), &zero);
+    defer gpa.free(padding);
+    try expectInvariantRefused(zozz.Skeleton, padding, .skeleton_load_memory, "Skeleton.joint_rest_poses", 0, 1, placeJoints);
 }
 
 test "a track whose first key is past 0 is refused, not sampled from the key before it" {
