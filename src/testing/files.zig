@@ -12,6 +12,7 @@ const zozz = @import("../zozz.zig");
 const quiet = @import("quiet.zig");
 
 extern fn zozzFixtureSkeleton(out_data: *?*anyopaque, out_size: *usize) zozz.c.Result;
+extern fn zozzFixtureAnimation(out_data: *?*anyopaque, out_size: *usize) zozz.c.Result;
 extern fn zozzFixtureFree(data: ?*anyopaque) void;
 
 /// The fixture skeleton's joint count (tests/fixture.cpp).
@@ -19,9 +20,14 @@ const fixture_joints = 4;
 
 /// The fixture skeleton as a `.ozz` image, from `gpa`.
 fn fixtureSkeleton(gpa: std.mem.Allocator) ![]u8 {
+    return fixture(gpa, &zozzFixtureSkeleton);
+}
+
+/// A fixture's `.ozz` image, from `gpa`.
+fn fixture(gpa: std.mem.Allocator, make: *const fn (*?*anyopaque, *usize) callconv(.c) zozz.c.Result) ![]u8 {
     var data: ?*anyopaque = null;
     var size: usize = 0;
-    if (zozzFixtureSkeleton(&data, &size) != .ok) return error.FixtureFailed;
+    if (make(&data, &size) != .ok) return error.FixtureFailed;
     defer zozzFixtureFree(data);
     const bytes: [*]const u8 = @ptrCast(data orelse return error.FixtureFailed);
     return gpa.dupe(u8, bytes[0..size]);
@@ -221,32 +227,79 @@ test "every loader of the Zig API refuses a file over its limit before ozz parse
     }
 }
 
-test "the C ABI's file save writes what the Zig API's writes, and its file load reads it back" {
-    const gpa = std.testing.allocator;
+/// The C ABI's file save of `object` writes the bytes the Zig API's save
+/// writes, and its file load reads those back. Both are found by the name of
+/// `object`'s C handle type, as every entry point of a type is spelled.
+fn expectCSaveMatches(tmp: std.testing.TmpDir, object: anytype) !void {
+    const T = @TypeOf(object);
+    const Handle = @typeInfo(@typeInfo(@FieldType(T, "handle")).optional.child).pointer.child;
+    const full = @typeName(Handle);
+    const name = comptime full[(std.mem.findScalarLast(u8, full, '.') orelse 0) + 1 ..];
     var failure: zozz.Failure = .{};
-    const image = try fixtureSkeleton(gpa);
-    defer gpa.free(image);
-    var skeleton = try zozz.Skeleton.initFromMemory(.init(image), &failure);
-    defer skeleton.deinit();
-    var tmp = std.testing.tmpDir(.{});
-    defer tmp.cleanup();
-    try zozz.saveSkeletonToFile(skeleton, std.testing.io, tmp.dir, "zig.ozz", &failure);
+    try @field(zozz, "save" ++ name ++ "ToFile")(object, std.testing.io, tmp.dir, "zig.ozz", &failure);
     // Relative to the test's working directory, as `tmpDir` makes it.
     var buffer: [64]u8 = undefined;
     const c_path = try std.mem.printSentinel(&buffer, ".zig-cache/tmp/{s}/c.ozz", .{tmp.sub_path}, 0);
-    try std.testing.expectEqual(zozz.c.Result.ok, zozz.c.zozzSkeletonSaveFile(skeleton.handle.?, c_path));
+    try std.testing.expectEqual(zozz.c.Result.ok, @field(zozz.c, "zozz" ++ name ++ "SaveFile")(object.handle.?, c_path));
 
-    var zig_bytes: [1 << 12]u8 = undefined;
-    var c_bytes: [1 << 12]u8 = undefined;
+    var zig_bytes: [1 << 16]u8 = undefined;
+    var c_bytes: [1 << 16]u8 = undefined;
     try std.testing.expectEqualSlices(u8, try tmp.dir.readFile(std.testing.io, "zig.ozz", &zig_bytes), try tmp.dir.readFile(std.testing.io, "c.ozz", &c_bytes));
 
     const zig_path = try std.mem.printSentinel(&buffer, ".zig-cache/tmp/{s}/zig.ozz", .{tmp.sub_path}, 0);
-    var handle: *zozz.c.Skeleton = undefined;
+    var handle: *Handle = undefined;
     var refusal: zozz.c.Refusal = .{};
-    try std.testing.expectEqual(zozz.c.Result.ok, zozz.c.zozzSkeletonLoadFile(zig_path, &handle, &refusal));
-    var loaded: zozz.Skeleton = .{ .handle = handle };
-    defer loaded.deinit();
-    try std.testing.expectEqual(skeleton.numJoints(), loaded.numJoints());
+    try std.testing.expectEqual(zozz.c.Result.ok, @field(zozz.c, "zozz" ++ name ++ "LoadFile")(zig_path, &handle, &refusal));
+    var loaded: T = .{ .handle = handle };
+    loaded.deinit();
+}
+
+test "every C ABI file save writes what the Zig API's writes, and its file load reads it back" {
+    const gpa = std.testing.allocator;
+    var failure: zozz.Failure = .{};
+    var tmp = std.testing.tmpDir(.{});
+    defer tmp.cleanup();
+
+    const skeleton_image = try fixtureSkeleton(gpa);
+    defer gpa.free(skeleton_image);
+    var skeleton = try zozz.Skeleton.initFromMemory(.init(skeleton_image), &failure);
+    defer skeleton.deinit();
+    try expectCSaveMatches(tmp, skeleton);
+
+    const clip_image = try fixture(gpa, &zozzFixtureAnimation);
+    defer gpa.free(clip_image);
+    var clip = try zozz.Animation.initFromMemory(.init(clip_image), &failure);
+    defer clip.deinit();
+    try expectCSaveMatches(tmp, clip);
+
+    var raw_skeleton = try zozz.RawSkeleton.init(&failure);
+    defer raw_skeleton.deinit();
+    _ = try raw_skeleton.addJoint(null, "root", zozz.transform_identity, &failure);
+    try expectCSaveMatches(tmp, raw_skeleton);
+
+    var raw_clip = try zozz.RawAnimation.init(1, 1.0, null, &failure);
+    defer raw_clip.deinit();
+    try raw_clip.pushTranslation(0, 0.5, .{ 1, 2, 3 }, &failure);
+    try expectCSaveMatches(tmp, raw_clip);
+
+    try expectTrackSavesMatch(tmp, zozz.RawFloatTrack, @as(f32, 0.5));
+    try expectTrackSavesMatch(tmp, zozz.RawFloat2Track, [2]f32{ 0.5, 1 });
+    try expectTrackSavesMatch(tmp, zozz.RawFloat3Track, [3]f32{ 0.5, 1, 2 });
+    try expectTrackSavesMatch(tmp, zozz.RawFloat4Track, [4]f32{ 0.5, 1, 2, 3 });
+    try expectTrackSavesMatch(tmp, zozz.RawQuaternionTrack, [4]f32{ 0, 0, 0, 1 });
+}
+
+/// `expectCSaveMatches` for a raw track of type `Raw` keyed with `value`,
+/// and for the track it builds.
+fn expectTrackSavesMatch(tmp: std.testing.TmpDir, comptime Raw: type, value: anytype) !void {
+    var failure: zozz.Failure = .{};
+    var raw = try Raw.init(&failure);
+    defer raw.deinit();
+    try raw.pushKeyframe(.linear, 0.5, value, &failure);
+    try expectCSaveMatches(tmp, raw);
+    var built = try raw.build(&failure);
+    defer built.deinit();
+    try expectCSaveMatches(tmp, built);
 }
 
 test "every saver of the Zig API creates its file through the Io it is given" {
