@@ -279,7 +279,6 @@ pub fn build(b: *std.Build) void {
     lib.root_module.addIncludePath(b.path("libs/ozz/src"));
     lib.root_module.addIncludePath(b.path("ffi"));
 
-    if (!options.enable_asserts) lib.root_module.addCMacro("NDEBUG", "");
     if (options.shared and target.result.abi == .msvc) {
         lib.root_module.addCMacro("ZOZZ_SHARED", "");
         lib.root_module.addCMacro("ZOZZ_BUILD", "");
@@ -306,13 +305,16 @@ pub fn build(b: *std.Build) void {
     // -Dsimd_ref belongs to EVERY translation unit or none: ozz's SimdFloat4
     // is a struct in the reference backend and __m128 in the SSE one, so a
     // mixed build would hand one definition's objects to the other's.
-    const cxx_flags: []const []const u8 = if (options.simd_ref)
-        std.mem.concat(b.allocator, []const u8, &.{
-            base_cxx_flags,
-            &.{"-DOZZ_BUILD_SIMD_REF"},
-        }) catch @panic("OOM")
-    else
-        base_cxx_flags;
+    //
+    // NDEBUG follows `enable_asserts` in every mode, and so it is a flag
+    // rather than a macro: Zig defines NDEBUG for C by itself in ReleaseFast
+    // and ReleaseSmall, and only an -UNDEBUG after its own flags keeps the
+    // asserts there when they are asked for.
+    const cxx_flags: []const []const u8 = std.mem.concat(b.allocator, []const u8, &.{
+        base_cxx_flags,
+        if (options.simd_ref) &.{"-DOZZ_BUILD_SIMD_REF"} else &.{},
+        &.{if (options.enable_asserts) "-UNDEBUG" else "-DNDEBUG"},
+    }) catch @panic("OOM");
 
     // Flags for a translation unit whose arithmetic is ozz's rather than
     // zozz's: the vendored sources, and tests/mathref.cpp, which dispatches
@@ -461,7 +463,6 @@ pub fn build(b: *std.Build) void {
     fixture.root_module.addIncludePath(b.path("libs/ozz/src"));
     fixture.root_module.addIncludePath(b.path("ffi"));
     fixture.root_module.addIncludePath(b.path("tests"));
-    if (!options.enable_asserts) fixture.root_module.addCMacro("NDEBUG", "");
     // The offline builders live in the zozz library itself now (they are part
     // of the public surface); the fixture links them from there.
     fixture.root_module.addCSourceFile(.{

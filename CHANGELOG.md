@@ -9,6 +9,14 @@ could not express, so a port has the reason and not only the diff.
 
 ## [Unreleased]
 
+### Fixed
+
+- `-Denable_asserts=true` keeps ozz's asserts in ReleaseFast and ReleaseSmall.
+  Zig 0.17 defines NDEBUG for C by itself in those two modes, and the build
+  only ever added NDEBUG, never removed it, so the C++ was built without its
+  asserts while `zozz.options` and `zozzBuildFeatures` disagreed about it.
+  NDEBUG now follows the option in every mode.
+
 ## [0.5.0] - 2026-09-04
 
 ### Fixed
