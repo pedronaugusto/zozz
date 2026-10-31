@@ -331,6 +331,11 @@ validate that first.
 Every prefix of a valid archive, across both fixtures, is tested to be
 refused, and the whole archives still load.
 
+The glTF backend (`-Dgltf`, `Importer.initFromGltf`) is outside all of this.
+It is ozz's `gltf2ozz` over tinygltf, a second glTF parser that no property
+here fuzzes, and it opens its file with C stdio. It is off by default and
+not hardened against hostile input; import only glTF you trust.
+
 ## The ABI guard
 
 `src/c.zig` hand-writes the `extern` declarations for `ffi/zozz.h` rather

@@ -155,7 +155,7 @@ struct with a `run` method, mirroring ozz's own shape.
 
 | Option | Default | Effect |
 |---|---|---|
-| `-Dgltf` | off | Compile ozz's glTF importer backend. Pulls in tinygltf's whole implementation. |
+| `-Dgltf` | off | Compile ozz's glTF importer backend. Pulls in tinygltf's whole implementation. **Not hardened against hostile input:** tinygltf is not fuzzed here and opens its file with C stdio, so import only glTF you trust. |
 | `-Doptions` | off | Compile ozz's command-line option parser and the `OzzImporter` interface. `options.cc` writes to `<iostream>`, which zozz otherwise never includes. |
 | `-Dshared` | off | Build the C library as a shared object. |
 | `-Denable_asserts` | on in Debug | Keep ozz's internal asserts. |
