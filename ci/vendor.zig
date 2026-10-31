@@ -24,7 +24,7 @@ const patches = [_][]const u8{
     "ozz-checked-allocation.patch",
     "ozz-archive-invariants.patch",
     "ozz-gv4-padding.patch",
-    "ozz-key-arrays-of-none.patch",
+    "ozz-arrays-of-none.patch",
     "ozz-raw-track-interpolation.patch",
     "ozz-rest-pose-rotations.patch",
 };

@@ -563,6 +563,35 @@ test "an animation of no tracks, as ozz builds one from a raw archive, saves and
     try std.testing.expectEqual(@as(f32, 1.0), loaded.duration());
 }
 
+test "a track of no keys, of each value type, saves and loads back" {
+    var failure: zozz.Failure = .{};
+    const gpa = std.testing.allocator;
+    try zozz.setAllocator(gpa, &failure);
+    defer zozz.resetAllocator(&failure) catch |e| std.debug.panic("zozz: {s}", .{@errorName(e)});
+    inline for (.{
+        .{ zozz.RawFloatTrack, zozz.FloatTrack, "FloatTrack" },
+        .{ zozz.RawFloat2Track, zozz.Float2Track, "Float2Track" },
+        .{ zozz.RawFloat3Track, zozz.Float3Track, "Float3Track" },
+        .{ zozz.RawFloat4Track, zozz.Float4Track, "Float4Track" },
+        .{ zozz.RawQuaternionTrack, zozz.QuaternionTrack, "QuaternionTrack" },
+    }) |kind| {
+        var raw = try kind[0].init(&failure);
+        defer raw.deinit();
+        var empty = try raw.build(&failure);
+        defer empty.deinit();
+
+        var buffer: WriteBuffer = .{ .gpa = gpa };
+        defer buffer.deinit();
+        const bridge = buffer.stream();
+        var archive = try zozz.OArchive.init(&bridge, zozz.nativeEndianness(), &failure);
+        try @field(zozz.OArchive, "save" ++ kind[2])(archive, empty, &failure);
+        archive.deinit();
+
+        var loaded = try kind[1].initFromMemory(.init(buffer.list.items), &failure);
+        loaded.deinit();
+    }
+}
+
 //=============================================================================
 // The refusal record
 //=============================================================================

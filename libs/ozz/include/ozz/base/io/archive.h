@@ -352,14 +352,20 @@ struct Extern {
 
 // Wrapper for dynamic array serialization.
 // Must be used through ozz::io::MakeArray.
+// An array of none hands its Extern nothing: its data may be null, and an
+// Extern may name the members of its first element.
 namespace internal {
 template <typename _Ty>
 struct Array {
   OZZ_INLINE void Save(OArchive& _archive) const {
-    ozz::io::Extern<_Ty>::Save(_archive, array, count);
+    if (count != 0) {
+      ozz::io::Extern<_Ty>::Save(_archive, array, count);
+    }
   }
   OZZ_INLINE void Load(IArchive& _archive, uint32_t _version) const {
-    ozz::io::Extern<_Ty>::Load(_archive, array, count, _version);
+    if (count != 0) {
+      ozz::io::Extern<_Ty>::Load(_archive, array, count, _version);
+    }
   }
   _Ty* array;
   size_t count;
@@ -368,7 +374,9 @@ struct Array {
 template <typename _Ty>
 struct Array<const _Ty> {
   OZZ_INLINE void Save(OArchive& _archive) const {
-    ozz::io::Extern<_Ty>::Save(_archive, array, count);
+    if (count != 0) {
+      ozz::io::Extern<_Ty>::Save(_archive, array, count);
+    }
   }
   const _Ty* array;
   size_t count;

@@ -91,9 +91,10 @@ could not express, so a port has the reason and not only the diff.
   decoder loads four bytes per value and only a name after the entries
   covered them (`libs/patches/ozz-gv4-padding.patch`).
 - Saving or loading an animation of no tracks, which ozz builds from a raw
-  animation of none, accessed a member through a null pointer: a channel of
-  no keys holds an empty span and its keys were read from the first key's
-  address (`libs/patches/ozz-key-arrays-of-none.patch`).
+  animation of none, or a track of no keys of any value type but float,
+  accessed a member through a null pointer: an array of none is often an
+  empty span, and ozz serialized an array from the address of its first
+  element's members (`libs/patches/ozz-arrays-of-none.patch`).
 - A raw track archive's keyframe could hold any byte as its interpolation,
   and ozz loaded it as a mode that does not exist, which building the track
   then read. A mode other than step or linear is `BadFormat` now, its

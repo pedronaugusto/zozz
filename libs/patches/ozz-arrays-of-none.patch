@@ -1,0 +1,57 @@
+ozz-arrays-of-none: hand an Extern no array of none
+
+An Extern that saves or loads an array of structs takes the address of a
+member of its first element: Float3Key and QuaternionKey's values, Float2's
+x and its siblings in math_archive.cc and soa_math_archive.cc. An array of
+none is often an empty span, whose data is null, so each of them accessed a
+member through a null pointer: an animation of no tracks, which ozz's
+builder makes from a raw animation of none, or a track of no keys, of any
+value type but float.
+
+internal::Array, through which MakeArray hands every array to its Extern,
+calls none for an array of none. What an archive holds is unchanged.
+
+Evidence: zozz's src/integration_test.zig saves and loads an animation of
+no tracks and a track of no keys of each value type; under
+UndefinedBehaviorSanitizer upstream stops in Extern<Float3Key>::Save and
+Extern<math::Float2>::Save with "member access within null pointer"
+(measured, 2026-10-31).
+
+diff --git a/libs/ozz/include/ozz/base/io/archive.h b/libs/ozz/include/ozz/base/io/archive.h
+index cea04c8..e3bc733 100644
+--- a/libs/ozz/include/ozz/base/io/archive.h
++++ b/libs/ozz/include/ozz/base/io/archive.h
+@@ -352,14 +352,20 @@ struct Extern {
+ 
+ // Wrapper for dynamic array serialization.
+ // Must be used through ozz::io::MakeArray.
++// An array of none hands its Extern nothing: its data may be null, and an
++// Extern may name the members of its first element.
+ namespace internal {
+ template <typename _Ty>
+ struct Array {
+   OZZ_INLINE void Save(OArchive& _archive) const {
+-    ozz::io::Extern<_Ty>::Save(_archive, array, count);
++    if (count != 0) {
++      ozz::io::Extern<_Ty>::Save(_archive, array, count);
++    }
+   }
+   OZZ_INLINE void Load(IArchive& _archive, uint32_t _version) const {
+-    ozz::io::Extern<_Ty>::Load(_archive, array, count, _version);
++    if (count != 0) {
++      ozz::io::Extern<_Ty>::Load(_archive, array, count, _version);
++    }
+   }
+   _Ty* array;
+   size_t count;
+@@ -368,7 +374,9 @@ struct Array {
+ template <typename _Ty>
+ struct Array<const _Ty> {
+   OZZ_INLINE void Save(OArchive& _archive) const {
+-    ozz::io::Extern<_Ty>::Save(_archive, array, count);
++    if (count != 0) {
++      ozz::io::Extern<_Ty>::Save(_archive, array, count);
++    }
+   }
+   const _Ty* array;
+   size_t count;
