@@ -44,17 +44,17 @@ pub const Importer = struct {
     handle: ?*c.Importer,
 
     /// Wraps a host's `ImporterInterface`. Behind `-Doptions`.
-    pub fn init(interface: *const ImporterInterface) err.Error!Importer {
+    pub fn init(interface: *const ImporterInterface, failure: *err.Failure) err.Error!Importer {
         var handle: *c.Importer = undefined;
-        try err.check(c.zozzImporterCreate(interface, &handle));
+        try err.check(failure, .importer_create, c.zozzImporterCreate(interface, &handle));
         return .{ .handle = handle };
     }
 
     /// Constructs a glTF importer and loads `path` (.gltf or .glb, guessed
     /// from the extension) in one call. Behind `-Dgltf`.
-    pub fn initFromGltf(path: [*:0]const u8) err.Error!Importer {
+    pub fn initFromGltf(path: [*:0]const u8, failure: *err.Failure) err.Error!Importer {
         var handle: *c.Importer = undefined;
-        try err.check(c.zozzGltfImporterCreate(path, &handle));
+        try err.check(failure, .gltf_importer_create, c.zozzGltfImporterCreate(path, &handle));
         return .{ .handle = handle };
     }
 
@@ -65,15 +65,15 @@ pub const Importer = struct {
 
     /// Loads (or reloads) source data. Most callers only need this to point
     /// a host-backed importer at its source; `initFromGltf` already loaded.
-    pub fn load(self: Importer, filename: [*:0]const u8) err.Error!void {
-        try err.check(c.zozzImporterLoad(self.handle.?, filename));
+    pub fn load(self: Importer, filename: [*:0]const u8, failure: *err.Failure) err.Error!void {
+        try err.check(failure, .importer_load, c.zozzImporterLoad(err.live(self.handle), filename));
     }
 
     /// Imports a skeleton, handed back as the same `RawSkeleton` type
     /// `RawSkeleton.init` + `addJoint` builds by hand.
-    pub fn importSkeleton(self: Importer, types: ImportNodeType) err.Error!offline_mod.RawSkeleton {
+    pub fn importSkeleton(self: Importer, types: ImportNodeType, failure: *err.Failure) err.Error!offline_mod.RawSkeleton {
         var handle: *c.RawSkeleton = undefined;
-        try err.check(c.zozzImporterImportSkeleton(self.handle.?, types, &handle));
+        try err.check(failure, .importer_import_skeleton, c.zozzImporterImportSkeleton(err.live(self.handle), types, &handle));
         return .{ .handle = handle };
     }
 
@@ -83,6 +83,7 @@ pub const Importer = struct {
         self: Importer,
         context: anytype,
         comptime visit: fn (@TypeOf(context), name: [:0]const u8) void,
+        failure: *err.Failure,
     ) err.Error!void {
         const Context = @TypeOf(context);
         comptime if (@typeInfo(Context) != .pointer) {
@@ -94,7 +95,7 @@ pub const Importer = struct {
                 visit(ctx, std.mem.span(name));
             }
         };
-        try err.check(c.zozzImporterIterateAnimationNames(self.handle.?, &Trampoline.call, @ptrCast(context))); // aegis: no-danger: the caller's context as the C side's opaque user pointer, read back only by the trampoline
+        try err.check(failure, .importer_iterate_animation_names, c.zozzImporterIterateAnimationNames(err.live(self.handle), &Trampoline.call, @ptrCast(context))); // aegis: no-danger: the caller's context as the C side's opaque user pointer, read back only by the trampoline
     }
 
     /// Imports one named animation against `skeleton`'s joints, handed back
@@ -105,12 +106,13 @@ pub const Importer = struct {
         animation_name: [*:0]const u8,
         skeleton: skeleton_mod.Skeleton,
         sampling_rate: f32,
+        failure: *err.Failure,
     ) err.Error!offline_mod.RawAnimation {
         var handle: *c.RawAnimation = undefined;
-        try err.check(c.zozzImporterImportAnimation(
-            self.handle.?,
+        try err.check(failure, .importer_import_animation, c.zozzImporterImportAnimation(
+            err.live(self.handle),
             animation_name,
-            skeleton.handle.?,
+            err.live(skeleton.handle),
             sampling_rate,
             &handle,
         ));
@@ -124,6 +126,7 @@ pub const Importer = struct {
         node_name: [*:0]const u8,
         context: anytype,
         comptime visit: fn (@TypeOf(context), property: NodeProperty) void,
+        failure: *err.Failure,
     ) err.Error!void {
         const Context = @TypeOf(context);
         comptime if (@typeInfo(Context) != .pointer) {
@@ -135,7 +138,7 @@ pub const Importer = struct {
                 visit(ctx, property.*);
             }
         };
-        try err.check(c.zozzImporterIterateNodeProperties(self.handle.?, node_name, &Trampoline.call, @ptrCast(context))); // aegis: no-danger: the caller's context as the C side's opaque user pointer, read back only by the trampoline
+        try err.check(failure, .importer_iterate_node_properties, c.zozzImporterIterateNodeProperties(err.live(self.handle), node_name, &Trampoline.call, @ptrCast(context))); // aegis: no-danger: the caller's context as the C side's opaque user pointer, read back only by the trampoline
     }
 
     /// Track imports, one per value width, mirroring `OzzImporter`'s four
@@ -147,10 +150,11 @@ pub const Importer = struct {
         track_name: [*:0]const u8,
         track_type: NodePropertyType,
         sampling_rate: f32,
+        failure: *err.Failure,
     ) err.Error!rawtrack_mod.RawFloatTrack {
         var handle: *c.RawFloatTrack = undefined;
-        try err.check(c.zozzImporterImportFloatTrack(
-            self.handle.?,
+        try err.check(failure, .importer_import_float_track, c.zozzImporterImportFloatTrack(
+            err.live(self.handle),
             animation_name,
             node_name,
             track_name,
@@ -168,10 +172,11 @@ pub const Importer = struct {
         track_name: [*:0]const u8,
         track_type: NodePropertyType,
         sampling_rate: f32,
+        failure: *err.Failure,
     ) err.Error!rawtrack_mod.RawFloat2Track {
         var handle: *c.RawFloat2Track = undefined;
-        try err.check(c.zozzImporterImportFloat2Track(
-            self.handle.?,
+        try err.check(failure, .importer_import_float2_track, c.zozzImporterImportFloat2Track(
+            err.live(self.handle),
             animation_name,
             node_name,
             track_name,
@@ -189,10 +194,11 @@ pub const Importer = struct {
         track_name: [*:0]const u8,
         track_type: NodePropertyType,
         sampling_rate: f32,
+        failure: *err.Failure,
     ) err.Error!rawtrack_mod.RawFloat3Track {
         var handle: *c.RawFloat3Track = undefined;
-        try err.check(c.zozzImporterImportFloat3Track(
-            self.handle.?,
+        try err.check(failure, .importer_import_float3_track, c.zozzImporterImportFloat3Track(
+            err.live(self.handle),
             animation_name,
             node_name,
             track_name,
@@ -210,10 +216,11 @@ pub const Importer = struct {
         track_name: [*:0]const u8,
         track_type: NodePropertyType,
         sampling_rate: f32,
+        failure: *err.Failure,
     ) err.Error!rawtrack_mod.RawFloat4Track {
         var handle: *c.RawFloat4Track = undefined;
-        try err.check(c.zozzImporterImportFloat4Track(
-            self.handle.?,
+        try err.check(failure, .importer_import_float4_track, c.zozzImporterImportFloat4Track(
+            err.live(self.handle),
             animation_name,
             node_name,
             track_name,
@@ -227,7 +234,8 @@ pub const Importer = struct {
     /// `OzzImporter::operator()`: parses `argv` as ozz's own importer CLI
     /// would, reads a JSON config file and writes .ozz files to disk.
     /// Currently always `error.Unsupported`; see the module comment above.
-    pub fn run(self: Importer, argv: []const [*:0]const u8) err.Error!void {
-        try err.check(c.zozzImporterRun(self.handle.?, @intCast(argv.len), argv.ptr));
+    pub fn run(self: Importer, argv: []const [*:0]const u8, failure: *err.Failure) err.Error!void {
+        const argc = try err.narrow(failure, .importer_run, c_int, argv.len);
+        try err.check(failure, .importer_run, c.zozzImporterRun(err.live(self.handle), argc, argv.ptr));
     }
 };

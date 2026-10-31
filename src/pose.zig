@@ -31,29 +31,31 @@ comptime {
 }
 
 /// SoA blocks needed for `num_joints`: ceil(num_joints / 4), ozz's
-/// num_soa_joints. `error.InvalidArgument` for 0 or above `max_joints`, so a
-/// caller cannot size a buffer from a count ozz would have refused.
-pub fn soaBlocks(num_joints: u32) err.Error!usize {
-    const blocks = c.zozzSoaBlocks(@intCast(num_joints));
-    if (blocks == 0) return err.Error.InvalidArgument;
+/// num_soa_joints. `error.InvalidArgument`, named `.soa_blocks`, for 0 or
+/// above `max_joints`, so a caller cannot size a buffer from a count ozz
+/// would have refused.
+pub fn soaBlocks(num_joints: u32, failure: *err.Failure) err.Error!usize {
+    const joints = try err.narrow(failure, .soa_blocks, c_int, num_joints);
+    const blocks = c.zozzSoaBlocks(joints);
+    if (blocks == 0) return err.refuse(failure, .soa_blocks, err.Error.InvalidArgument);
     return blocks;
 }
 
 /// Fills every block with the identity transform.
-pub fn setIdentity(pose: []SoaTransform) err.Error!void {
-    try err.check(c.zozzSoaPoseSetIdentity(pose.ptr, pose.len));
+pub fn setIdentity(pose: []SoaTransform, failure: *err.Failure) err.Error!void {
+    try err.check(failure, .soa_pose_set_identity, c.zozzSoaPoseSetIdentity(pose.ptr, pose.len));
 }
 
 /// SoA -> AoS. `pose` must cover `out.len` joints.
-pub fn toLocalTransforms(pose: []const SoaTransform, out: []math.Transform) err.Error!void {
-    try err.check(c.zozzSoaPoseToLocalTransforms(pose.ptr, pose.len, out.ptr, out.len));
+pub fn toLocalTransforms(pose: []const SoaTransform, out: []math.Transform, failure: *err.Failure) err.Error!void {
+    try err.check(failure, .soa_pose_to_local_transforms, c.zozzSoaPoseToLocalTransforms(pose.ptr, pose.len, out.ptr, out.len));
 }
 
 /// AoS -> SoA. `pose` must cover `in.len` joints; the lanes of a trailing
 /// partial block are filled with identity, so the whole slice is valid input
 /// to a job that reads it a block at a time.
-pub fn fromLocalTransforms(in: []const math.Transform, pose: []SoaTransform) err.Error!void {
-    try err.check(c.zozzSoaPoseFromLocalTransforms(in.ptr, in.len, pose.ptr, pose.len));
+pub fn fromLocalTransforms(in: []const math.Transform, pose: []SoaTransform, failure: *err.Failure) err.Error!void {
+    try err.check(failure, .soa_pose_from_local_transforms, c.zozzSoaPoseFromLocalTransforms(in.ptr, in.len, pose.ptr, pose.len));
 }
 
 /// Packs flat per-joint weights into the SoA registers a `BlendingLayer`
@@ -61,6 +63,6 @@ pub fn fromLocalTransforms(in: []const math.Transform, pose: []SoaTransform) err
 /// weighted" meaning ozz gives an absent mask. Values are not clamped: ozz
 /// treats a negative weight as 0, and above 1 is valid wherever
 /// normalisation allows it. Every value must be finite.
-pub fn packJointWeights(in: []const f32, out: []math.SimdFloat4) err.Error!void {
-    try err.check(c.zozzSoaWeightsPack(in.ptr, in.len, @ptrCast(out.ptr), out.len)); // aegis: no-danger: math.SimdFloat4 and c.SimdFloat4 are the same 16 bytes at the same alignment, asserted at comptime above
+pub fn packJointWeights(in: []const f32, out: []math.SimdFloat4, failure: *err.Failure) err.Error!void {
+    try err.check(failure, .soa_weights_pack, c.zozzSoaWeightsPack(in.ptr, in.len, @ptrCast(out.ptr), out.len)); // aegis: no-danger: math.SimdFloat4 and c.SimdFloat4 are the same 16 bytes at the same alignment, asserted at comptime above
 }

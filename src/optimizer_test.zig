@@ -21,11 +21,12 @@ fn translated(x: f32, y: f32, z: f32) zozz.Transform {
 /// parent scale, which is 1 here). That is what lets the tolerance below be
 /// compared against a plain distance.
 fn buildSkeleton() !zozz.Skeleton {
-    var raw = try zozz.RawSkeleton.init();
+    var failure: zozz.Failure = .{};
+    var raw = try zozz.RawSkeleton.init(&failure);
     defer raw.deinit();
-    const root = try raw.addJoint(null, "root", zozz.transform_identity);
-    _ = try raw.addJoint(root, "child", translated(0, 1, 0));
-    return raw.build();
+    const root = try raw.addJoint(null, "root", zozz.transform_identity, &failure);
+    _ = try raw.addJoint(root, "child", translated(0, 1, 0), &failure);
+    return raw.build(&failure);
 }
 
 const duration: f32 = 1.0;
@@ -40,19 +41,20 @@ fn curveAt(time: f32) f32 {
 /// dozen would do. Track 1 is deliberately near-static and keyed only at the
 /// ends, so the key-time union below counts the root's keys and nothing else.
 fn buildDenseAnimation() !zozz.RawAnimation {
-    var raw = try zozz.RawAnimation.init(2, duration, "dense");
+    var failure: zozz.Failure = .{};
+    var raw = try zozz.RawAnimation.init(2, duration, "dense", &failure);
     errdefer raw.deinit();
 
     for (0..dense_keys) |i| {
         const time = duration * @as(f32, @floatFromInt(i)) / (dense_keys - 1);
-        try raw.pushTranslation(0, time, .{ 0, curveAt(time), 0 });
+        try raw.pushTranslation(0, time, .{ 0, curveAt(time), 0 }, &failure);
     }
     for ([_]f32{ 0, duration }) |time| {
-        try raw.pushRotation(0, time, .{ 0, 0, 0, 1 });
-        try raw.pushScale(0, time, .{ 1, 1, 1 });
-        try raw.pushTranslation(1, time, .{ 0, 1, 0 });
-        try raw.pushRotation(1, time, .{ 0, 0, 0, 1 });
-        try raw.pushScale(1, time, .{ 1, 1, 1 });
+        try raw.pushRotation(0, time, .{ 0, 0, 0, 1 }, &failure);
+        try raw.pushScale(0, time, .{ 1, 1, 1 }, &failure);
+        try raw.pushTranslation(1, time, .{ 0, 1, 0 }, &failure);
+        try raw.pushRotation(1, time, .{ 0, 0, 0, 1 }, &failure);
+        try raw.pushScale(1, time, .{ 1, 1, 1 }, &failure);
     }
     return raw;
 }
@@ -61,15 +63,17 @@ fn buildDenseAnimation() !zozz.RawAnimation {
 /// at 0 and `duration`, which the root always keeps, so this is exactly the
 /// root's translation key count.
 fn countKeyTimes(raw: zozz.RawAnimation, gpa: std.mem.Allocator) !usize {
-    const times = try raw.extractTimePoints(gpa);
+    var failure: zozz.Failure = .{};
+    const times = try raw.extractTimePoints(gpa, &failure);
     defer gpa.free(times);
     return times.len;
 }
 
 test "optimising drops redundant keys while staying inside the tolerance asked for" {
+    var failure: zozz.Failure = .{};
     const gpa = std.testing.allocator;
-    try zozz.setAllocator(gpa);
-    defer zozz.resetAllocator() catch unreachable;
+    try zozz.setAllocator(gpa, &failure);
+    defer zozz.resetAllocator(&failure) catch |e| std.debug.panic("zozz: {s}", .{@errorName(e)});
 
     var skel = try buildSkeleton();
     defer skel.deinit();
@@ -78,19 +82,19 @@ test "optimising drops redundant keys while staying inside the tolerance asked f
     try std.testing.expectEqual(@as(usize, dense_keys), try countKeyTimes(input, gpa));
 
     const tolerance: f32 = 1e-2;
-    var optimizer = try zozz.AnimationOptimizer.init();
+    var optimizer = try zozz.AnimationOptimizer.init(&failure);
     defer optimizer.deinit();
-    try optimizer.setSetting(.{ .tolerance = tolerance, .distance = 1e-1 });
+    try optimizer.setSetting(.{ .tolerance = tolerance, .distance = 1e-1 }, &failure);
 
     // The setting must be the one that gets used, not a default that was
     // silently kept.
-    const read_back = try optimizer.getSetting();
+    const read_back = try optimizer.getSetting(&failure);
     try std.testing.expectApproxEqAbs(tolerance, read_back.tolerance, 1e-9);
     try std.testing.expectApproxEqAbs(@as(f32, 1e-1), read_back.distance, 1e-9);
 
-    var output = try zozz.RawAnimation.init(2, duration, null);
+    var output = try zozz.RawAnimation.init(2, duration, null, &failure);
     defer output.deinit();
-    try optimizer.run(input, skel, output);
+    try optimizer.run(input, skel, output, &failure);
 
     // Half one: fewer keys. The curve is smooth enough that most of 61 keys
     // are recoverable by interpolation, so this is a real reduction rather
@@ -109,8 +113,8 @@ test "optimising drops redundant keys while staying inside the tolerance asked f
     var worst: f32 = 0;
     for (0..sweep + 1) |i| {
         const time = duration * @as(f32, @floatFromInt(i)) / sweep;
-        const before = try input.sampleTrack(0, time);
-        const after = try output.sampleTrack(0, time);
+        const before = try input.sampleTrack(0, time, &failure);
+        const after = try output.sampleTrack(0, time, &failure);
         var squared: f32 = 0;
         for (before.translation, after.translation) |a, b| squared += (a - b) * (a - b);
         worst = @max(worst, @sqrt(squared));
@@ -121,14 +125,14 @@ test "optimising drops redundant keys while staying inside the tolerance asked f
     // would sit at `amplitude` of error, not under the tolerance, but say so
     // anyway so the sweep cannot pass against an empty clip.
     try std.testing.expect(@abs(curveAt(0.25) - amplitude) < 1e-5);
-    const at_peak = try output.sampleTrack(0, 0.25);
+    const at_peak = try output.sampleTrack(0, 0.25, &failure);
     try std.testing.expectApproxEqAbs(amplitude, at_peak.translation[1], tolerance);
 
     // The clip's shape is otherwise preserved: same duration, same track
     // count, and the untouched joint keeps its keys.
     try std.testing.expectApproxEqAbs(duration, output.duration(), 1e-6);
     try std.testing.expectEqual(@as(u32, 2), output.numTracks());
-    const child = try output.sampleTrack(1, 0.5);
+    const child = try output.sampleTrack(1, 0.5, &failure);
     try expectTranslation(.{ 0, 1, 0 }, child, 1e-6);
 }
 
@@ -146,29 +150,31 @@ fn optimizedKeyCount(
     input: zozz.RawAnimation,
     optimizer: zozz.AnimationOptimizer,
 ) !usize {
-    var output = try zozz.RawAnimation.init(2, duration, null);
+    var failure: zozz.Failure = .{};
+    var output = try zozz.RawAnimation.init(2, duration, null, &failure);
     defer output.deinit();
-    try optimizer.run(input, skel, output);
+    try optimizer.run(input, skel, output, &failure);
     return countKeyTimes(output, gpa);
 }
 
 test "tolerance drives how much is dropped, and a child's override tightens its parents" {
+    var failure: zozz.Failure = .{};
     const gpa = std.testing.allocator;
-    try zozz.setAllocator(gpa);
-    defer zozz.resetAllocator() catch unreachable;
+    try zozz.setAllocator(gpa, &failure);
+    defer zozz.resetAllocator(&failure) catch |e| std.debug.panic("zozz: {s}", .{@errorName(e)});
 
     var skel = try buildSkeleton();
     defer skel.deinit();
     var input = try buildDenseAnimation();
     defer input.deinit();
 
-    var optimizer = try zozz.AnimationOptimizer.init();
+    var optimizer = try zozz.AnimationOptimizer.init(&failure);
     defer optimizer.deinit();
 
-    try optimizer.setSetting(.{ .tolerance = 1e-3, .distance = 1e-1 });
+    try optimizer.setSetting(.{ .tolerance = 1e-3, .distance = 1e-1 }, &failure);
     const tight = try optimizedKeyCount(gpa, skel, input, optimizer);
 
-    try optimizer.setSetting(.{ .tolerance = 1e-1, .distance = 1e-1 });
+    try optimizer.setSetting(.{ .tolerance = 1e-1, .distance = 1e-1 }, &failure);
     const loose = try optimizedKeyCount(gpa, skel, input, optimizer);
 
     // A looser error budget buys a smaller clip. An optimizer that ignored
@@ -182,28 +188,29 @@ test "tolerance drives how much is dropped, and a child's override tightens its 
     // changed. A consumer tuning the fingers of a hand and finding the spine
     // grew keys is seeing this, and it is the opposite of what per-joint
     // overrides look like they do.
-    try optimizer.setJointOverride(1, .{ .tolerance = 1e-4, .distance = 1e-1 });
+    try optimizer.setJointOverride(1, .{ .tolerance = 1e-4, .distance = 1e-1 }, &failure);
     const child_tightened = try optimizedKeyCount(gpa, skel, input, optimizer);
     try std.testing.expect(child_tightened > loose);
 
     // Clearing it puts the global setting back in charge.
-    try optimizer.clearJointOverride(1);
+    try optimizer.clearJointOverride(1, &failure);
     try std.testing.expectEqual(loose, try optimizedKeyCount(gpa, skel, input, optimizer));
 }
 
 test "fixed-rate sample times are evenly spaced and the last never runs past the duration" {
+    var failure: zozz.Failure = .{};
     const gpa = std.testing.allocator;
-    try zozz.setAllocator(gpa);
-    defer zozz.resetAllocator() catch unreachable;
+    try zozz.setAllocator(gpa, &failure);
+    defer zozz.resetAllocator(&failure) catch |e| std.debug.panic("zozz: {s}", .{@errorName(e)});
 
     {
         // A whole number of periods: 2.5s at 24Hz is 60 intervals, so 61 keys.
-        var timing = try zozz.FixedRateSamplingTime.init(2.5, 24);
+        var timing = try zozz.FixedRateSamplingTime.init(2.5, 24, &failure);
         defer timing.deinit();
         try std.testing.expectEqual(@as(usize, 61), timing.numKeys());
-        try std.testing.expectApproxEqAbs(@as(f32, 0), try timing.at(0), 1e-6);
+        try std.testing.expectApproxEqAbs(@as(f32, 0), try timing.at(0, &failure), 1e-6);
         for (0..timing.numKeys()) |key| {
-            const time = try timing.at(key);
+            const time = try timing.at(key, &failure);
             try std.testing.expectApproxEqAbs(
                 @as(f32, @floatFromInt(key)) / 24.0,
                 time,
@@ -214,8 +221,10 @@ test "fixed-rate sample times are evenly spaced and the last never runs past the
             // done. 60 * (1/24) overshoots 2.5 in binary floating point.
             try std.testing.expect(time <= 2.5);
         }
-        try std.testing.expectApproxEqAbs(@as(f32, 2.5), try timing.at(60), 1e-6);
-        try std.testing.expectError(zozz.Error.InvalidArgument, timing.at(61));
+        try std.testing.expectApproxEqAbs(@as(f32, 2.5), try timing.at(60, &failure), 1e-6);
+        try std.testing.expectError(zozz.Error.InvalidArgument, timing.at(61, &failure));
+        try std.testing.expectEqualSlices(zozz.Frame, &.{.{ .call = .fixed_rate_sampling_time_at, .result = .invalid_argument }}, failure.frames());
+        failure.reset();
     }
 
     {
@@ -223,41 +232,45 @@ test "fixed-rate sample times are evenly spaced and the last never runs past the
         // clamp lands the last one on 1.0 — a SHORTER final step than the
         // period. A consumer assuming a uniform delta between consecutive
         // sample times is wrong here, and this is where it shows.
-        var timing = try zozz.FixedRateSamplingTime.init(1.0, 2.5);
+        var timing = try zozz.FixedRateSamplingTime.init(1.0, 2.5, &failure);
         defer timing.deinit();
         try std.testing.expectEqual(@as(usize, 4), timing.numKeys());
-        try std.testing.expectApproxEqAbs(@as(f32, 0.0), try timing.at(0), 1e-6);
-        try std.testing.expectApproxEqAbs(@as(f32, 0.4), try timing.at(1), 1e-6);
-        try std.testing.expectApproxEqAbs(@as(f32, 0.8), try timing.at(2), 1e-6);
-        try std.testing.expectApproxEqAbs(@as(f32, 1.0), try timing.at(3), 1e-6);
+        try std.testing.expectApproxEqAbs(@as(f32, 0.0), try timing.at(0, &failure), 1e-6);
+        try std.testing.expectApproxEqAbs(@as(f32, 0.4), try timing.at(1, &failure), 1e-6);
+        try std.testing.expectApproxEqAbs(@as(f32, 0.8), try timing.at(2, &failure), 1e-6);
+        try std.testing.expectApproxEqAbs(@as(f32, 1.0), try timing.at(3, &failure), 1e-6);
     }
 
-    try std.testing.expectError(zozz.Error.InvalidArgument, zozz.FixedRateSamplingTime.init(1.0, 0));
+    try std.testing.expectError(zozz.Error.InvalidArgument, zozz.FixedRateSamplingTime.init(1.0, 0, &failure));
+    try std.testing.expectEqualSlices(zozz.Frame, &.{.{ .call = .fixed_rate_sampling_time_create, .result = .invalid_argument }}, failure.frames());
+    failure.reset();
     try std.testing.expectError(
         zozz.Error.InvalidArgument,
-        zozz.FixedRateSamplingTime.init(std.math.nan(f32), 30),
+        zozz.FixedRateSamplingTime.init(std.math.nan(f32), 30, &failure),
     );
+    try std.testing.expectEqualSlices(zozz.Frame, &.{.{ .call = .fixed_rate_sampling_time_create, .result = .invalid_argument }}, failure.frames());
 }
 
 test "model-space sampling accounts for a parent joint's motion, not just the joint's own keys" {
+    var failure: zozz.Failure = .{};
     const gpa = std.testing.allocator;
-    try zozz.setAllocator(gpa);
-    defer zozz.resetAllocator() catch unreachable;
+    try zozz.setAllocator(gpa, &failure);
+    defer zozz.resetAllocator(&failure) catch |e| std.debug.panic("zozz: {s}", .{@errorName(e)});
 
     var skel = try buildSkeleton(); // root -> child, child at rest (0, 1, 0)
     defer skel.deinit();
 
-    var raw = try zozz.RawAnimation.init(2, duration, "model-space");
+    var raw = try zozz.RawAnimation.init(2, duration, "model-space", &failure);
     defer raw.deinit();
     // Root translates 0 -> (4, 0, 0). The child track is left completely
     // empty — no key on any channel — so none of the motion below comes
     // from the child's own local keys.
-    try raw.pushTranslation(0, 0.0, .{ 0, 0, 0 });
-    try raw.pushTranslation(0, duration, .{ 4, 0, 0 });
-    try raw.pushRotation(0, 0.0, .{ 0, 0, 0, 1 });
-    try raw.pushScale(0, 0.0, .{ 1, 1, 1 });
+    try raw.pushTranslation(0, 0.0, .{ 0, 0, 0 }, &failure);
+    try raw.pushTranslation(0, duration, .{ 4, 0, 0 }, &failure);
+    try raw.pushRotation(0, 0.0, .{ 0, 0, 0, 1 }, &failure);
+    try raw.pushScale(0, 0.0, .{ 1, 1, 1 }, &failure);
 
-    const samples = try raw.sampleTrackModelSpace(skel, 1, gpa);
+    const samples = try raw.sampleTrackModelSpace(skel, 1, gpa, &failure);
     defer gpa.free(samples);
 
     // The only keyframe times anywhere in the joint's ancestry are the
@@ -282,41 +295,45 @@ test "model-space sampling accounts for a parent joint's motion, not just the jo
     // not silently sampled against garbage.
     try std.testing.expectError(
         zozz.Error.InvalidArgument,
-        raw.sampleTrackModelSpace(skel, 2, gpa),
+        raw.sampleTrackModelSpace(skel, 2, gpa, &failure),
     );
-    var mismatched = try zozz.RawAnimation.init(1, duration, null);
+    try std.testing.expectEqualSlices(zozz.Frame, &.{.{ .call = .raw_animation_sample_track_model_space, .result = .invalid_argument }}, failure.frames());
+    failure.reset();
+    var mismatched = try zozz.RawAnimation.init(1, duration, null, &failure);
     defer mismatched.deinit();
     try std.testing.expectError(
         zozz.Error.SkeletonMismatch,
-        mismatched.sampleTrackModelSpace(skel, 0, gpa),
+        mismatched.sampleTrackModelSpace(skel, 0, gpa, &failure),
     );
+    try std.testing.expectEqualSlices(zozz.Frame, &.{.{ .call = .raw_animation_sample_track_model_space, .result = .skeleton_mismatch }}, failure.frames());
 }
 
 test "the additive builder turns a clip into deltas from its own first frame" {
+    var failure: zozz.Failure = .{};
     const gpa = std.testing.allocator;
-    try zozz.setAllocator(gpa);
-    defer zozz.resetAllocator() catch unreachable;
+    try zozz.setAllocator(gpa, &failure);
+    defer zozz.resetAllocator(&failure) catch |e| std.debug.panic("zozz: {s}", .{@errorName(e)});
 
     // One track, starting well away from the origin and away from identity,
     // so "delta" and "absolute" cannot be confused for one another.
     const quarter_turn: [4]f32 = .{ 0, @sin(std.math.pi / 4.0), 0, @cos(std.math.pi / 4.0) };
-    var input = try zozz.RawAnimation.init(1, duration, "absolute");
+    var input = try zozz.RawAnimation.init(1, duration, "absolute", &failure);
     defer input.deinit();
-    try input.pushTranslation(0, 0, .{ 7, 3, -2 });
-    try input.pushTranslation(0, duration, .{ 11, 3, -2 });
-    try input.pushRotation(0, 0, .{ 0, 0, 0, 1 });
-    try input.pushRotation(0, duration, quarter_turn);
-    try input.pushScale(0, 0, .{ 2, 2, 2 });
-    try input.pushScale(0, duration, .{ 4, 2, 2 });
+    try input.pushTranslation(0, 0, .{ 7, 3, -2 }, &failure);
+    try input.pushTranslation(0, duration, .{ 11, 3, -2 }, &failure);
+    try input.pushRotation(0, 0, .{ 0, 0, 0, 1 }, &failure);
+    try input.pushRotation(0, duration, quarter_turn, &failure);
+    try input.pushScale(0, 0, .{ 2, 2, 2 }, &failure);
+    try input.pushScale(0, duration, .{ 4, 2, 2 }, &failure);
 
-    var output = try zozz.RawAnimation.init(1, duration, null);
+    var output = try zozz.RawAnimation.init(1, duration, null, &failure);
     defer output.deinit();
-    try zozz.AdditiveAnimationBuilder.run(input, output);
+    try zozz.AdditiveAnimationBuilder.run(input, output, &failure);
 
     // The first frame of a delta clip is the identity by construction — an
     // additive layer built from this clip and applied at t=0 must change
     // nothing about the pose it is layered onto.
-    const first = try output.sampleTrack(0, 0);
+    const first = try output.sampleTrack(0, 0, &failure);
     try expectTranslation(.{ 0, 0, 0 }, first, 1e-5);
     try std.testing.expectApproxEqAbs(@as(f32, 1), first.rotation[3], 1e-5);
     for (first.scale) |s| try std.testing.expectApproxEqAbs(@as(f32, 1), s, 1e-5);
@@ -325,7 +342,7 @@ test "the additive builder turns a clip into deltas from its own first frame" {
     // rotation composes with the reference's conjugate, and scale DIVIDES.
     // The scale one is the trap — a consumer expecting a subtraction there
     // gets (2, 0, 0) instead of (2, 1, 1).
-    const last = try output.sampleTrack(0, duration);
+    const last = try output.sampleTrack(0, duration, &failure);
     try expectTranslation(.{ 4, 0, 0 }, last, 1e-5);
     try expectVec3(.{ 2, 1, 1 }, last.scale, 1e-5);
     var dot: f32 = 0;
@@ -336,18 +353,18 @@ test "the additive builder turns a clip into deltas from its own first frame" {
     // instead, so a clip authored around one bind pose can be retargeted to
     // another without re-authoring: reference == the clip's LAST frame makes
     // the last frame the identity and the first frame the inverse delta.
-    var from_last = try zozz.RawAnimation.init(1, duration, null);
+    var from_last = try zozz.RawAnimation.init(1, duration, null, &failure);
     defer from_last.deinit();
     try zozz.AdditiveAnimationBuilder.runWithReference(input, &[_]zozz.Transform{.{
         .translation = .{ 11, 3, -2 },
         .rotation = quarter_turn,
         .scale = .{ 4, 2, 2 },
-    }}, from_last);
+    }}, from_last, &failure);
 
-    const referenced_last = try from_last.sampleTrack(0, duration);
+    const referenced_last = try from_last.sampleTrack(0, duration, &failure);
     try expectTranslation(.{ 0, 0, 0 }, referenced_last, 1e-5);
     try std.testing.expectApproxEqAbs(@as(f32, 1), referenced_last.rotation[3], 1e-5);
-    const referenced_first = try from_last.sampleTrack(0, 0);
+    const referenced_first = try from_last.sampleTrack(0, 0, &failure);
     try expectTranslation(.{ -4, 0, 0 }, referenced_first, 1e-5);
     try std.testing.expectApproxEqAbs(@as(f32, 0.5), referenced_first.scale[0], 1e-5);
 
@@ -355,41 +372,43 @@ test "the additive builder turns a clip into deltas from its own first frame" {
     // than read past its end.
     try std.testing.expectError(
         zozz.Error.InvalidData,
-        zozz.AdditiveAnimationBuilder.runWithReference(input, &[_]zozz.Transform{}, from_last),
+        zozz.AdditiveAnimationBuilder.runWithReference(input, &[_]zozz.Transform{}, from_last, &failure),
     );
+    try std.testing.expectEqualSlices(zozz.Frame, &.{.{ .call = .additive_animation_builder_run_with_reference, .result = .invalid_data }}, failure.frames());
 }
 
 test "the compressed control streams size and read back for every channel" {
+    var failure: zozz.Failure = .{};
     const gpa = std.testing.allocator;
-    try zozz.setAllocator(gpa);
-    defer zozz.resetAllocator() catch unreachable;
+    try zozz.setAllocator(gpa, &failure);
+    defer zozz.resetAllocator(&failure) catch |e| std.debug.panic("zozz: {s}", .{@errorName(e)});
 
     var raw = try buildDenseAnimation();
     defer raw.deinit();
-    var animation = try raw.build();
+    var animation = try raw.build(&failure);
     defer animation.deinit();
 
     for ([_]zozz.Animation.Channel{ .translation, .rotation, .scale }) |channel| {
-        const ctrl = try animation.keyframesCtrl(channel);
+        const ctrl = try animation.keyframesCtrl(channel, &failure);
         try std.testing.expect(ctrl.num_ratio_bytes > 0);
         try std.testing.expect(ctrl.num_previouses > 0);
         try std.testing.expect(ctrl.iframe_interval >= 0);
 
         const ratios = try gpa.alloc(u8, ctrl.num_ratio_bytes);
         defer gpa.free(ratios);
-        try animation.keyframeRatios(channel, ratios);
+        try animation.keyframeRatios(channel, ratios, &failure);
 
         const previouses = try gpa.alloc(u16, ctrl.num_previouses);
         defer gpa.free(previouses);
-        try animation.keyframePreviouses(channel, previouses);
+        try animation.keyframePreviouses(channel, previouses, &failure);
 
         const entries = try gpa.alloc(u8, ctrl.num_iframe_entry_bytes);
         defer gpa.free(entries);
-        try animation.keyframeIframeEntries(channel, entries);
+        try animation.keyframeIframeEntries(channel, entries, &failure);
 
         const desc = try gpa.alloc(u32, ctrl.num_iframe_desc);
         defer gpa.free(desc);
-        try animation.keyframeIframeDesc(channel, desc);
+        try animation.keyframeIframeDesc(channel, desc, &failure);
 
         // Ratios index the clip's time points, so none may run past them.
         const timepoint_count = animation.numTimepoints();
@@ -408,16 +427,34 @@ test "the compressed control streams size and read back for every channel" {
     // A channel value the host made up is rejected, not read out of bounds.
     try std.testing.expectError(
         error.InvalidArgument,
-        animation.keyframesCtrl(@fromBackingInt(@intCast(99))),
+        animation.keyframesCtrl(@fromBackingInt(@intCast(99)), &failure),
     );
+    try std.testing.expectEqualSlices(zozz.Frame, &.{.{ .call = .animation_keyframes_ctrl, .result = .invalid_argument }}, failure.frames());
+    failure.reset();
 
     // A buffer that is too small is refused rather than overrun.
-    const ctrl = try animation.keyframesCtrl(.translation);
+    const ctrl = try animation.keyframesCtrl(.translation, &failure);
     var tiny: [1]u8 = undefined;
     if (ctrl.num_ratio_bytes > 1) {
         try std.testing.expectError(
             error.BufferTooSmall,
-            animation.keyframeRatios(.translation, &tiny),
+            animation.keyframeRatios(.translation, &tiny, &failure),
         );
+        try std.testing.expectEqualSlices(zozz.Frame, &.{.{ .call = .animation_keyframe_ratios, .result = .buffer_too_small }}, failure.frames());
+        failure.reset();
     }
+}
+
+test "a joint index the C boundary cannot carry is refused, not narrowed" {
+    var failure: zozz.Failure = .{};
+    var optimizer = try zozz.AnimationOptimizer.init(&failure);
+    defer optimizer.deinit();
+    try std.testing.expectError(zozz.Error.InvalidArgument, optimizer.setJointOverride(1 << 31, .{}, &failure));
+    try std.testing.expectEqualSlices(zozz.Frame, &.{.{ .call = .animation_optimizer_set_joint_override, .result = .invalid_argument }}, failure.frames());
+
+    failure.reset();
+    var extractor = try zozz.MotionExtractor.init(&failure);
+    defer extractor.deinit();
+    try std.testing.expectError(zozz.Error.InvalidArgument, extractor.setRootJoint(1 << 31, &failure));
+    try std.testing.expectEqualSlices(zozz.Frame, &.{.{ .call = .motion_extractor_set_root_joint, .result = .invalid_argument }}, failure.frames());
 }

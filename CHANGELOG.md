@@ -11,6 +11,17 @@ could not express, so a port has the reason and not only the diff.
 
 ### Breaking
 
+- Every call that can fail takes a `*zozz.Failure` as its last argument,
+  jobs' `run` included, and a refusal pushes a `zozz.Frame` on it: the
+  `zozz.Call` that refused and its result. An error alone said what went
+  wrong but not which call, and a load, a bake or a frame makes several.
+  Declare one with `var failure: zozz.Failure = .{};` and pass `&failure`.
+- Every loader of bytes takes `zozz.Bytes` (aegis's untrusted-input type):
+  every `initFromMemory` and `decodeGV4`/`decodeGV4Stream`; wrap a
+  slice with `.init(bytes)`. `IArchive.init` takes a `zozz.InputStream`.
+- `getAllocator` returns `?c.Allocator` and `setLogLevel` returns `void`:
+  neither can be refused from Zig, so their error unions were never an
+  answer.
 - Builds on Zig 0.17.0, which `build.zig.zon` now requires. The tests read
   `ffi/zozz.h` through the build's translate-c step, since 0.17 removed
   `@cImport`, and the wrapper walks 0.17's reflection lists.
@@ -31,6 +42,13 @@ could not express, so a port has the reason and not only the diff.
 
 ### Fixed
 
+- A caller's `u32` or `usize` past what the C boundary's `int` carries
+  (`SamplingContext.init(1 << 31)`, a joint, track or vertex count) was
+  `@intCast`, a panic in a safe build and undefined in ReleaseFast; it is
+  `error.InvalidArgument` with a frame now, and a count the boundary reports
+  goes through a narrowing that stops in every build. A handle used after its
+  `deinit` stops in every build too: it was a null unwrap, undefined in
+  ReleaseFast.
 - README's numbers block counted every header in `ffi/` as an installed public
   header, the two C++-internal ones that are never installed included. It now
   counts `zozz.h` and the headers it includes.

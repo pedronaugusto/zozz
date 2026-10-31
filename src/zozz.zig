@@ -6,6 +6,7 @@
 //! see `integration_test.zig` for a complete load -> sample -> convert example.
 
 const std = @import("std");
+const aegis = @import("aegis");
 
 pub const c = @import("c.zig");
 
@@ -35,6 +36,10 @@ const importer_mod = @import("importer.zig");
 //=============================================================================
 
 pub const Error = error_mod.Error;
+pub const Failure = error_mod.Failure;
+pub const Frame = error_mod.Frame;
+pub const Call = error_mod.Call;
+pub const Bytes = error_mod.Bytes;
 pub const resultName = error_mod.name;
 
 pub const Transform = math_mod.Transform;
@@ -105,6 +110,7 @@ pub const BlendingLayer = blending_mod.Layer;
 pub const BlendingJob = blending_mod.BlendingJob;
 
 pub const Stream = archive_mod.Stream;
+pub const InputStream = archive_mod.InputStream;
 pub const SeekOrigin = archive_mod.SeekOrigin;
 pub const Endianness = archive_mod.Endianness;
 pub const nativeEndianness = archive_mod.nativeEndianness;
@@ -198,9 +204,9 @@ pub const Version = struct {
 
     fn unpack(packed_value: u32) Version {
         return .{
-            .major = @truncate(packed_value >> 16),
-            .minor = @truncate(packed_value >> 8),
-            .patch = @truncate(packed_value),
+            .major = @truncate(packed_value >> 16), // safe: the packed 0xMMmmpp version's major byte
+            .minor = @truncate(packed_value >> 8), // safe: its minor byte
+            .patch = @truncate(packed_value), // safe: its patch byte
         };
     }
 
@@ -228,9 +234,10 @@ pub const LogLevel = c.LogLevel;
 /// Sets ozz's global logging verbosity — process-wide, like the allocator
 /// seam. Silencing it is the only lever offered: ozz's diagnostic streams
 /// cannot cross this boundary (see zozz_core.h), so there is no way to
-/// redirect them, only to turn them down.
-pub fn setLogLevel(level: LogLevel) Error!void {
-    try error_mod.check(c.zozzSetLogLevel(level));
+/// redirect them, only to turn them down. Never fails: the seam refuses only
+/// a value `LogLevel` has no name for.
+pub fn setLogLevel(level: LogLevel) void {
+    error_mod.map(c.zozzSetLogLevel(level)) catch aegis.assert.never("zozz: zozzSetLogLevel refused a named LogLevel");
 }
 
 /// Reads back ozz's current logging verbosity. Never fails: there is always
@@ -411,14 +418,15 @@ test "result names are never null" {
 
 test "a handle destroyed twice is freed once" {
     const gpa = std.testing.allocator;
-    try setAllocator(gpa);
-    defer resetAllocator() catch unreachable;
+    var failure: Failure = .{};
+    try setAllocator(gpa, &failure);
+    defer resetAllocator(&failure) catch |e| std.debug.panic("zozz: {s}", .{@errorName(e)});
 
     // `deinit` takes a pointer and nulls the handle, so the second call has
     // nothing to free. Under the testing allocator a second free is a failure
     // rather than an opinion, and the live-block count says the first one
     // happened at all.
-    var context = try SamplingContext.init(8);
+    var context = try SamplingContext.init(8, &failure);
     try std.testing.expect(allocatorLiveBlocks() > 0);
     context.deinit();
     try std.testing.expectEqual(@as(usize, 0), allocatorLiveBlocks());
@@ -429,35 +437,46 @@ test "a handle destroyed twice is freed once" {
 
 test "loaders reject malformed input instead of parsing it" {
     const gpa = std.testing.allocator;
-    try setAllocator(gpa);
-    defer resetAllocator() catch unreachable;
+    var failure: Failure = .{};
+    try setAllocator(gpa, &failure);
+    defer resetAllocator(&failure) catch |e| std.debug.panic("zozz: {s}", .{@errorName(e)});
 
     // Not an ozz archive: the tag test must catch it.
     const garbage = "this is definitely not an ozz archive" ++
         "this is definitely not an ozz archive" ++
         "this is definitely not an ozz archive" ++
         "this is definitely not an ozz archive";
-    try std.testing.expectError(Error.BadFormat, Skeleton.initFromMemory(garbage));
-    try std.testing.expectError(Error.BadFormat, Animation.initFromMemory(garbage));
+    try std.testing.expectError(Error.BadFormat, Skeleton.initFromMemory(.init(garbage), &failure));
+    try std.testing.expectError(Error.BadFormat, Animation.initFromMemory(.init(garbage), &failure));
+    try std.testing.expectEqualSlices(Frame, &.{
+        .{ .call = .skeleton_load_memory, .result = .bad_format },
+        .{ .call = .animation_load_memory, .result = .bad_format },
+    }, failure.frames());
+    failure.reset();
 
     // Empty and absent inputs.
-    try std.testing.expectError(Error.InvalidArgument, Skeleton.initFromMemory(""));
+    try std.testing.expectError(Error.InvalidArgument, Skeleton.initFromMemory(.init(""), &failure));
     try std.testing.expectError(
         Error.FileNotFound,
-        Skeleton.initFromFile("/nonexistent/zozz/skeleton.ozz"),
+        Skeleton.initFromFile("/nonexistent/zozz/skeleton.ozz", &failure),
     );
+    try std.testing.expectEqualSlices(Frame, &.{
+        .{ .call = .skeleton_load_memory, .result = .invalid_argument },
+        .{ .call = .skeleton_load_file, .result = .file_not_found },
+    }, failure.frames());
 }
 
 test "a pose round-trips through AoS without drifting" {
     const gpa = std.testing.allocator;
-    try setAllocator(gpa);
-    defer resetAllocator() catch unreachable;
+    var failure: Failure = .{};
+    try setAllocator(gpa, &failure);
+    defer resetAllocator(&failure) catch |e| std.debug.panic("zozz: {s}", .{@errorName(e)});
 
     // 7 joints exercises a partial trailing SoA block (4 + 3).
     const joint_count = 7;
     var blocks: [2]SoaTransform = undefined;
-    try std.testing.expectEqual(blocks.len, try soaBlocks(joint_count));
-    try pose.setIdentity(&blocks);
+    try std.testing.expectEqual(blocks.len, try soaBlocks(joint_count, &failure));
+    try pose.setIdentity(&blocks, &failure);
 
     var written: [joint_count]Transform = undefined;
     for (&written, 0..) |*t, i| {
@@ -474,10 +493,10 @@ test "a pose round-trips through AoS without drifting" {
         };
     }
 
-    try pose.fromLocalTransforms(&written, &blocks);
+    try pose.fromLocalTransforms(&written, &blocks, &failure);
 
     var read_back: [joint_count]Transform = undefined;
-    try pose.toLocalTransforms(&blocks, &read_back);
+    try pose.toLocalTransforms(&blocks, &read_back, &failure);
 
     for (written, read_back) |expected, actual| {
         for (expected.translation, actual.translation) |e, a| {
@@ -494,15 +513,28 @@ test "a pose round-trips through AoS without drifting" {
 
 test "buffer size and joint count mismatches are refused" {
     const gpa = std.testing.allocator;
-    try setAllocator(gpa);
-    defer resetAllocator() catch unreachable;
+    var failure: Failure = .{};
+    try setAllocator(gpa, &failure);
+    defer resetAllocator(&failure) catch |e| std.debug.panic("zozz: {s}", .{@errorName(e)});
 
     // One block holds four joints; eight transforms do not fit in it.
     var one_block: [1]SoaTransform = undefined;
     var eight: [8]Transform = undefined;
-    try std.testing.expectError(Error.BufferTooSmall, pose.toLocalTransforms(&one_block, &eight));
-    try std.testing.expectError(Error.BufferTooSmall, pose.fromLocalTransforms(&eight, &one_block));
+    try std.testing.expectError(Error.BufferTooSmall, pose.toLocalTransforms(&one_block, &eight, &failure));
+    try std.testing.expectError(Error.BufferTooSmall, pose.fromLocalTransforms(&eight, &one_block, &failure));
 
-    try std.testing.expectError(Error.InvalidArgument, soaBlocks(0));
-    try std.testing.expectError(Error.InvalidArgument, soaBlocks(@as(u32, @intCast(max_joints)) + 1));
+    try std.testing.expectError(Error.InvalidArgument, soaBlocks(0, &failure));
+    try std.testing.expectError(Error.InvalidArgument, soaBlocks(@as(u32, @intCast(max_joints)) + 1, &failure));
+    try std.testing.expectEqualSlices(Frame, &.{
+        .{ .call = .soa_pose_to_local_transforms, .result = .buffer_too_small },
+        .{ .call = .soa_pose_from_local_transforms, .result = .buffer_too_small },
+        .{ .call = .soa_blocks, .result = .invalid_argument },
+        .{ .call = .soa_blocks, .result = .invalid_argument },
+    }, failure.frames());
+}
+
+test "a joint count the C boundary cannot carry is refused, not narrowed" {
+    var failure: Failure = .{};
+    try std.testing.expectError(Error.InvalidArgument, soaBlocks(1 << 31, &failure));
+    try std.testing.expectEqualSlices(Frame, &.{.{ .call = .soa_blocks, .result = .invalid_argument }}, failure.frames());
 }

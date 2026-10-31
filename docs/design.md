@@ -76,9 +76,10 @@ pub extern fn zozzSamplingContextCreate(max_tracks: c_int, out: **SamplingContex
 
 `src/sampling.zig`
 ```zig
-pub fn init(max_tracks: u32) err.Error!SamplingContext {
+pub fn init(max_tracks: u32, failure: *err.Failure) err.Error!SamplingContext {
+    const tracks = try err.narrow(failure, .sampling_context_create, c_int, max_tracks);
     var handle: *c.SamplingContext = undefined;
-    try err.check(c.zozzSamplingContextCreate(@intCast(max_tracks), &handle));
+    try err.check(failure, .sampling_context_create, c.zozzSamplingContextCreate(tracks, &handle));
     return .{ .handle = handle };
 }
 ```
@@ -94,10 +95,9 @@ and no allocation (`ffi/zozz_pose.h`, and the `static_assert`s in
 `ffi/zozz_abi.cpp` that hold the layouts).
 
 A handle wrapper holds `handle: ?*c.Thing`, and its `deinit` takes `*Self`,
-nulls the handle and is therefore idempotent. A destroyed handle used again
-through the same variable trips the null check: a panic naming the line in a
-safety-checked build, and free in ReleaseFast, where the optional pointer
-carries no tag. Zig cannot delete a copy constructor, so a copy taken before
+nulls the handle and is therefore idempotent. Every use reads it through
+`err.live`, so a destroyed handle used again through the same variable stops
+in every build, ReleaseFast included, through `aegis.assert.never`. Zig cannot delete a copy constructor, so a copy taken before
 `deinit` still holds the old pointer and dangles exactly as a raw pointer
 would. ozz deletes the copy constructor; this binding cannot.
 
@@ -150,7 +150,22 @@ in `src/c.zig`, the file the guard walks.
 
 ### The Zig wrapper
 
-- `ZozzResult` becomes `Error!T` through `err.check`.
+- A call that can fail takes the caller's `*Failure` last. `ZozzResult`
+  becomes `Error!T` through `err.check(failure, .call, c.zozzCall(...))`,
+  which pushes one `Frame` naming the entry point and its result; a refusal
+  the wrapper makes before calling C goes through `err.refuse` or
+  `err.narrow` and names the call it was about to make. A call that only
+  passes a refusal on pushes nothing, so one refusal is one frame. Tests in
+  `src/error.zig` read the modules and fail when a frame names another call,
+  when an error leaves any other way, or when a module makes a `Failure` of
+  its own. `err.map`, which pushes none, is only for a result
+  `aegis.assert.never` rules out (`getAllocator`, `setLogLevel`).
+- A caller's integer going to a narrower C parameter is `err.narrow`, a
+  refusal, never `@intCast`; a count the boundary reports comes back through
+  `err.reported`, which stops in every build if it does not fit.
+- Bytes a loader parses arrive as `Bytes` (`aegis.input.Untrusted`), and an
+  archive's input stream as `InputStream`; they leave that type only at the
+  call that hands them to the boundary's checked reader.
 - A count-then-fill pair becomes a slice, with the allocator taken
   explicitly.
 - A lifetime the C side did not promise is never widened.

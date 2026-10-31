@@ -18,14 +18,15 @@ pub const SamplingContext = struct {
 
     /// Sizes the context for clips of at most `max_tracks` tracks. Size it
     /// from the skeleton, not one clip, if the context will be reused.
-    pub fn init(max_tracks: u32) err.Error!SamplingContext {
+    pub fn init(max_tracks: u32, failure: *err.Failure) err.Error!SamplingContext {
+        const tracks = try err.narrow(failure, .sampling_context_create, c_int, max_tracks);
         var handle: *c.SamplingContext = undefined;
-        try err.check(c.zozzSamplingContextCreate(@intCast(max_tracks), &handle));
+        try err.check(failure, .sampling_context_create, c.zozzSamplingContextCreate(tracks, &handle));
         return .{ .handle = handle };
     }
 
-    pub fn initForSkeleton(skeleton: Skeleton) err.Error!SamplingContext {
-        return init(skeleton.numJoints());
+    pub fn initForSkeleton(skeleton: Skeleton, failure: *err.Failure) err.Error!SamplingContext {
+        return init(skeleton.numJoints(), failure);
     }
 
     pub fn deinit(self: *SamplingContext) void {
@@ -39,12 +40,13 @@ pub const SamplingContext = struct {
     /// context across differently-sized skeletons instead of destroying and
     /// recreating it each time. Also invalidates the context, exactly like
     /// `invalidate`.
-    pub fn resize(self: SamplingContext, max_tracks: u32) err.Error!void {
-        try err.check(c.zozzSamplingContextResize(self.handle.?, @intCast(max_tracks)));
+    pub fn resize(self: SamplingContext, max_tracks: u32, failure: *err.Failure) err.Error!void {
+        const tracks = try err.narrow(failure, .sampling_context_resize, c_int, max_tracks);
+        try err.check(failure, .sampling_context_resize, c.zozzSamplingContextResize(err.live(self.handle), tracks));
     }
 
     pub fn maxTracks(self: SamplingContext) u32 {
-        return @intCast(c.zozzSamplingContextMaxTracks(self.handle.?));
+        return err.reported(u32, c.zozzSamplingContextMaxTracks(err.live(self.handle)));
     }
 
     /// Drops the cached keyframe state.
@@ -54,7 +56,7 @@ pub const SamplingContext = struct {
     /// change by pointer identity, so a new clip at an old address would
     /// otherwise reuse stale cursors.
     pub fn invalidate(self: SamplingContext) void {
-        c.zozzSamplingContextInvalidate(self.handle.?);
+        c.zozzSamplingContextInvalidate(err.live(self.handle));
     }
 };
 
@@ -70,10 +72,10 @@ pub const SamplingJob = struct {
     out: []SoaTransform,
 
     /// Runs the sampling job.
-    pub fn run(self: SamplingJob) err.Error!void {
-        try err.check(c.zozzSample(
-            self.animation.handle.?,
-            self.context.handle.?,
+    pub fn run(self: SamplingJob, failure: *err.Failure) err.Error!void {
+        try err.check(failure, .sample, c.zozzSample(
+            err.live(self.animation.handle),
+            err.live(self.context.handle),
             self.ratio,
             self.out.ptr,
             self.out.len,
@@ -112,9 +114,9 @@ pub const LocalToModelJob = struct {
     out: []math.Mat4,
 
     /// Runs the local-to-model job.
-    pub fn run(self: LocalToModelJob) err.Error!void {
-        try err.check(c.zozzLocalToModel(
-            self.skeleton.handle.?,
+    pub fn run(self: LocalToModelJob, failure: *err.Failure) err.Error!void {
+        try err.check(failure, .local_to_model, c.zozzLocalToModel(
+            err.live(self.skeleton.handle),
             self.locals.ptr,
             self.locals.len,
             self.root,

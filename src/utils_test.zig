@@ -23,26 +23,28 @@ fn translated(x: f32, y: f32, z: f32) zozz.Transform {
 /// insertion indices equal built indices (see offline.zig): a-b-c, a-b-d, a-g,
 /// e-f.
 fn buildSkeleton() !zozz.Skeleton {
-    var raw = try zozz.RawSkeleton.init();
+    var failure: zozz.Failure = .{};
+    var raw = try zozz.RawSkeleton.init(&failure);
     defer raw.deinit();
 
-    const a = try raw.addJoint(null, "a", translated(1, 0, 0));
-    const b = try raw.addJoint(a, "b", translated(0, 2, 0));
-    _ = try raw.addJoint(b, "c", translated(0, 0, 3));
-    _ = try raw.addJoint(b, "d", translated(0, 0, -3));
-    _ = try raw.addJoint(a, "g", translated(-1, 0, 0));
-    const e = try raw.addJoint(null, "e", translated(10, 0, 0));
-    _ = try raw.addJoint(e, "f", translated(0, 5, 0));
+    const a = try raw.addJoint(null, "a", translated(1, 0, 0), &failure);
+    const b = try raw.addJoint(a, "b", translated(0, 2, 0), &failure);
+    _ = try raw.addJoint(b, "c", translated(0, 0, 3), &failure);
+    _ = try raw.addJoint(b, "d", translated(0, 0, -3), &failure);
+    _ = try raw.addJoint(a, "g", translated(-1, 0, 0), &failure);
+    const e = try raw.addJoint(null, "e", translated(10, 0, 0), &failure);
+    _ = try raw.addJoint(e, "f", translated(0, 5, 0), &failure);
 
-    return raw.build();
+    return raw.build(&failure);
 }
 
 const joint_count = 7;
 
 test "jointIsLeaf agrees with the parent array on every joint" {
+    var failure: zozz.Failure = .{};
     const gpa = std.testing.allocator;
-    try zozz.setAllocator(gpa);
-    defer zozz.resetAllocator() catch unreachable;
+    try zozz.setAllocator(gpa, &failure);
+    defer zozz.resetAllocator(&failure) catch |e| std.debug.panic("zozz: {s}", .{@errorName(e)});
 
     var skel = try buildSkeleton();
     defer skel.deinit();
@@ -58,20 +60,20 @@ test "jointIsLeaf agrees with the parent array on every joint" {
         for (0..joint_count) |j| {
             if (skel.jointParent(@intCast(j)) == @as(i16, @intCast(joint))) has_child = true;
         }
-        try std.testing.expectEqual(!has_child, try zozz.jointIsLeaf(skel, joint));
+        try std.testing.expectEqual(!has_child, try zozz.jointIsLeaf(skel, joint, &failure));
     }
 
     // And the specific facts, spelled out, so a change that broke both the
     // utility and the cross-check above would still be caught: c, d and g
     // are leaves, and c is a leaf that is NOT the last joint — the case the
     // "is it the last one?" half of the implementation exists for.
-    try std.testing.expect(!try zozz.jointIsLeaf(skel, 0)); // a
-    try std.testing.expect(!try zozz.jointIsLeaf(skel, 1)); // b
-    try std.testing.expect(try zozz.jointIsLeaf(skel, 2)); // c
-    try std.testing.expect(try zozz.jointIsLeaf(skel, 3)); // d
-    try std.testing.expect(try zozz.jointIsLeaf(skel, 4)); // g
-    try std.testing.expect(!try zozz.jointIsLeaf(skel, 5)); // e
-    try std.testing.expect(try zozz.jointIsLeaf(skel, 6)); // f
+    try std.testing.expect(!try zozz.jointIsLeaf(skel, 0, &failure)); // a
+    try std.testing.expect(!try zozz.jointIsLeaf(skel, 1, &failure)); // b
+    try std.testing.expect(try zozz.jointIsLeaf(skel, 2, &failure)); // c
+    try std.testing.expect(try zozz.jointIsLeaf(skel, 3, &failure)); // d
+    try std.testing.expect(try zozz.jointIsLeaf(skel, 4, &failure)); // g
+    try std.testing.expect(!try zozz.jointIsLeaf(skel, 5, &failure)); // e
+    try std.testing.expect(try zozz.jointIsLeaf(skel, 6, &failure)); // f
 }
 
 const Visits = struct {
@@ -96,15 +98,16 @@ const Visits = struct {
 };
 
 test "the depth-first traversal visits every joint once, parents before children" {
+    var failure: zozz.Failure = .{};
     const gpa = std.testing.allocator;
-    try zozz.setAllocator(gpa);
-    defer zozz.resetAllocator() catch unreachable;
+    try zozz.setAllocator(gpa, &failure);
+    defer zozz.resetAllocator(&failure) catch |e| std.debug.panic("zozz: {s}", .{@errorName(e)});
 
     var skel = try buildSkeleton();
     defer skel.deinit();
 
     var forward: Visits = .{};
-    try zozz.iterateJointsDepthFirst(skel, zozz.no_parent, &forward, Visits.record);
+    try zozz.iterateJointsDepthFirst(skel, zozz.no_parent, &forward, Visits.record, &failure);
 
     // Every joint, exactly once. `positionOf` returning non-null for all of
     // them plus a total count of exactly numJoints leaves no room for a
@@ -136,7 +139,7 @@ test "the depth-first traversal visits every joint once, parents before children
     // every joint before its parent, so a consumer accumulating UP a chain
     // (bounding volumes, IK setup) can rely on children being done first.
     var reverse: Visits = .{};
-    try zozz.iterateJointsDepthFirstReverse(skel, &reverse, Visits.record);
+    try zozz.iterateJointsDepthFirstReverse(skel, &reverse, Visits.record, &failure);
 
     try std.testing.expectEqual(@as(usize, joint_count), reverse.count);
     for (0..reverse.count) |step| {
@@ -152,9 +155,10 @@ test "the depth-first traversal visits every joint once, parents before children
 }
 
 test "findJoint round-trips against jointName, and misses are null" {
+    var failure: zozz.Failure = .{};
     const gpa = std.testing.allocator;
-    try zozz.setAllocator(gpa);
-    defer zozz.resetAllocator() catch unreachable;
+    try zozz.setAllocator(gpa, &failure);
+    defer zozz.resetAllocator(&failure) catch |e| std.debug.panic("zozz: {s}", .{@errorName(e)});
 
     var skel = try buildSkeleton();
     defer skel.deinit();
@@ -174,9 +178,10 @@ test "findJoint round-trips against jointName, and misses are null" {
 }
 
 test "the rest-pose accessors agree with each other, locally and in model space" {
+    var failure: zozz.Failure = .{};
     const gpa = std.testing.allocator;
-    try zozz.setAllocator(gpa);
-    defer zozz.resetAllocator() catch unreachable;
+    try zozz.setAllocator(gpa, &failure);
+    defer zozz.resetAllocator(&failure) catch |e| std.debug.panic("zozz: {s}", .{@errorName(e)});
 
     var skel = try buildSkeleton();
     defer skel.deinit();
@@ -185,9 +190,9 @@ test "the rest-pose accessors agree with each other, locally and in model space"
     // rest pose. The single-joint form exists to avoid materialising the
     // array; it must not answer differently for doing so.
     var rest: [joint_count]zozz.Transform = undefined;
-    try skel.restPose(&rest);
+    try skel.restPose(&rest, &failure);
     for (0..joint_count) |i| {
-        const one = try zozz.jointRestPoseLocal(skel, @intCast(i));
+        const one = try zozz.jointRestPoseLocal(skel, @intCast(i), &failure);
         for (rest[i].translation, one.translation) |e, a| {
             try std.testing.expectApproxEqAbs(e, a, 1e-6);
         }
@@ -204,7 +209,7 @@ test "the rest-pose accessors agree with each other, locally and in model space"
     // joint is exactly the sum of its own and its ancestors' translations —
     // which makes the expected answer checkable by hand.
     var models: [joint_count]zozz.Mat4 align(16) = undefined;
-    try zozz.restPoseModelSpace(skel, &models);
+    try zozz.restPoseModelSpace(skel, &models, &failure);
 
     for (0..joint_count) |i| {
         var expected: [3]f32 = .{ 0, 0, 0 };
@@ -226,4 +231,17 @@ test "the rest-pose accessors agree with each other, locally and in model space"
     try std.testing.expectApproxEqAbs(@as(f32, 1), models[2].m[12], 1e-5);
     try std.testing.expectApproxEqAbs(@as(f32, 2), models[2].m[13], 1e-5);
     try std.testing.expectApproxEqAbs(@as(f32, 3), models[2].m[14], 1e-5);
+}
+
+test "a joint or track index the C boundary cannot carry is refused, not narrowed" {
+    // Refused before the boundary is reached, so no skeleton or clip is needed.
+    var failure: zozz.Failure = .{};
+    const skeleton: zozz.Skeleton = .{ .handle = null };
+    try std.testing.expectError(zozz.Error.InvalidArgument, zozz.jointRestPoseLocal(skeleton, 1 << 31, &failure));
+    const animation: zozz.Animation = .{ .handle = null };
+    try std.testing.expectError(zozz.Error.InvalidArgument, zozz.countTranslationKeys(animation, 1 << 31, &failure));
+    try std.testing.expectEqualSlices(zozz.Frame, &.{
+        .{ .call = .skeleton_joint_rest_pose_local, .result = .invalid_argument },
+        .{ .call = .animation_count_translation_keys, .result = .invalid_argument },
+    }, failure.frames());
 }

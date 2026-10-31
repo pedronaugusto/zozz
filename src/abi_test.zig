@@ -265,6 +265,74 @@ const Counts = struct {
     enumerators: usize = 0,
 };
 
+/// One type `c.zig` declares, compared with the header's, and counted on `n`.
+fn sweepOurType(comptime d: []const u8, comptime n: *Counts) void {
+    const Ours = @field(c, d);
+    const cname = typeCName(d);
+    const what = "type " ++ d;
+    n.types += 1;
+
+    switch (@typeInfo(Ours)) {
+        .@"opaque" => {
+            // Nothing to compare but existence: an opaque handle
+            // has no layout on either side, which is the point.
+            const Theirs = theirDecl(cname, what);
+            if (Theirs != type) fail(cname ++ " is not a type in ffi/zozz.h");
+            if (@typeInfo(@field(h, cname)) != .@"opaque") {
+                fail(what ++ " is opaque in src/c.zig but not in ffi/zozz.h");
+            }
+        },
+        .@"struct" => |s| {
+            _ = theirDecl(cname, what);
+            const Theirs = @field(h, cname);
+            switch (s.layout) {
+                .@"extern" => {
+                    checkStructLayout(what, Ours, Theirs);
+                    n.fields += s.field_names.len;
+                },
+                // No packed struct crosses this boundary today —
+                // zozz has no bit-mask type. One added later would
+                // land in the `else` arm below with a message
+                // saying so, rather than being waved through.
+                .@"packed", .auto => fail(what ++ " has " ++ @tagName(s.layout) ++
+                    " layout, which this check does not know how to compare " ++
+                    "against the header; declare it extern, or add a case here"),
+            }
+        },
+        .@"enum" => |e| {
+            _ = theirDecl(cname, what);
+            sameSizeAndAlign(what, Ours, @field(h, cname));
+            checkEnumValues(what, Ours, d);
+            n.enumerators += e.field_names.len;
+        },
+        .int, .float, .bool => {
+            _ = theirDecl(cname, what);
+            const Theirs = @field(h, cname);
+            sameSizeAndAlign(what, Ours, Theirs);
+            const oi = @typeInfo(Ours);
+            const ti = @typeInfo(Theirs);
+            if (oi == .int and ti == .int and oi.int.signedness != ti.int.signedness) {
+                fail(what ++ " is " ++ @typeName(Ours) ++ " in src/c.zig but " ++
+                    @typeName(Theirs) ++ " in ffi/zozz.h");
+            }
+        },
+        .pointer => {
+            // A callback typedef. translate-c makes every C
+            // function pointer optional; unwrap before comparing.
+            _ = theirDecl(cname, what);
+            const Theirs = @field(h, cname);
+            sameSizeAndAlign(what, Ours, Theirs);
+            const OursFn = @typeInfo(Ours).pointer.child;
+            const TheirsOpt = @typeInfo(Theirs);
+            const TheirsPtr = if (TheirsOpt == .optional) TheirsOpt.optional.child else Theirs;
+            checkFnType(what, OursFn, @typeInfo(TheirsPtr).pointer.child);
+        },
+        else => fail("type " ++ d ++ " is a " ++
+            @tagName(@typeInfo(Ours)) ++ ", which this check does not know how to " ++
+            "compare against the header"),
+    }
+}
+
 /// Every public declaration in `c.zig`, classified and compared. The `else`
 /// arms are compile errors: a declaration this does not know how to check is a
 /// hole in the guard, and a hole should stop the build rather than be counted
@@ -278,70 +346,7 @@ fn sweepOurs() Counts {
 
             // ---- types -----------------------------------------------------
             if (Decl == type) {
-                const Ours = @field(c, d);
-                const cname = typeCName(d);
-                const what = "type " ++ d;
-                n.types += 1;
-
-                switch (@typeInfo(Ours)) {
-                    .@"opaque" => {
-                        // Nothing to compare but existence: an opaque handle
-                        // has no layout on either side, which is the point.
-                        const Theirs = theirDecl(cname, what);
-                        if (Theirs != type) fail(cname ++ " is not a type in ffi/zozz.h");
-                        if (@typeInfo(@field(h, cname)) != .@"opaque") {
-                            fail(what ++ " is opaque in src/c.zig but not in ffi/zozz.h");
-                        }
-                    },
-                    .@"struct" => |s| {
-                        _ = theirDecl(cname, what);
-                        const Theirs = @field(h, cname);
-                        switch (s.layout) {
-                            .@"extern" => {
-                                checkStructLayout(what, Ours, Theirs);
-                                n.fields += s.field_names.len;
-                            },
-                            // No packed struct crosses this boundary today —
-                            // zozz has no bit-mask type. One added later would
-                            // land in the `else` arm below with a message
-                            // saying so, rather than being waved through.
-                            .@"packed", .auto => fail(what ++ " has " ++ @tagName(s.layout) ++
-                                " layout, which this check does not know how to compare " ++
-                                "against the header; declare it extern, or add a case here"),
-                        }
-                    },
-                    .@"enum" => |e| {
-                        _ = theirDecl(cname, what);
-                        sameSizeAndAlign(what, Ours, @field(h, cname));
-                        checkEnumValues(what, Ours, d);
-                        n.enumerators += e.field_names.len;
-                    },
-                    .int, .float, .bool => {
-                        _ = theirDecl(cname, what);
-                        const Theirs = @field(h, cname);
-                        sameSizeAndAlign(what, Ours, Theirs);
-                        const oi = @typeInfo(Ours);
-                        const ti = @typeInfo(Theirs);
-                        if (oi == .int and ti == .int and oi.int.signedness != ti.int.signedness) {
-                            fail(what ++ " is " ++ @typeName(Ours) ++ " in src/c.zig but " ++
-                                @typeName(Theirs) ++ " in ffi/zozz.h");
-                        }
-                    },
-                    .pointer => {
-                        // A callback typedef. translate-c makes every C
-                        // function pointer optional; unwrap before comparing.
-                        _ = theirDecl(cname, what);
-                        const Theirs = @field(h, cname);
-                        sameSizeAndAlign(what, Ours, Theirs);
-                        const OursFn = @typeInfo(Ours).pointer.child;
-                        const TheirsOpt = @typeInfo(Theirs);
-                        const TheirsPtr = if (TheirsOpt == .optional) TheirsOpt.optional.child else Theirs;
-                        checkFnType(what, OursFn, @typeInfo(TheirsPtr).pointer.child);
-                    },
-                    else => fail("type " ++ d ++ " is a " ++
-                        @tagName(@typeInfo(Ours)) ++ ", which this check does not know how to " ++
-                        "compare against the header"),
-                }
+                sweepOurType(d, &n);
                 continue;
             }
 

@@ -27,7 +27,7 @@ pub const MotionBlendingJob = struct {
     out: *math.Transform,
 
     /// Runs the motion-blending job.
-    pub fn run(self: MotionBlendingJob) err.Error!void {
-        try err.check(c.zozzMotionBlend(self.layers.ptr, self.layers.len, self.out));
+    pub fn run(self: MotionBlendingJob, failure: *err.Failure) err.Error!void {
+        try err.check(failure, .motion_blend, c.zozzMotionBlend(self.layers.ptr, self.layers.len, self.out));
     }
 };

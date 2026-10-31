@@ -44,9 +44,9 @@ pub const AnimationOptimizer = struct {
 
     /// Allocates an optimizer with ozz's default setting and no per-joint
     /// overrides.
-    pub fn init() err.Error!AnimationOptimizer {
+    pub fn init(failure: *err.Failure) err.Error!AnimationOptimizer {
         var handle: *c.AnimationOptimizer = undefined;
-        try err.check(c.zozzAnimationOptimizerCreate(&handle));
+        try err.check(failure, .animation_optimizer_create, c.zozzAnimationOptimizerCreate(&handle));
         return .{ .handle = handle };
     }
 
@@ -57,14 +57,14 @@ pub const AnimationOptimizer = struct {
 
     /// Replaces the default setting applied to every joint not otherwise
     /// overridden.
-    pub fn setSetting(self: AnimationOptimizer, setting: OptimizerSetting) err.Error!void {
+    pub fn setSetting(self: AnimationOptimizer, setting: OptimizerSetting, failure: *err.Failure) err.Error!void {
         const raw = settingToC(setting);
-        try err.check(c.zozzAnimationOptimizerSetSetting(self.handle.?, &raw));
+        try err.check(failure, .animation_optimizer_set_setting, c.zozzAnimationOptimizerSetSetting(err.live(self.handle), &raw));
     }
 
-    pub fn getSetting(self: AnimationOptimizer) err.Error!OptimizerSetting {
+    pub fn getSetting(self: AnimationOptimizer, failure: *err.Failure) err.Error!OptimizerSetting {
         var out: c.OptimizerSetting = undefined;
-        try err.check(c.zozzAnimationOptimizerGetSetting(self.handle.?, &out));
+        try err.check(failure, .animation_optimizer_get_setting, c.zozzAnimationOptimizerGetSetting(err.live(self.handle), &out));
         return settingFromC(out);
     }
 
@@ -73,14 +73,16 @@ pub const AnimationOptimizer = struct {
     /// it is not checked against any particular skeleton here — only
     /// whichever skeleton `run` is later called with can make it valid or
     /// not.
-    pub fn setJointOverride(self: AnimationOptimizer, joint: u32, setting: OptimizerSetting) err.Error!void {
+    pub fn setJointOverride(self: AnimationOptimizer, joint: u32, setting: OptimizerSetting, failure: *err.Failure) err.Error!void {
         const raw = settingToC(setting);
-        try err.check(c.zozzAnimationOptimizerSetJointOverride(self.handle.?, @intCast(joint), &raw));
+        const joint_index = try err.narrow(failure, .animation_optimizer_set_joint_override, i32, joint);
+        try err.check(failure, .animation_optimizer_set_joint_override, c.zozzAnimationOptimizerSetJointOverride(err.live(self.handle), joint_index, &raw));
     }
 
     /// Removes a joint's override, if any. Not an error if it had none.
-    pub fn clearJointOverride(self: AnimationOptimizer, joint: u32) err.Error!void {
-        try err.check(c.zozzAnimationOptimizerClearJointOverride(self.handle.?, @intCast(joint)));
+    pub fn clearJointOverride(self: AnimationOptimizer, joint: u32, failure: *err.Failure) err.Error!void {
+        const joint_index = try err.narrow(failure, .animation_optimizer_clear_joint_override, i32, joint);
+        try err.check(failure, .animation_optimizer_clear_joint_override, c.zozzAnimationOptimizerClearJointOverride(err.live(self.handle), joint_index));
     }
 
     /// Runs the optimizer over `input`, writing the decimated clip to
@@ -92,8 +94,9 @@ pub const AnimationOptimizer = struct {
         input: offline_mod.RawAnimation,
         skeleton: skeleton_mod.Skeleton,
         output: offline_mod.RawAnimation,
+        failure: *err.Failure,
     ) err.Error!void {
-        try err.check(c.zozzAnimationOptimizerRun(self.handle.?, input.handle.?, skeleton.handle.?, output.handle.?));
+        try err.check(failure, .animation_optimizer_run, c.zozzAnimationOptimizerRun(err.live(self.handle), err.live(input.handle), err.live(skeleton.handle), err.live(output.handle)));
     }
 };
 
@@ -109,9 +112,9 @@ pub const FixedRateSamplingTime = struct {
 
     /// `duration` must be finite and >= 0; `frequency` must be finite and
     /// > 0.
-    pub fn init(duration: f32, frequency: f32) err.Error!FixedRateSamplingTime {
+    pub fn init(duration: f32, frequency: f32, failure: *err.Failure) err.Error!FixedRateSamplingTime {
         var handle: *c.FixedRateSamplingTime = undefined;
-        try err.check(c.zozzFixedRateSamplingTimeCreate(duration, frequency, &handle));
+        try err.check(failure, .fixed_rate_sampling_time_create, c.zozzFixedRateSamplingTimeCreate(duration, frequency, &handle));
         return .{ .handle = handle };
     }
 
@@ -121,13 +124,13 @@ pub const FixedRateSamplingTime = struct {
     }
 
     pub fn numKeys(self: FixedRateSamplingTime) usize {
-        return c.zozzFixedRateSamplingTimeNumKeys(self.handle.?);
+        return c.zozzFixedRateSamplingTimeNumKeys(err.live(self.handle));
     }
 
     /// Time of the `key`-th sample. `key` must be < `numKeys`.
-    pub fn at(self: FixedRateSamplingTime, key: usize) err.Error!f32 {
+    pub fn at(self: FixedRateSamplingTime, key: usize, failure: *err.Failure) err.Error!f32 {
         var out: f32 = undefined;
-        try err.check(c.zozzFixedRateSamplingTimeAt(self.handle.?, key, &out));
+        try err.check(failure, .fixed_rate_sampling_time_at, c.zozzFixedRateSamplingTimeAt(err.live(self.handle), key, &out));
         return out;
     }
 };
@@ -144,8 +147,8 @@ pub const AdditiveAnimationBuilder = struct {
     /// Builds a delta animation from `input` using its own first frame as
     /// the reference pose, per joint. `output` must be distinct from
     /// `input`; its previous contents are discarded even on failure.
-    pub fn run(input: offline_mod.RawAnimation, output: offline_mod.RawAnimation) err.Error!void {
-        try err.check(c.zozzAdditiveAnimationBuilderRun(input.handle.?, output.handle.?));
+    pub fn run(input: offline_mod.RawAnimation, output: offline_mod.RawAnimation, failure: *err.Failure) err.Error!void {
+        try err.check(failure, .additive_animation_builder_run, c.zozzAdditiveAnimationBuilderRun(err.live(input.handle), err.live(output.handle)));
     }
 
     /// As `run`, but the reference pose is supplied explicitly: one
@@ -155,12 +158,13 @@ pub const AdditiveAnimationBuilder = struct {
         input: offline_mod.RawAnimation,
         reference_pose: []const math.Transform,
         output: offline_mod.RawAnimation,
+        failure: *err.Failure,
     ) err.Error!void {
-        try err.check(c.zozzAdditiveAnimationBuilderRunWithReference(
-            input.handle.?,
+        try err.check(failure, .additive_animation_builder_run_with_reference, c.zozzAdditiveAnimationBuilderRunWithReference(
+            err.live(input.handle),
             if (reference_pose.len == 0) null else reference_pose.ptr,
             reference_pose.len,
-            output.handle.?,
+            err.live(output.handle),
         ));
     }
 };
@@ -205,9 +209,9 @@ pub const MotionExtractor = struct {
     /// extracts X/Z against the skeleton reference, baked, not looped;
     /// rotation extracts Y (yaw) against the skeleton reference, baked, not
     /// looped.
-    pub fn init() err.Error!MotionExtractor {
+    pub fn init(failure: *err.Failure) err.Error!MotionExtractor {
         var handle: *c.MotionExtractor = undefined;
-        try err.check(c.zozzMotionExtractorCreate(&handle));
+        try err.check(failure, .motion_extractor_create, c.zozzMotionExtractorCreate(&handle));
         return .{ .handle = handle };
     }
 
@@ -218,33 +222,34 @@ pub const MotionExtractor = struct {
 
     /// Index of the joint root motion is extracted from. Whether it is in
     /// range for a particular skeleton is checked at `run`.
-    pub fn setRootJoint(self: MotionExtractor, joint: u32) err.Error!void {
-        try err.check(c.zozzMotionExtractorSetRootJoint(self.handle.?, @intCast(joint)));
+    pub fn setRootJoint(self: MotionExtractor, joint: u32, failure: *err.Failure) err.Error!void {
+        const joint_index = try err.narrow(failure, .motion_extractor_set_root_joint, i32, joint);
+        try err.check(failure, .motion_extractor_set_root_joint, c.zozzMotionExtractorSetRootJoint(err.live(self.handle), joint_index));
     }
 
     pub fn rootJoint(self: MotionExtractor) u32 {
-        return @intCast(c.zozzMotionExtractorGetRootJoint(self.handle.?));
+        return err.reported(u32, c.zozzMotionExtractorGetRootJoint(err.live(self.handle)));
     }
 
-    pub fn setPositionSettings(self: MotionExtractor, settings: MotionSettings) err.Error!void {
+    pub fn setPositionSettings(self: MotionExtractor, settings: MotionSettings, failure: *err.Failure) err.Error!void {
         const raw = motionSettingsToC(settings);
-        try err.check(c.zozzMotionExtractorSetPositionSettings(self.handle.?, &raw));
+        try err.check(failure, .motion_extractor_set_position_settings, c.zozzMotionExtractorSetPositionSettings(err.live(self.handle), &raw));
     }
 
-    pub fn positionSettings(self: MotionExtractor) err.Error!MotionSettings {
+    pub fn positionSettings(self: MotionExtractor, failure: *err.Failure) err.Error!MotionSettings {
         var out: c.MotionSettings = undefined;
-        try err.check(c.zozzMotionExtractorGetPositionSettings(self.handle.?, &out));
+        try err.check(failure, .motion_extractor_get_position_settings, c.zozzMotionExtractorGetPositionSettings(err.live(self.handle), &out));
         return motionSettingsFromC(out);
     }
 
-    pub fn setRotationSettings(self: MotionExtractor, settings: MotionSettings) err.Error!void {
+    pub fn setRotationSettings(self: MotionExtractor, settings: MotionSettings, failure: *err.Failure) err.Error!void {
         const raw = motionSettingsToC(settings);
-        try err.check(c.zozzMotionExtractorSetRotationSettings(self.handle.?, &raw));
+        try err.check(failure, .motion_extractor_set_rotation_settings, c.zozzMotionExtractorSetRotationSettings(err.live(self.handle), &raw));
     }
 
-    pub fn rotationSettings(self: MotionExtractor) err.Error!MotionSettings {
+    pub fn rotationSettings(self: MotionExtractor, failure: *err.Failure) err.Error!MotionSettings {
         var out: c.MotionSettings = undefined;
-        try err.check(c.zozzMotionExtractorGetRotationSettings(self.handle.?, &out));
+        try err.check(failure, .motion_extractor_get_rotation_settings, c.zozzMotionExtractorGetRotationSettings(err.live(self.handle), &out));
         return motionSettingsFromC(out);
     }
 
@@ -261,14 +266,15 @@ pub const MotionExtractor = struct {
         motion_position: rawtrack_mod.RawFloat3Track,
         motion_rotation: rawtrack_mod.RawQuaternionTrack,
         output: offline_mod.RawAnimation,
+        failure: *err.Failure,
     ) err.Error!void {
-        try err.check(c.zozzMotionExtractorRun(
-            self.handle.?,
-            input.handle.?,
-            skeleton.handle.?,
-            motion_position.handle.?,
-            motion_rotation.handle.?,
-            output.handle.?,
+        try err.check(failure, .motion_extractor_run, c.zozzMotionExtractorRun(
+            err.live(self.handle),
+            err.live(input.handle),
+            err.live(skeleton.handle),
+            err.live(motion_position.handle),
+            err.live(motion_rotation.handle),
+            err.live(output.handle),
         ));
     }
 };

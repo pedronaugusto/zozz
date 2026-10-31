@@ -54,15 +54,15 @@ pub const Job = struct {
     out_tangents: ?MutChannel = null,
 
     /// Runs the skinning job.
-    pub fn run(self: Job) err.Error!void {
+    pub fn run(self: Job, failure: *err.Failure) err.Error!void {
         const in_normals = if (self.in_normals) |ch| ch.data else null;
         const in_tangents = if (self.in_tangents) |ch| ch.data else null;
         const out_normals = if (self.out_normals) |ch| ch.data else null;
         const out_tangents = if (self.out_tangents) |ch| ch.data else null;
 
         var raw = c.SkinningJob{
-            .vertex_count = @intCast(self.vertex_count),
-            .influences_count = @intCast(self.influences_count),
+            .vertex_count = try err.narrow(failure, .skinning_job_run, c_int, self.vertex_count),
+            .influences_count = try err.narrow(failure, .skinning_job_run, c_int, self.influences_count),
 
             .joint_matrices = self.joint_matrices.ptr,
             .joint_matrices_count = self.joint_matrices.len,
@@ -102,7 +102,7 @@ pub const Job = struct {
             .out_tangents_count = mutLenOr0(f32, out_tangents),
             .out_tangents_stride = if (self.out_tangents) |ch| ch.stride else 0,
         };
-        try err.check(c.zozzSkinningJobRun(&raw));
+        try err.check(failure, .skinning_job_run, c.zozzSkinningJobRun(&raw));
     }
 };
 

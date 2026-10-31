@@ -68,9 +68,10 @@ fn normalize(v: [3]f32) [3]f32 {
 }
 
 test "a single-influence vertex lands exactly where its joint matrix puts it" {
+    var failure: zozz.Failure = .{};
     const gpa = std.testing.allocator;
-    try zozz.setAllocator(gpa);
-    defer zozz.resetAllocator() catch unreachable;
+    try zozz.setAllocator(gpa, &failure);
+    defer zozz.resetAllocator(&failure) catch |e| std.debug.panic("zozz: {s}", .{@errorName(e)});
 
     // Two joints doing visibly different things, so a job that silently used
     // joint 0 for everything would be caught.
@@ -97,7 +98,7 @@ test "a single-influence vertex lands exactly where its joint matrix puts it" {
         .joint_indices_stride = 1 * @sizeOf(u16),
         .in_positions = .{ .data = &in_positions, .stride = float3_stride },
         .out_positions = .{ .data = &out_positions, .stride = float3_stride },
-    }).run();
+    }).run(&failure);
 
     for (0..vertex_count) |v| {
         const source: [3]f32 = in_positions[v * 3 ..][0..3].*;
@@ -112,9 +113,10 @@ test "a single-influence vertex lands exactly where its joint matrix puts it" {
 }
 
 test "two influences summing to 1 interpolate between the two single-joint results" {
+    var failure: zozz.Failure = .{};
     const gpa = std.testing.allocator;
-    try zozz.setAllocator(gpa);
-    defer zozz.resetAllocator() catch unreachable;
+    try zozz.setAllocator(gpa, &failure);
+    defer zozz.resetAllocator(&failure) catch |e| std.debug.panic("zozz: {s}", .{@errorName(e)});
 
     const joints = [_]zozz.Mat4{
         rotateZThenTranslate(std.math.pi / 2.0, .{ 10, 0, 0 }),
@@ -150,7 +152,7 @@ test "two influences summing to 1 interpolate between the two single-joint resul
         .joint_weights_stride = 1 * @sizeOf(f32),
         .in_positions = .{ .data = &in_positions, .stride = float3_stride },
         .out_positions = .{ .data = &blended, .stride = float3_stride },
-    }).run();
+    }).run(&failure);
 
     for (0..vertex_count) |v| {
         const source: [3]f32 = in_positions[v * 3 ..][0..3].*;
@@ -177,6 +179,7 @@ fn skinPadded(
     joints: []const zozz.Mat4,
     source: [3]f32,
 ) ![3]f32 {
+    var failure: zozz.Failure = .{};
     var indices: [influences]u16 = undefined;
     indices[0] = 0;
     for (indices[1..]) |*i| i.* = 1;
@@ -198,14 +201,15 @@ fn skinPadded(
         .joint_weights_stride = if (influences > 1) (influences - 1) * @sizeOf(f32) else 0,
         .in_positions = .{ .data = &source, .stride = float3_stride },
         .out_positions = .{ .data = &out, .stride = float3_stride },
-    }).run();
+    }).run(&failure);
     return out;
 }
 
 test "the influence-count variants agree on a vertex that only one joint moves" {
+    var failure: zozz.Failure = .{};
     const gpa = std.testing.allocator;
-    try zozz.setAllocator(gpa);
-    defer zozz.resetAllocator() catch unreachable;
+    try zozz.setAllocator(gpa, &failure);
+    defer zozz.resetAllocator(&failure) catch |e| std.debug.panic("zozz: {s}", .{@errorName(e)});
 
     // ozz specialises the skinning loop per influence count (1, 2, 3, 4, and
     // a generic path beyond) — five separate bodies of code that must all
@@ -227,9 +231,10 @@ test "the influence-count variants agree on a vertex that only one joint moves" 
 }
 
 test "normals are transformed as directions, and the inverse-transpose set is used when given" {
+    var failure: zozz.Failure = .{};
     const gpa = std.testing.allocator;
-    try zozz.setAllocator(gpa);
-    defer zozz.resetAllocator() catch unreachable;
+    try zozz.setAllocator(gpa, &failure);
+    defer zozz.resetAllocator(&failure) catch |e| std.debug.panic("zozz: {s}", .{@errorName(e)});
 
     // A joint that both rotates and translates a long way.
     const rotating = [_]zozz.Mat4{rotateZThenTranslate(std.math.pi / 2.0, .{ 100, 200, 300 })};
@@ -250,7 +255,7 @@ test "normals are transformed as directions, and the inverse-transpose set is us
         .in_normals = .{ .data = &in_normals, .stride = float3_stride },
         .out_positions = .{ .data = &out_positions, .stride = float3_stride },
         .out_normals = .{ .data = &out_normals, .stride = float3_stride },
-    }).run();
+    }).run(&failure);
 
     // The position picks up the translation; the normal must not. A normal
     // that moved by (100, 200, 300) would be meaningless, and this is the
@@ -278,7 +283,7 @@ test "normals are transformed as directions, and the inverse-transpose set is us
         .in_normals = .{ .data = &diagonal_normal, .stride = float3_stride },
         .out_positions = .{ .data = &out_positions, .stride = float3_stride },
         .out_normals = .{ .data = &without, .stride = float3_stride },
-    }).run();
+    }).run(&failure);
 
     var with: [3]f32 = undefined;
     try (zozz.skinning.Job{
@@ -292,7 +297,7 @@ test "normals are transformed as directions, and the inverse-transpose set is us
         .in_normals = .{ .data = &diagonal_normal, .stride = float3_stride },
         .out_positions = .{ .data = &out_positions, .stride = float3_stride },
         .out_normals = .{ .data = &with, .stride = float3_stride },
-    }).run();
+    }).run(&failure);
 
     // Output normals are NOT normalized by the job (documented), so compare
     // directions rather than components.
@@ -302,4 +307,20 @@ test "normals are transformed as directions, and the inverse-transpose set is us
     // The positions are untouched by which set was used — only vectors take
     // the alternate path.
     try expectVec3(transformPoint(stretching[0], .{ 1, 0, 0 }), out_positions, 1e-5);
+}
+
+test "a vertex count the C boundary cannot carry is refused, not narrowed" {
+    var failure: zozz.Failure = .{};
+    var out: [3]f32 = undefined;
+    const job: zozz.skinning.Job = .{
+        .vertex_count = 1 << 31,
+        .influences_count = 1,
+        .joint_matrices = &.{zozz.mat4_identity},
+        .joint_indices = &.{0},
+        .joint_indices_stride = @sizeOf(u16),
+        .in_positions = .{ .data = &.{ 0, 0, 0 }, .stride = 3 * @sizeOf(f32) },
+        .out_positions = .{ .data = &out, .stride = 3 * @sizeOf(f32) },
+    };
+    try std.testing.expectError(zozz.Error.InvalidArgument, job.run(&failure));
+    try std.testing.expectEqualSlices(zozz.Frame, &.{.{ .call = .skinning_job_run, .result = .invalid_argument }}, failure.frames());
 }

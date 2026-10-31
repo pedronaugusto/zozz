@@ -1,6 +1,7 @@
 //! Joint hierarchy and rest pose.
 
 const std = @import("std");
+const aegis = @import("aegis");
 const c = @import("c.zig");
 const err = @import("error.zig");
 const math = @import("math.zig");
@@ -23,17 +24,18 @@ pub const Skeleton = struct {
     ///
     /// `path` is passed straight to the C runtime's `fopen`, so it must be a
     /// native path in the platform's encoding.
-    pub fn initFromFile(path: [*:0]const u8) err.Error!Skeleton {
+    pub fn initFromFile(path: [*:0]const u8, failure: *err.Failure) err.Error!Skeleton {
         var handle: *c.Skeleton = undefined;
-        try err.check(c.zozzSkeletonLoadFile(path, &handle));
+        try err.check(failure, .skeleton_load_file, c.zozzSkeletonLoadFile(path, &handle));
         return .{ .handle = handle };
     }
 
     /// Loads a skeleton from a memory image of a `.ozz` file. The bytes are
     /// read during the call only and need not outlive it.
-    pub fn initFromMemory(bytes: []const u8) err.Error!Skeleton {
+    pub fn initFromMemory(bytes: err.Bytes, failure: *err.Failure) err.Error!Skeleton {
+        const image = bytes.readForParse();
         var handle: *c.Skeleton = undefined;
-        try err.check(c.zozzSkeletonLoadMemory(bytes.ptr, bytes.len, &handle));
+        try err.check(failure, .skeleton_load_memory, c.zozzSkeletonLoadMemory(image.ptr, image.len, &handle));
         return .{ .handle = handle };
     }
 
@@ -43,25 +45,27 @@ pub const Skeleton = struct {
     }
 
     pub fn numJoints(self: Skeleton) u32 {
-        return @intCast(c.zozzSkeletonNumJoints(self.handle.?));
+        return err.reported(u32, c.zozzSkeletonNumJoints(err.live(self.handle)));
     }
 
     /// Number of SoA blocks the skeleton occupies: `(numJoints + 3) / 4`.
     pub fn numSoaJoints(self: Skeleton) u32 {
-        return @intCast(c.zozzSkeletonNumSoaJoints(self.handle.?));
+        return err.reported(u32, c.zozzSkeletonNumSoaJoints(err.live(self.handle)));
     }
 
     /// Borrowed joint name, or null when `joint` is out of range. Valid only
     /// while the skeleton is alive.
     pub fn jointName(self: Skeleton, joint: u32) ?[:0]const u8 {
-        const name = c.zozzSkeletonJointName(self.handle.?, @intCast(joint)) orelse return null;
+        const index = aegis.int.narrow(c_int, joint) orelse return null;
+        const name = c.zozzSkeletonJointName(err.live(self.handle), index) orelse return null;
         return std.mem.span(name);
     }
 
     /// Parent joint index, or `no_parent` for a root. Out-of-range indices
     /// also report `no_parent`; check `numJoints` when the difference matters.
     pub fn jointParent(self: Skeleton, joint: u32) i16 {
-        return c.zozzSkeletonJointParent(self.handle.?, @intCast(joint));
+        const index = aegis.int.narrow(c_int, joint) orelse return no_parent;
+        return c.zozzSkeletonJointParent(err.live(self.handle), index);
     }
 
     /// ozz's own parent array, in depth-first order, borrowed: no copy and
@@ -70,7 +74,7 @@ pub const Skeleton = struct {
     /// skeleton with no joints.
     pub fn jointParents(self: Skeleton) []const i16 {
         var count: usize = 0;
-        const ptr = c.zozzSkeletonJointParents(self.handle.?, &count) orelse
+        const ptr = c.zozzSkeletonJointParents(err.live(self.handle), &count) orelse
             return &.{};
         return ptr[0..count];
     }
@@ -80,7 +84,7 @@ pub const Skeleton = struct {
     /// into a slice when a slice is what the caller wants.
     pub fn jointNames(self: Skeleton) []const [*:0]const u8 {
         var count: usize = 0;
-        const ptr = c.zozzSkeletonJointNames(self.handle.?, &count) orelse
+        const ptr = c.zozzSkeletonJointNames(err.live(self.handle), &count) orelse
             return &.{};
         return ptr[0..count];
     }
@@ -90,22 +94,22 @@ pub const Skeleton = struct {
     /// copying twin, for a caller that means to WRITE the pose it seeds.
     pub fn jointRestPoses(self: Skeleton) []const math.SoaTransform {
         var count: usize = 0;
-        const ptr = c.zozzSkeletonJointRestPoses(self.handle.?, &count) orelse
+        const ptr = c.zozzSkeletonJointRestPoses(err.live(self.handle), &count) orelse
             return &.{};
         return ptr[0..count];
     }
 
     /// Writes the rest pose as local transforms. `out` must hold at least
     /// `numJoints` entries.
-    pub fn restPose(self: Skeleton, out: []math.Transform) err.Error!void {
-        try err.check(c.zozzSkeletonRestPose(self.handle.?, out.ptr, out.len));
+    pub fn restPose(self: Skeleton, out: []math.Transform, failure: *err.Failure) err.Error!void {
+        try err.check(failure, .skeleton_rest_pose, c.zozzSkeletonRestPose(err.live(self.handle), out.ptr, out.len));
     }
 
     /// Copies ozz's own `joint_rest_poses` into `out`, no transpose. Seed a
     /// pose with this before sampling a clip that drives only some of the
     /// skeleton's joints: the ones the clip misses keep the rest pose.
     /// `out` must hold at least `numSoaJoints` blocks.
-    pub fn restPoseSoa(self: Skeleton, out: []math.SoaTransform) err.Error!void {
-        try err.check(c.zozzSkeletonRestPoseSoa(self.handle.?, out.ptr, out.len));
+    pub fn restPoseSoa(self: Skeleton, out: []math.SoaTransform, failure: *err.Failure) err.Error!void {
+        try err.check(failure, .skeleton_rest_pose_soa, c.zozzSkeletonRestPoseSoa(err.live(self.handle), out.ptr, out.len));
     }
 };

@@ -11,6 +11,7 @@ const zozz = @import("zozz.zig");
 const encode = zozz.encode;
 
 test "encodeGV4 / decodeGV4 round-trip across the byte-length boundaries" {
+    var failure: zozz.Failure = .{};
     const cases = [_][4]u32{
         .{ 0, 0, 0, 0 },
         .{ 1, 255, 256, 65535 },
@@ -19,61 +20,73 @@ test "encodeGV4 / decodeGV4 round-trip across the byte-length boundaries" {
     };
     for (cases) |values| {
         var buf: [17]u8 = undefined;
-        const used = try encode.encodeGV4(values, &buf);
+        const used = try encode.encodeGV4(values, &buf, &failure);
         try std.testing.expect(used >= 5 and used <= 17);
 
         var out: [4]u32 = undefined;
-        const consumed = try encode.decodeGV4(buf[0..used], &out);
+        const consumed = try encode.decodeGV4(.init(buf[0..used]), &out, &failure);
         try std.testing.expectEqual(used, consumed);
         try std.testing.expectEqualSlices(u32, &values, &out);
     }
 }
 
 test "encodeGV4 rejects a buffer shorter than the fixed 17-byte worst case" {
+    var failure: zozz.Failure = .{};
     var buf: [16]u8 = undefined;
-    try std.testing.expectError(zozz.Error.BufferTooSmall, encode.encodeGV4(.{ 1, 2, 3, 4 }, &buf));
+    try std.testing.expectError(zozz.Error.BufferTooSmall, encode.encodeGV4(.{ 1, 2, 3, 4 }, &buf, &failure));
+    try std.testing.expectEqualSlices(zozz.Frame, &.{.{ .call = .encode_gv4, .result = .buffer_too_small }}, failure.frames());
 }
 
 test "decodeGV4 rejects a buffer shorter than the 5-byte minimum" {
+    var failure: zozz.Failure = .{};
     var out: [4]u32 = undefined;
     var buf: [4]u8 = undefined;
-    try std.testing.expectError(zozz.Error.BufferTooSmall, encode.decodeGV4(&buf, &out));
+    try std.testing.expectError(zozz.Error.BufferTooSmall, encode.decodeGV4(.init(&buf), &out, &failure));
+    try std.testing.expectEqualSlices(zozz.Frame, &.{.{ .call = .decode_gv4, .result = .buffer_too_small }}, failure.frames());
 }
 
 test "computeGV4WorstBufferSize: 15 bytes per group of 4, plus the header byte" {
-    try std.testing.expectEqual(@as(usize, 0), try encode.computeGV4WorstBufferSize(0));
-    try std.testing.expectEqual(@as(usize, 17), try encode.computeGV4WorstBufferSize(4));
-    try std.testing.expectEqual(@as(usize, 34), try encode.computeGV4WorstBufferSize(8));
+    var failure: zozz.Failure = .{};
+    try std.testing.expectEqual(@as(usize, 0), try encode.computeGV4WorstBufferSize(0, &failure));
+    try std.testing.expectEqual(@as(usize, 17), try encode.computeGV4WorstBufferSize(4, &failure));
+    try std.testing.expectEqual(@as(usize, 34), try encode.computeGV4WorstBufferSize(8, &failure));
 }
 
 test "computeGV4WorstBufferSize rejects a count that is not a multiple of 4" {
-    try std.testing.expectError(zozz.Error.InvalidArgument, encode.computeGV4WorstBufferSize(5));
+    var failure: zozz.Failure = .{};
+    try std.testing.expectError(zozz.Error.InvalidArgument, encode.computeGV4WorstBufferSize(5, &failure));
+    try std.testing.expectEqualSlices(zozz.Frame, &.{.{ .call = .compute_gv4_worst_buffer_size, .result = .invalid_argument }}, failure.frames());
 }
 
 test "encodeGV4Stream / decodeGV4Stream round-trip an arbitrary-length stream" {
+    var failure: zozz.Failure = .{};
     const values = [_]u32{ 0, 1, 200, 70000, 16777216, 42, 0xffffffff, 3, 9, 99, 999, 9999 };
-    const worst = try encode.computeGV4WorstBufferSize(values.len);
+    const worst = try encode.computeGV4WorstBufferSize(values.len, &failure);
     var buf: [64]u8 = undefined;
     try std.testing.expect(worst <= buf.len);
 
-    const used = try encode.encodeGV4Stream(&values, buf[0..worst]);
+    const used = try encode.encodeGV4Stream(&values, buf[0..worst], &failure);
     try std.testing.expect(used <= worst);
 
     var out: [values.len]u32 = undefined;
-    const consumed = try encode.decodeGV4Stream(buf[0..used], &out);
+    const consumed = try encode.decodeGV4Stream(.init(buf[0..used]), &out, &failure);
     try std.testing.expectEqual(used, consumed);
     try std.testing.expectEqualSlices(u32, &values, &out);
 }
 
 test "encodeGV4Stream rejects a count that is not a multiple of 4" {
+    var failure: zozz.Failure = .{};
     var buf: [64]u8 = undefined;
-    try std.testing.expectError(zozz.Error.InvalidArgument, encode.encodeGV4Stream(&.{ 1, 2, 3 }, &buf));
+    try std.testing.expectError(zozz.Error.InvalidArgument, encode.encodeGV4Stream(&.{ 1, 2, 3 }, &buf, &failure));
+    try std.testing.expectEqualSlices(zozz.Frame, &.{.{ .call = .encode_gv4_stream, .result = .invalid_argument }}, failure.frames());
 }
 
 test "decodeGV4Stream rejects a buffer shorter than the minimum encoding" {
+    var failure: zozz.Failure = .{};
     var out: [4]u32 = undefined;
     var buf: [4]u8 = undefined;
-    try std.testing.expectError(zozz.Error.BufferTooSmall, encode.decodeGV4Stream(&buf, &out));
+    try std.testing.expectError(zozz.Error.BufferTooSmall, encode.decodeGV4Stream(.init(&buf), &out, &failure));
+    try std.testing.expectEqualSlices(zozz.Frame, &.{.{ .call = .decode_gv4_stream, .result = .buffer_too_small }}, failure.frames());
 }
 
 // Wire-format pin: bytes ozz's own EncodeGV4/EncodeGV4Stream produced, not
@@ -84,6 +97,7 @@ test "decodeGV4Stream rejects a buffer shorter than the minimum encoding" {
 // these bytes.
 
 test "decodeGV4 decodes a buffer ozz's own EncodeGV4 produced" {
+    var failure: zozz.Failure = .{};
     // Input {1, 0x1234, 0x123456, 0xdeadbeef}: one value needing each of the
     // four possible byte lengths (1, 2, 3, 4), so the prefix byte exercises
     // every 2-bit tag value at once.
@@ -95,19 +109,20 @@ test "decodeGV4 decodes a buffer ozz's own EncodeGV4 produced" {
         0xEF, 0xBE, 0xAD, 0xDE, // d = 0xdeadbeef (4 bytes, little-endian)
     };
     var out: [4]u32 = undefined;
-    const consumed = try encode.decodeGV4(&buf, &out);
+    const consumed = try encode.decodeGV4(.init(&buf), &out, &failure);
     try std.testing.expectEqual(@as(usize, buf.len), consumed);
     try std.testing.expectEqualSlices(u32, &.{ 1, 0x1234, 0x123456, 0xdeadbeef }, &out);
 }
 
 test "decodeGV4Stream decodes a buffer ozz's own EncodeGV4Stream produced" {
+    var failure: zozz.Failure = .{};
     // Two groups: {0, 1, 200, 70000} then {16777216, 42, 0xffffffff, 3}.
     const buf = [_]u8{
         0x80, 0x00, 0x01, 0xC8, 0x70, 0x11, 0x01, // group 1
         0x33, 0x00, 0x00, 0x00, 0x01, 0x2A, 0xFF, 0xFF, 0xFF, 0xFF, 0x03, // group 2
     };
     var out: [8]u32 = undefined;
-    const consumed = try encode.decodeGV4Stream(&buf, &out);
+    const consumed = try encode.decodeGV4Stream(.init(&buf), &out, &failure);
     try std.testing.expectEqual(@as(usize, buf.len), consumed);
     try std.testing.expectEqualSlices(u32, &.{ 0, 1, 200, 70000, 16777216, 42, 0xffffffff, 3 }, &out);
 }

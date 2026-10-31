@@ -45,26 +45,27 @@ const Sink = struct {
 };
 
 test "zozzSetLogLevel round-trips through zozzGetLogLevel" {
-    defer _ = zozz.setLogLevel(.standard) catch |e| std.debug.panic("restoring the log level: {s}", .{@errorName(e)});
+    defer zozz.setLogLevel(.standard);
 
     // ozz's own default, before anything here has touched it.
     try std.testing.expectEqual(zozz.LogLevel.standard, zozz.logLevel());
 
-    try zozz.setLogLevel(.silent);
+    zozz.setLogLevel(.silent);
     try std.testing.expectEqual(zozz.LogLevel.silent, zozz.logLevel());
 
-    try zozz.setLogLevel(.verbose);
+    zozz.setLogLevel(.verbose);
     try std.testing.expectEqual(zozz.LogLevel.verbose, zozz.logLevel());
 
-    try zozz.setLogLevel(.standard);
+    zozz.setLogLevel(.standard);
     try std.testing.expectEqual(zozz.LogLevel.standard, zozz.logLevel());
 }
 
 test "SILENT suppresses the diagnostic ozz logs for a version-mismatched skeleton archive; STANDARD does not" {
+    var failure: zozz.Failure = .{};
     const gpa = std.testing.allocator;
-    try zozz.setAllocator(gpa);
-    defer zozz.resetAllocator() catch unreachable;
-    defer _ = zozz.setLogLevel(.standard) catch |e| std.debug.panic("restoring the log level: {s}", .{@errorName(e)});
+    try zozz.setAllocator(gpa, &failure);
+    defer zozz.resetAllocator(&failure) catch |e| std.debug.panic("zozz: {s}", .{@errorName(e)});
+    defer zozz.setLogLevel(.standard);
 
     // Just enough of an archive to pass Skeleton::Load's tag test, then fail
     // its version check: the tag is "ozz-skeleton" plus its counted null
@@ -75,16 +76,16 @@ test "SILENT suppresses the diagnostic ozz logs for a version-mismatched skeleto
     var sink: Sink = .{ .gpa = gpa };
     defer sink.deinit();
     const bridge = sink.stream();
-    var archive = try zozz.OArchive.init(&bridge, zozz.nativeEndianness());
-    try archive.saveBinary("ozz-skeleton\x00");
-    try archive.saveInt32(999);
+    var archive = try zozz.OArchive.init(&bridge, zozz.nativeEndianness(), &failure);
+    try archive.saveBinary("ozz-skeleton\x00", &failure);
+    try archive.saveInt32(999, &failure);
     archive.deinit();
 
-    try zozz.setLogLevel(.standard);
+    zozz.setLogLevel(.standard);
     const standard_bytes = zozzFixtureCapturedSkeletonLoadBytes(sink.list.items.ptr, sink.list.items.len);
     try std.testing.expect(standard_bytes > 0);
 
-    try zozz.setLogLevel(.silent);
+    zozz.setLogLevel(.silent);
     const silent_bytes = zozzFixtureCapturedSkeletonLoadBytes(sink.list.items.ptr, sink.list.items.len);
     try std.testing.expectEqual(@as(usize, 0), silent_bytes);
 }

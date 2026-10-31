@@ -51,26 +51,27 @@ fn normalize(v: [3]f32) [3]f32 {
 }
 
 test "two-bone IK moves the end effector toward the target, and reaches an in-range one" {
+    var failure: zozz.Failure = .{};
     const gpa = std.testing.allocator;
-    try zozz.setAllocator(gpa);
-    defer zozz.resetAllocator() catch unreachable;
+    try zozz.setAllocator(gpa, &failure);
+    defer zozz.resetAllocator(&failure) catch |e| std.debug.panic("zozz: {s}", .{@errorName(e)});
 
     // A two-bone chain lying flat along +X, each bone length 1: fully
     // extended reach is 2.
-    var raw = try zozz.RawSkeleton.init();
+    var raw = try zozz.RawSkeleton.init(&failure);
     defer raw.deinit();
-    const start = try raw.addJoint(null, "start", translated(0, 0, 0));
-    const mid = try raw.addJoint(start, "mid", translated(1, 0, 0));
-    _ = try raw.addJoint(mid, "end", translated(1, 0, 0));
-    var skel = try raw.build();
+    const start = try raw.addJoint(null, "start", translated(0, 0, 0), &failure);
+    const mid = try raw.addJoint(start, "mid", translated(1, 0, 0), &failure);
+    _ = try raw.addJoint(mid, "end", translated(1, 0, 0), &failure);
+    var skel = try raw.build(&failure);
     defer skel.deinit();
 
     // Three joints fit in one SoA block.
     var pose: [1]zozz.SoaTransform = undefined;
-    try skel.restPoseSoa(&pose);
+    try skel.restPoseSoa(&pose, &failure);
 
     var models: [3]zozz.Mat4 = undefined;
-    try (zozz.LocalToModelJob{ .skeleton = skel, .locals = &pose, .root = null, .out = &models }).run();
+    try (zozz.LocalToModelJob{ .skeleton = skel, .locals = &pose, .root = null, .out = &models }).run(&failure);
 
     // Case 1: a target beyond the chain's reach, off the chain's own axis so
     // reaching it actually requires bending. The end effector cannot reach
@@ -85,7 +86,7 @@ test "two-bone IK moves the end effector toward the target, and reaches an in-ra
             .start_joint = &models[0],
             .mid_joint = &models[1],
             .end_joint = &models[2],
-        }).run();
+        }).run(&failure);
         try std.testing.expect(!result.reached);
 
         // Both joints of the chain in ONE crossing, which is what a batch is
@@ -93,16 +94,16 @@ test "two-bone IK moves the end effector toward the target, and reaches an in-ra
         try zozz.ik.applyCorrections(&pose, &.{
             zozz.ik.correction(start, result.start_joint_correction),
             zozz.ik.correction(mid, result.mid_joint_correction),
-        });
-        try (zozz.LocalToModelJob{ .skeleton = skel, .locals = &pose, .root = null, .out = &models }).run();
+        }, &failure);
+        try (zozz.LocalToModelJob{ .skeleton = skel, .locals = &pose, .root = null, .out = &models }).run(&failure);
         const after = distance(position(models[2]), target);
 
         try std.testing.expect(after < before);
     }
 
     // Reset to the rest pose for a clean second case.
-    try skel.restPoseSoa(&pose);
-    try (zozz.LocalToModelJob{ .skeleton = skel, .locals = &pose, .root = null, .out = &models }).run();
+    try skel.restPoseSoa(&pose, &failure);
+    try (zozz.LocalToModelJob{ .skeleton = skel, .locals = &pose, .root = null, .out = &models }).run(&failure);
 
     // Case 2: a target inside the chain's reach must actually be reached.
     {
@@ -112,14 +113,14 @@ test "two-bone IK moves the end effector toward the target, and reaches an in-ra
             .start_joint = &models[0],
             .mid_joint = &models[1],
             .end_joint = &models[2],
-        }).run();
+        }).run(&failure);
         try std.testing.expect(result.reached);
 
         // The single-joint spelling, twice: the same entry point with a
         // one-element batch, and it must land the chain in the same place.
-        try zozz.ik.applyCorrection(&pose, start, result.start_joint_correction);
-        try zozz.ik.applyCorrection(&pose, mid, result.mid_joint_correction);
-        try (zozz.LocalToModelJob{ .skeleton = skel, .locals = &pose, .root = null, .out = &models }).run();
+        try zozz.ik.applyCorrection(&pose, start, result.start_joint_correction, &failure);
+        try zozz.ik.applyCorrection(&pose, mid, result.mid_joint_correction, &failure);
+        try (zozz.LocalToModelJob{ .skeleton = skel, .locals = &pose, .root = null, .out = &models }).run(&failure);
         const reached_pos = position(models[2]);
 
         try std.testing.expectApproxEqAbs(target[0], reached_pos[0], 5e-3);
@@ -129,12 +130,13 @@ test "two-bone IK moves the end effector toward the target, and reaches an in-ra
 }
 
 test "aim IK points the forward axis at the target" {
+    var failure: zozz.Failure = .{};
     const gpa = std.testing.allocator;
-    try zozz.setAllocator(gpa);
-    defer zozz.resetAllocator() catch unreachable;
+    try zozz.setAllocator(gpa, &failure);
+    defer zozz.resetAllocator(&failure) catch |e| std.debug.panic("zozz: {s}", .{@errorName(e)});
 
     var pose: [1]zozz.SoaTransform = undefined;
-    try zozz.pose.setIdentity(&pose);
+    try zozz.pose.setIdentity(&pose, &failure);
     // The joint sits at the origin with identity rotation, so its local
     // space equals its model space: the correction can be applied to the
     // pose and the aimed direction read back directly.
@@ -143,11 +145,11 @@ test "aim IK points the forward axis at the target" {
     const result = try (zozz.ik.AimJob{
         .target = .{ 0, 0, 5, 0 },
         .joint = &joint_matrix,
-    }).run();
+    }).run(&failure);
 
-    try zozz.ik.applyCorrection(&pose, 0, result.joint_correction);
+    try zozz.ik.applyCorrection(&pose, 0, result.joint_correction, &failure);
     var locals: [1]zozz.Transform = undefined;
-    try zozz.pose.toLocalTransforms(&pose, &locals);
+    try zozz.pose.toLocalTransforms(&pose, &locals, &failure);
 
     const aimed = normalize(rotate(locals[0].rotation, .{ 1, 0, 0 }));
     const target_dir = normalize([3]f32{ 0, 0, 5 });
@@ -157,22 +159,23 @@ test "aim IK points the forward axis at the target" {
 }
 
 test "weight = 0 is identity: exactly for TwoBoneJob, to ozz's Est tolerance for AimJob" {
+    var failure: zozz.Failure = .{};
     const gpa = std.testing.allocator;
-    try zozz.setAllocator(gpa);
-    defer zozz.resetAllocator() catch unreachable;
+    try zozz.setAllocator(gpa, &failure);
+    defer zozz.resetAllocator(&failure) catch |e| std.debug.panic("zozz: {s}", .{@errorName(e)});
 
-    var raw = try zozz.RawSkeleton.init();
+    var raw = try zozz.RawSkeleton.init(&failure);
     defer raw.deinit();
-    const start = try raw.addJoint(null, "start", translated(0, 0, 0));
-    const mid = try raw.addJoint(start, "mid", translated(1, 0, 0));
-    _ = try raw.addJoint(mid, "end", translated(1, 0, 0));
-    var skel = try raw.build();
+    const start = try raw.addJoint(null, "start", translated(0, 0, 0), &failure);
+    const mid = try raw.addJoint(start, "mid", translated(1, 0, 0), &failure);
+    _ = try raw.addJoint(mid, "end", translated(1, 0, 0), &failure);
+    var skel = try raw.build(&failure);
     defer skel.deinit();
     // Three joints fit in one SoA block.
     var pose: [1]zozz.SoaTransform = undefined;
-    try skel.restPoseSoa(&pose);
+    try skel.restPoseSoa(&pose, &failure);
     var models: [3]zozz.Mat4 = undefined;
-    try (zozz.LocalToModelJob{ .skeleton = skel, .locals = &pose, .root = null, .out = &models }).run();
+    try (zozz.LocalToModelJob{ .skeleton = skel, .locals = &pose, .root = null, .out = &models }).run(&failure);
 
     const two_bone = try (zozz.ik.TwoBoneJob{
         .target = .{ 5, 5, 5, 0 }, // wildly off-axis; would normally bend hard.
@@ -180,7 +183,7 @@ test "weight = 0 is identity: exactly for TwoBoneJob, to ozz's Est tolerance for
         .start_joint = &models[0],
         .mid_joint = &models[1],
         .end_joint = &models[2],
-    }).run();
+    }).run(&failure);
     // IKTwoBoneJob::Run has an explicit `weight <= 0` early-out that assigns
     // SimdQuaternion::identity() (ik_two_bone_job.cc), so this half is exact
     // on every backend and is held to an exact bar.
@@ -196,7 +199,7 @@ test "weight = 0 is identity: exactly for TwoBoneJob, to ozz's Est tolerance for
         .target = .{ 5, 5, 5, 0 },
         .weight = 0,
         .joint = &joint_matrix,
-    }).run();
+    }).run(&failure);
     try expectIdentityToEstTolerance(aim.joint_correction);
 }
 
@@ -222,20 +225,21 @@ fn expectIdentityToEstTolerance(q: [4]f32) !void {
 }
 
 test "AimJob's weight-0 identity is exact on a scalar ozz backend and estimated on SSE" {
+    var failure: zozz.Failure = .{};
     // The measured difference between the two backends ozz ships, pinned so it
     // cannot be mistaken for a binding defect again. ozz has `ref` (scalar) and
     // `sse` only -- no NEON -- so aarch64 runs `ref` and returns exactly 1.0,
     // while x86_64 runs `sse` and returns rsqrt(1.0) = 0.999755859375.
     const gpa = std.testing.allocator;
-    try zozz.setAllocator(gpa);
-    defer zozz.resetAllocator() catch unreachable;
+    try zozz.setAllocator(gpa, &failure);
+    defer zozz.resetAllocator(&failure) catch |e| std.debug.panic("zozz: {s}", .{@errorName(e)});
 
     const joint_matrix = zozz.mat4_identity;
     const aim = try (zozz.ik.AimJob{
         .target = .{ 5, 5, 5, 0 },
         .weight = 0,
         .joint = &joint_matrix,
-    }).run();
+    }).run(&failure);
 
     try expectIdentityToEstTolerance(aim.joint_correction);
 
@@ -283,9 +287,10 @@ test "IK job defaults match ozz's own" {
 }
 
 test "a batch of corrections is the same as applying them one at a time" {
+    var failure: zozz.Failure = .{};
     const gpa = std.testing.allocator;
-    try zozz.setAllocator(gpa);
-    defer zozz.resetAllocator() catch unreachable;
+    try zozz.setAllocator(gpa, &failure);
+    defer zozz.resetAllocator(&failure) catch |e| std.debug.panic("zozz: {s}", .{@errorName(e)});
 
     const h = @sqrt(0.5);
     const q_z: zozz.ik.Vec4 = .{ 0, 0, h, h };
@@ -297,22 +302,22 @@ test "a batch of corrections is the same as applying them one at a time" {
     // implementation hoists a single transpose over.
     var batched: [2]zozz.SoaTransform = undefined;
     var one_by_one: [2]zozz.SoaTransform = undefined;
-    try zozz.pose.setIdentity(&batched);
-    try zozz.pose.setIdentity(&one_by_one);
+    try zozz.pose.setIdentity(&batched, &failure);
+    try zozz.pose.setIdentity(&one_by_one, &failure);
 
     try zozz.ik.applyCorrections(&batched, &.{
         zozz.ik.correction(0, q_z),
         zozz.ik.correction(2, q_x),
         zozz.ik.correction(5, q_y),
-    });
-    try zozz.ik.applyCorrection(&one_by_one, 0, q_z);
-    try zozz.ik.applyCorrection(&one_by_one, 2, q_x);
-    try zozz.ik.applyCorrection(&one_by_one, 5, q_y);
+    }, &failure);
+    try zozz.ik.applyCorrection(&one_by_one, 0, q_z, &failure);
+    try zozz.ik.applyCorrection(&one_by_one, 2, q_x, &failure);
+    try zozz.ik.applyCorrection(&one_by_one, 5, q_y, &failure);
 
     var from_batch: [8]zozz.Transform = undefined;
     var from_singles: [8]zozz.Transform = undefined;
-    try zozz.pose.toLocalTransforms(&batched, &from_batch);
-    try zozz.pose.toLocalTransforms(&one_by_one, &from_singles);
+    try zozz.pose.toLocalTransforms(&batched, &from_batch, &failure);
+    try zozz.pose.toLocalTransforms(&one_by_one, &from_singles, &failure);
     try std.testing.expectEqualSlices(zozz.Transform, &from_singles, &from_batch);
 
     // An out-of-range joint anywhere in the batch is refused BEFORE anything
@@ -320,14 +325,26 @@ test "a batch of corrections is the same as applying them one at a time" {
     try std.testing.expectError(error.InvalidArgument, zozz.ik.applyCorrections(&batched, &.{
         zozz.ik.correction(1, q_z),
         zozz.ik.correction(99, q_z),
-    }));
+    }, &failure));
+    try std.testing.expectEqualSlices(zozz.Frame, &.{.{ .call = .soa_pose_apply_local_corrections, .result = .invalid_argument }}, failure.frames());
+    failure.reset();
     var after_failure: [8]zozz.Transform = undefined;
-    try zozz.pose.toLocalTransforms(&batched, &after_failure);
+    try zozz.pose.toLocalTransforms(&batched, &after_failure, &failure);
     try std.testing.expectEqualSlices(zozz.Transform, &from_batch, &after_failure);
 
     // An empty batch is a no-op, not an error: a pass that found nothing to
     // correct should not have to special-case the call.
-    try zozz.ik.applyCorrections(&batched, &.{});
-    try zozz.pose.toLocalTransforms(&batched, &after_failure);
+    try zozz.ik.applyCorrections(&batched, &.{}, &failure);
+    try zozz.pose.toLocalTransforms(&batched, &after_failure, &failure);
     try std.testing.expectEqualSlices(zozz.Transform, &from_batch, &after_failure);
+}
+
+test "a joint index past i32 is a correction the batch refuses, not a narrowing" {
+    // `correction` holds it as -1, an index out of every pose's range.
+    var failure: zozz.Failure = .{};
+    var pose: [1]zozz.SoaTransform = undefined;
+    try zozz.pose.setIdentity(&pose, &failure);
+    try std.testing.expectEqual(@as(i32, -1), zozz.ik.correction(1 << 31, .{ 0, 0, 0, 1 }).joint);
+    try std.testing.expectError(zozz.Error.InvalidArgument, zozz.ik.applyCorrection(&pose, 1 << 31, .{ 0, 0, 0, 1 }, &failure));
+    try std.testing.expectEqualSlices(zozz.Frame, &.{.{ .call = .soa_pose_apply_local_corrections, .result = .invalid_argument }}, failure.frames());
 }

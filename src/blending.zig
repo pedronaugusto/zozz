@@ -48,7 +48,7 @@ pub fn maskedLayer(
 /// second pass this wrapper adds. A joint whose accumulated `layers` weight
 /// falls below `threshold` (finite, > 0) is taken from `rest_pose` instead.
 /// `out.len` sets the SoA block count every other buffer is measured against;
-/// a `rest_pose` shorter than that is `error.InvalidArgument`.
+/// a shorter `rest_pose` is refused before ozz runs, as `.blending_run`.
 pub const BlendingJob = struct {
     layers: []const Layer,
     additive_layers: []const Layer = &.{},
@@ -58,15 +58,15 @@ pub const BlendingJob = struct {
 
     /// Runs the blending job. Nothing is allocated: the layer arrays are
     /// already in the layout ozz reads.
-    pub fn run(self: BlendingJob) err.Error!void {
+    pub fn run(self: BlendingJob, failure: *err.Failure) err.Error!void {
         // The only length this wrapper cannot forward. `blocks` below is the
         // count of BOTH `rest_pose` and `out` — that is the C contract, and
         // the span ozz validates is built from it, so ozz cannot see a
         // `rest_pose` that is short and would read past its end for every
         // joint that falls back to it. Every other buffer here carries its
         // own count across the boundary; this one is checked instead.
-        if (self.rest_pose.len < self.out.len) return err.Error.InvalidArgument;
-        try err.check(c.zozzBlendingRun(
+        if (self.rest_pose.len < self.out.len) return err.refuse(failure, .blending_run, err.Error.InvalidArgument);
+        try err.check(failure, .blending_run, c.zozzBlendingRun(
             self.layers.ptr,
             self.layers.len,
             self.additive_layers.ptr,

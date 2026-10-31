@@ -9,38 +9,41 @@ const zozz = @import("zozz.zig");
 /// on the two. Both wrap the same `*c.FloatTrack`, so re-wrapping the handle
 /// here is enough to get `sample`.
 fn buildTrack(raw: zozz.RawFloatTrack) !zozz.FloatTrack {
-    const built = try raw.build();
+    var failure: zozz.Failure = .{};
+    const built = try raw.build(&failure);
     return .{ .handle = built.handle };
 }
 
 test "a float track returns keyframe values exactly and interpolates between them" {
+    var failure: zozz.Failure = .{};
     const gpa = std.testing.allocator;
-    try zozz.setAllocator(gpa);
-    defer zozz.resetAllocator() catch unreachable;
+    try zozz.setAllocator(gpa, &failure);
+    defer zozz.resetAllocator(&failure) catch |e| std.debug.panic("zozz: {s}", .{@errorName(e)});
 
-    var raw = try zozz.RawFloatTrack.init();
+    var raw = try zozz.RawFloatTrack.init(&failure);
     defer raw.deinit();
-    try raw.pushKeyframe(.linear, 0.0, 0.0);
-    try raw.pushKeyframe(.linear, 0.5, 10.0);
-    try raw.pushKeyframe(.linear, 1.0, 0.0);
+    try raw.pushKeyframe(.linear, 0.0, 0.0, &failure);
+    try raw.pushKeyframe(.linear, 0.5, 10.0, &failure);
+    try raw.pushKeyframe(.linear, 1.0, 0.0, &failure);
 
     var track = try buildTrack(raw);
     defer track.deinit();
 
     // Exact keyframes.
-    try std.testing.expectApproxEqAbs(@as(f32, 0.0), try track.sample(0.0), 1e-4);
-    try std.testing.expectApproxEqAbs(@as(f32, 10.0), try track.sample(0.5), 1e-4);
-    try std.testing.expectApproxEqAbs(@as(f32, 0.0), try track.sample(1.0), 1e-4);
+    try std.testing.expectApproxEqAbs(@as(f32, 0.0), try track.sample(0.0, &failure), 1e-4);
+    try std.testing.expectApproxEqAbs(@as(f32, 10.0), try track.sample(0.5, &failure), 1e-4);
+    try std.testing.expectApproxEqAbs(@as(f32, 0.0), try track.sample(1.0, &failure), 1e-4);
 
     // Halfway between two keyframes lands halfway between their values.
-    try std.testing.expectApproxEqAbs(@as(f32, 5.0), try track.sample(0.25), 1e-2);
-    try std.testing.expectApproxEqAbs(@as(f32, 5.0), try track.sample(0.75), 1e-2);
+    try std.testing.expectApproxEqAbs(@as(f32, 5.0), try track.sample(0.25, &failure), 1e-2);
+    try std.testing.expectApproxEqAbs(@as(f32, 5.0), try track.sample(0.75, &failure), 1e-2);
 }
 
 test "a float track's keyframe read-back matches what was authored, across a bitset byte boundary" {
+    var failure: zozz.Failure = .{};
     const gpa = std.testing.allocator;
-    try zozz.setAllocator(gpa);
-    defer zozz.resetAllocator() catch unreachable;
+    try zozz.setAllocator(gpa, &failure);
+    defer zozz.resetAllocator(&failure) catch |e| std.debug.panic("zozz: {s}", .{@errorName(e)});
 
     // 12 keys — more than the 8 in one byte of the packed steps bitset
     // (Track::steps(), one bit per key) — alternating step/linear, so an
@@ -48,14 +51,14 @@ test "a float track's keyframe read-back matches what was authored, across a bit
     // silently passing with fewer keys. front()/back() sit exactly at ratio 0
     // and 1, so the builder patches nothing in: the built track holds exactly
     // these 12 keys, in order.
-    var raw = try zozz.RawFloatTrack.init();
+    var raw = try zozz.RawFloatTrack.init(&failure);
     defer raw.deinit();
     const count = 12;
     for (0..count) |i| {
         const ratio: f32 = @as(f32, @floatFromInt(i)) / @as(f32, @floatFromInt(count - 1));
         const value: f32 = @floatFromInt(i);
         const interpolation: zozz.TrackInterpolation = if (i % 2 == 0) .step else .linear;
-        try raw.pushKeyframe(interpolation, ratio, value);
+        try raw.pushKeyframe(interpolation, ratio, value, &failure);
     }
 
     var track = try buildTrack(raw);
@@ -72,7 +75,7 @@ test "a float track's keyframe read-back matches what was authored, across a bit
     try std.testing.expectEqual(@as(usize, 2), track.steps().len);
 
     var decoded: [count]zozz.TrackInterpolation = undefined;
-    const modes = try track.interpolations(&decoded);
+    const modes = try track.interpolations(&decoded, &failure);
     try std.testing.expectEqual(@as(usize, count), modes.len);
 
     for (0..count) |i| {
@@ -90,21 +93,23 @@ test "a float track's keyframe read-back matches what was authored, across a bit
 
     // A buffer shorter than the keyframe count is refused, not truncated.
     var too_small: [count - 1]zozz.TrackInterpolation = undefined;
-    try std.testing.expectError(error.BufferTooSmall, track.interpolations(&too_small));
+    try std.testing.expectError(error.BufferTooSmall, track.interpolations(&too_small, &failure));
+    try std.testing.expectEqualSlices(zozz.Frame, &.{.{ .call = .track_interpolations, .result = .buffer_too_small }}, failure.frames());
 }
 
 test "a float3 track's keyframe read-back matches what was authored" {
+    var failure: zozz.Failure = .{};
     const gpa = std.testing.allocator;
-    try zozz.setAllocator(gpa);
-    defer zozz.resetAllocator() catch unreachable;
+    try zozz.setAllocator(gpa, &failure);
+    defer zozz.resetAllocator(&failure) catch |e| std.debug.panic("zozz: {s}", .{@errorName(e)});
 
-    var raw = try zozz.RawFloat3Track.init();
+    var raw = try zozz.RawFloat3Track.init(&failure);
     defer raw.deinit();
-    try raw.pushKeyframe(.linear, 0.0, .{ 1, 2, 3 });
-    try raw.pushKeyframe(.step, 0.5, .{ -1, -2, -3 });
-    try raw.pushKeyframe(.linear, 1.0, .{ 0, 0, 0 });
+    try raw.pushKeyframe(.linear, 0.0, .{ 1, 2, 3 }, &failure);
+    try raw.pushKeyframe(.step, 0.5, .{ -1, -2, -3 }, &failure);
+    try raw.pushKeyframe(.linear, 1.0, .{ 0, 0, 0 }, &failure);
 
-    var track = try raw.build();
+    var track = try raw.build(&failure);
     defer track.deinit();
 
     try std.testing.expectEqual(@as(u32, 3), track.numKeyframes());
@@ -121,24 +126,25 @@ test "a float3 track's keyframe read-back matches what was authored" {
     try std.testing.expectEqualSlices(
         zozz.TrackInterpolation,
         &.{ .linear, .step, .linear },
-        try track.interpolations(&decoded),
+        try track.interpolations(&decoded, &failure),
     );
 }
 
 test "a quaternion track's keyframe read-back preserves x, y, z, w order" {
+    var failure: zozz.Failure = .{};
     const gpa = std.testing.allocator;
-    try zozz.setAllocator(gpa);
-    defer zozz.resetAllocator() catch unreachable;
+    try zozz.setAllocator(gpa, &failure);
+    defer zozz.resetAllocator(&failure) catch |e| std.debug.panic("zozz: {s}", .{@errorName(e)});
 
     // A 90-degree turn about Z: identity, then (0, 0, sin45, cos45) — w LAST,
     // matching every other quaternion in this package.
     const half_turn: f32 = std.math.sqrt2 / 2.0;
-    var raw = try zozz.RawQuaternionTrack.init();
+    var raw = try zozz.RawQuaternionTrack.init(&failure);
     defer raw.deinit();
-    try raw.pushKeyframe(.linear, 0.0, .{ 0, 0, 0, 1 });
-    try raw.pushKeyframe(.linear, 1.0, .{ 0, 0, half_turn, half_turn });
+    try raw.pushKeyframe(.linear, 0.0, .{ 0, 0, 0, 1 }, &failure);
+    try raw.pushKeyframe(.linear, 1.0, .{ 0, 0, half_turn, half_turn }, &failure);
 
-    var track = try raw.build();
+    var track = try raw.build(&failure);
     defer track.deinit();
 
     const values = track.values();
@@ -151,18 +157,19 @@ test "a quaternion track's keyframe read-back preserves x, y, z, w order" {
 }
 
 test "the triggering iterator yields the edges of a step function, in order" {
+    var failure: zozz.Failure = .{};
     const gpa = std.testing.allocator;
-    try zozz.setAllocator(gpa);
-    defer zozz.resetAllocator() catch unreachable;
+    try zozz.setAllocator(gpa, &failure);
+    defer zozz.resetAllocator(&failure) catch |e| std.debug.panic("zozz: {s}", .{@errorName(e)});
 
     // A square wave: 0, 1, 0, 1 held over each quarter, step interpolation
     // so the transition sits exactly at each keyframe's ratio.
-    var raw = try zozz.RawFloatTrack.init();
+    var raw = try zozz.RawFloatTrack.init(&failure);
     defer raw.deinit();
-    try raw.pushKeyframe(.step, 0.0, 0.0);
-    try raw.pushKeyframe(.step, 0.25, 1.0);
-    try raw.pushKeyframe(.step, 0.5, 0.0);
-    try raw.pushKeyframe(.step, 0.75, 1.0);
+    try raw.pushKeyframe(.step, 0.0, 0.0, &failure);
+    try raw.pushKeyframe(.step, 0.25, 1.0, &failure);
+    try raw.pushKeyframe(.step, 0.5, 0.0, &failure);
+    try raw.pushKeyframe(.step, 0.75, 1.0, &failure);
 
     var track = try buildTrack(raw);
     defer track.deinit();
@@ -170,14 +177,14 @@ test "the triggering iterator yields the edges of a step function, in order" {
     // On the stack, and nothing to free: the allocator assertion at the end
     // of this test is what proves the session took nothing from it.
     var triggering: zozz.TrackTriggering = undefined;
-    try triggering.run(track, 0.0, 1.0, 0.5);
+    try triggering.run(track, 0.0, 1.0, 0.5, &failure);
 
     var edges: [8]zozz.TrackEdge = undefined;
     var count: usize = 0;
     while (triggering.valid()) {
-        edges[count] = try triggering.get();
+        edges[count] = try triggering.get(&failure);
         count += 1;
-        try triggering.next();
+        try triggering.next(&failure);
     }
 
     // Four edges, and the first is at ratio 0: a track is CYCLIC, so the value
@@ -197,19 +204,23 @@ test "the triggering iterator yields the edges of a step function, in order" {
     try std.testing.expect(edges[3].rising);
 
     // Past the end is an error, not an assert inside ozz.
-    try std.testing.expectError(error.InvalidArgument, triggering.next());
-    try std.testing.expectError(error.InvalidArgument, triggering.get());
+    try std.testing.expectError(error.InvalidArgument, triggering.next(&failure));
+    try std.testing.expectEqualSlices(zozz.Frame, &.{.{ .call = .track_triggering_iterator_next, .result = .invalid_argument }}, failure.frames());
+    failure.reset();
+    try std.testing.expectError(error.InvalidArgument, triggering.get(&failure));
+    try std.testing.expectEqualSlices(zozz.Frame, &.{.{ .call = .track_triggering_iterator_get, .result = .invalid_argument }}, failure.frames());
 }
 
 test "triggering storage that was never run, or was copied, is refused" {
+    var failure: zozz.Failure = .{};
     const gpa = std.testing.allocator;
-    try zozz.setAllocator(gpa);
-    defer zozz.resetAllocator() catch unreachable;
+    try zozz.setAllocator(gpa, &failure);
+    defer zozz.resetAllocator(&failure) catch |e| std.debug.panic("zozz: {s}", .{@errorName(e)});
 
-    var raw = try zozz.RawFloatTrack.init();
+    var raw = try zozz.RawFloatTrack.init(&failure);
     defer raw.deinit();
-    try raw.pushKeyframe(.step, 0.0, 0.0);
-    try raw.pushKeyframe(.step, 0.5, 1.0);
+    try raw.pushKeyframe(.step, 0.0, 0.0, &failure);
+    try raw.pushKeyframe(.step, 0.5, 1.0, &failure);
     var track = try buildTrack(raw);
     defer track.deinit();
 
@@ -219,43 +230,52 @@ test "triggering storage that was never run, or was copied, is refused" {
     // what rejects it either way.
     var never_run: zozz.TrackTriggering = std.mem.zeroes(zozz.TrackTriggering);
     try std.testing.expect(!never_run.valid());
-    try std.testing.expectError(error.InvalidArgument, never_run.next());
-    try std.testing.expectError(error.InvalidArgument, never_run.get());
+    try std.testing.expectError(error.InvalidArgument, never_run.next(&failure));
+    try std.testing.expectEqualSlices(zozz.Frame, &.{.{ .call = .track_triggering_iterator_next, .result = .invalid_argument }}, failure.frames());
+    failure.reset();
+    try std.testing.expectError(error.InvalidArgument, never_run.get(&failure));
+    try std.testing.expectEqualSlices(zozz.Frame, &.{.{ .call = .track_triggering_iterator_get, .result = .invalid_argument }}, failure.frames());
+    failure.reset();
 
     var session: zozz.TrackTriggering = undefined;
-    try session.run(track, 0.0, 1.0, 0.5);
+    try session.run(track, 0.0, 1.0, 0.5, &failure);
     try std.testing.expect(session.valid());
 
     // A COPY holds a pointer into the original, so ozz would compare it
     // against the wrong job and walk the wrong storage. It is refused instead.
     var moved = session;
     try std.testing.expect(!moved.valid());
-    try std.testing.expectError(error.InvalidArgument, moved.next());
-    try std.testing.expectError(error.InvalidArgument, moved.get());
+    try std.testing.expectError(error.InvalidArgument, moved.next(&failure));
+    try std.testing.expectEqualSlices(zozz.Frame, &.{.{ .call = .track_triggering_iterator_next, .result = .invalid_argument }}, failure.frames());
+    failure.reset();
+    try std.testing.expectError(error.InvalidArgument, moved.get(&failure));
+    try std.testing.expectEqualSlices(zozz.Frame, &.{.{ .call = .track_triggering_iterator_get, .result = .invalid_argument }}, failure.frames());
+    failure.reset();
 
     // The original is untouched by any of that.
     try std.testing.expect(session.valid());
 }
 
 test "the track optimizer reduces keyframe count within tolerance of the original" {
+    var failure: zozz.Failure = .{};
     const gpa = std.testing.allocator;
-    try zozz.setAllocator(gpa);
-    defer zozz.resetAllocator() catch unreachable;
+    try zozz.setAllocator(gpa, &failure);
+    defer zozz.resetAllocator(&failure) catch |e| std.debug.panic("zozz: {s}", .{@errorName(e)});
 
-    var raw = try zozz.RawFloatTrack.init();
+    var raw = try zozz.RawFloatTrack.init(&failure);
     defer raw.deinit();
     // 11 co-linear points on a ramp from 0 to 10: every interior point is
     // exactly reproducible by interpolating its neighbours, so an optimizer
     // that actually looks at the data should discard nearly all of them.
     for (0..11) |i| {
         const ratio: f32 = @as(f32, @floatFromInt(i)) / 10.0;
-        try raw.pushKeyframe(.linear, ratio, ratio * 10.0);
+        try raw.pushKeyframe(.linear, ratio, ratio * 10.0, &failure);
     }
     try std.testing.expectEqual(@as(u32, 11), raw.numKeyframes());
 
-    var optimized = try zozz.RawFloatTrack.init();
+    var optimized = try zozz.RawFloatTrack.init(&failure);
     defer optimized.deinit();
-    try raw.optimize(1e-3, optimized);
+    try raw.optimize(1e-3, optimized, &failure);
 
     try std.testing.expect(optimized.numKeyframes() < raw.numKeyframes());
 
@@ -266,23 +286,24 @@ test "the track optimizer reduces keyframe count within tolerance of the origina
 
     var ratio: f32 = 0.0;
     while (ratio <= 1.0) : (ratio += 0.1) {
-        const a = try original_track.sample(ratio);
-        const b = try optimized_track.sample(ratio);
+        const a = try original_track.sample(ratio, &failure);
+        const b = try optimized_track.sample(ratio, &failure);
         try std.testing.expectApproxEqAbs(a, b, 1e-2);
     }
 }
 
 test "a raw track reads back what was authored, and validates ratio order" {
-    var raw = try zozz.RawFloat3Track.init();
+    var failure: zozz.Failure = .{};
+    var raw = try zozz.RawFloat3Track.init(&failure);
     defer raw.deinit();
 
     try std.testing.expectEqualStrings("", raw.name());
-    try raw.setName("wind");
-    try raw.pushKeyframe(.step, 0.0, .{ 1, 0, 0 });
-    try raw.pushKeyframe(.linear, 0.5, .{ 0, 1, 0 });
+    try raw.setName("wind", &failure);
+    try raw.pushKeyframe(.step, 0.0, .{ 1, 0, 0 }, &failure);
+    try raw.pushKeyframe(.linear, 0.5, .{ 0, 1, 0 }, &failure);
 
     var keys: [4]zozz.Float3Keyframe = undefined;
-    const back = try raw.keyframes(&keys);
+    const back = try raw.keyframes(&keys, &failure);
     try std.testing.expectEqual(@as(usize, 2), back.len);
     try std.testing.expectEqual(zozz.TrackInterpolation.step, back[0].interpolation);
     try std.testing.expectEqual(@as(f32, 0.0), back[0].ratio);
@@ -293,24 +314,28 @@ test "a raw track reads back what was authored, and validates ratio order" {
 
     // A short buffer is refused before anything is written.
     var one: [1]zozz.Float3Keyframe = .{.{ .interpolation = .step, .ratio = -1, .value = .{ 9, 9, 9 } }};
-    try std.testing.expectError(error.BufferTooSmall, raw.keyframes(&one));
+    try std.testing.expectError(error.BufferTooSmall, raw.keyframes(&one, &failure));
+    try std.testing.expectEqualSlices(zozz.Frame, &.{.{ .call = .raw_float3_track_keyframes, .result = .buffer_too_small }}, failure.frames());
+    failure.reset();
     try std.testing.expectEqual(@as(f32, -1), one[0].ratio);
 
     // ozz's RawTrack::Validate wants strictly ascending ratios; the push
     // entry point cannot see order, so this is where it surfaces — before
     // build, which reports the same thing as error.InvalidData.
     try std.testing.expect(raw.validate());
-    try raw.pushKeyframe(.linear, 0.25, .{ 0, 0, 1 });
+    try raw.pushKeyframe(.linear, 0.25, .{ 0, 0, 1 }, &failure);
     try std.testing.expect(!raw.validate());
-    try std.testing.expectError(error.InvalidData, raw.build());
+    try std.testing.expectError(error.InvalidData, raw.build(&failure));
+    try std.testing.expectEqualSlices(zozz.Frame, &.{.{ .call = .float3_track_build, .result = .invalid_data }}, failure.frames());
+    failure.reset();
 
     // Clearing keeps the name and lets the track be rewritten.
-    try raw.clear();
+    try raw.clear(&failure);
     try std.testing.expectEqual(@as(u32, 0), raw.numKeyframes());
     try std.testing.expectEqualStrings("wind", raw.name());
-    try raw.pushKeyframe(.linear, 0.0, .{ 2, 2, 2 });
+    try raw.pushKeyframe(.linear, 0.0, .{ 2, 2, 2 }, &failure);
     try std.testing.expect(raw.validate());
-    var built = try raw.build();
+    var built = try raw.build(&failure);
     defer built.deinit();
     try std.testing.expectEqualStrings("wind", built.name());
 }

@@ -35,17 +35,18 @@ const Chain = struct {
     pose: [1]zozz.SoaTransform,
 
     fn init() !Chain {
-        var raw = try zozz.RawSkeleton.init();
+        var failure: zozz.Failure = .{};
+        var raw = try zozz.RawSkeleton.init(&failure);
         defer raw.deinit();
         var parent: ?u32 = null;
         for ([_][*:0]const u8{ "j0", "j1", "j2", "j3" }, 0..) |name, i| {
             const offset: f32 = if (i == 0) 0 else 1;
-            parent = try raw.addJoint(parent, name, translated(offset, 0, 0));
+            parent = try raw.addJoint(parent, name, translated(offset, 0, 0), &failure);
         }
-        var skeleton = try raw.build();
+        var skeleton = try raw.build(&failure);
         errdefer skeleton.deinit();
         var pose: [1]zozz.SoaTransform = undefined;
-        try skeleton.restPoseSoa(&pose);
+        try skeleton.restPoseSoa(&pose, &failure);
         return .{ .skeleton = skeleton, .pose = pose };
     }
 
@@ -55,8 +56,9 @@ const Chain = struct {
 };
 
 test "the default range walks the whole hierarchy" {
-    try zozz.setAllocator(std.testing.allocator);
-    defer zozz.resetAllocator() catch unreachable;
+    var failure: zozz.Failure = .{};
+    try zozz.setAllocator(std.testing.allocator, &failure);
+    defer zozz.resetAllocator(&failure) catch |e| std.debug.panic("zozz: {s}", .{@errorName(e)});
 
     var chain = try Chain.init();
     defer chain.deinit();
@@ -66,7 +68,7 @@ test "the default range walks the whole hierarchy" {
         .skeleton = chain.skeleton,
         .locals = &chain.pose,
         .out = &models,
-    }).run();
+    }).run(&failure);
 
     for (models, 0..) |m, i| {
         try std.testing.expect(wasWritten(m));
@@ -75,13 +77,14 @@ test "the default range walks the whole hierarchy" {
 }
 
 test "a from with a defaulted to still updates through the last joint" {
+    var failure: zozz.Failure = .{};
     // The regression this file exists for. A defaulted `to` was translated
     // to maxInt(c_int), and ozz's `Min(to + 1, n)` overflowed to INT_MIN --
     // the walk ended before it began, wrote NOT ONE matrix, and returned
     // success. This is the documented path for re-running only the chain an
     // IK correction touched.
-    try zozz.setAllocator(std.testing.allocator);
-    defer zozz.resetAllocator() catch unreachable;
+    try zozz.setAllocator(std.testing.allocator, &failure);
+    defer zozz.resetAllocator(&failure) catch |e| std.debug.panic("zozz: {s}", .{@errorName(e)});
 
     var chain = try Chain.init();
     defer chain.deinit();
@@ -93,7 +96,7 @@ test "a from with a defaulted to still updates through the last joint" {
         .skeleton = chain.skeleton,
         .locals = &chain.pose,
         .out = &models,
-    }).run();
+    }).run(&failure);
 
     models[2] = poison;
     models[3] = poison;
@@ -102,7 +105,7 @@ test "a from with a defaulted to still updates through the last joint" {
         .locals = &chain.pose,
         .from = 2,
         .out = &models,
-    }).run();
+    }).run(&failure);
 
     try std.testing.expect(wasWritten(models[2]));
     try std.testing.expect(wasWritten(models[3]));
@@ -111,8 +114,9 @@ test "a from with a defaulted to still updates through the last joint" {
 }
 
 test "to ends the walk, leaving later joints untouched" {
-    try zozz.setAllocator(std.testing.allocator);
-    defer zozz.resetAllocator() catch unreachable;
+    var failure: zozz.Failure = .{};
+    try zozz.setAllocator(std.testing.allocator, &failure);
+    defer zozz.resetAllocator(&failure) catch |e| std.debug.panic("zozz: {s}", .{@errorName(e)});
 
     var chain = try Chain.init();
     defer chain.deinit();
@@ -123,7 +127,7 @@ test "to ends the walk, leaving later joints untouched" {
         .locals = &chain.pose,
         .to = 1,
         .out = &models,
-    }).run();
+    }).run(&failure);
 
     try std.testing.expect(wasWritten(models[0]));
     try std.testing.expect(wasWritten(models[1]));
@@ -132,8 +136,9 @@ test "to ends the walk, leaving later joints untouched" {
 }
 
 test "from_excluded keeps from's matrix and updates its children" {
-    try zozz.setAllocator(std.testing.allocator);
-    defer zozz.resetAllocator() catch unreachable;
+    var failure: zozz.Failure = .{};
+    try zozz.setAllocator(std.testing.allocator, &failure);
+    defer zozz.resetAllocator(&failure) catch |e| std.debug.panic("zozz: {s}", .{@errorName(e)});
 
     var chain = try Chain.init();
     defer chain.deinit();
@@ -143,7 +148,7 @@ test "from_excluded keeps from's matrix and updates its children" {
         .skeleton = chain.skeleton,
         .locals = &chain.pose,
         .out = &models,
-    }).run();
+    }).run(&failure);
 
     // Move joint 1 in MODEL space only -- exactly what an IK correction does
     // before the rest of the chain is re-flattened beneath it.
@@ -157,7 +162,7 @@ test "from_excluded keeps from's matrix and updates its children" {
         .from = 1,
         .from_excluded = true,
         .out = &models,
-    }).run();
+    }).run(&failure);
 
     try std.testing.expectApproxEqAbs(@as(f32, 10), translationX(models[1]), 1e-6);
     try std.testing.expectApproxEqAbs(@as(f32, 11), translationX(models[2]), 1e-6);
@@ -165,8 +170,9 @@ test "from_excluded keeps from's matrix and updates its children" {
 }
 
 test "an out-of-range from or to is refused rather than writing nothing" {
-    try zozz.setAllocator(std.testing.allocator);
-    defer zozz.resetAllocator() catch unreachable;
+    var failure: zozz.Failure = .{};
+    try zozz.setAllocator(std.testing.allocator, &failure);
+    defer zozz.resetAllocator(&failure) catch |e| std.debug.panic("zozz: {s}", .{@errorName(e)});
 
     var chain = try Chain.init();
     defer chain.deinit();
@@ -190,7 +196,9 @@ test "an out-of-range from or to is refused rather than writing nothing" {
         var job = base;
         job.from = case.from;
         job.to = case.to;
-        try std.testing.expectError(zozz.Error.InvalidArgument, job.run());
+        try std.testing.expectError(zozz.Error.InvalidArgument, job.run(&failure));
+        try std.testing.expectEqualSlices(zozz.Frame, &.{.{ .call = .local_to_model, .result = .invalid_argument }}, failure.frames());
+        failure.reset();
     }
 
     // Nothing was written by any of them.
@@ -198,8 +206,9 @@ test "an out-of-range from or to is refused rather than writing nothing" {
 }
 
 test "a destination smaller than the skeleton is refused whatever the range" {
-    try zozz.setAllocator(std.testing.allocator);
-    defer zozz.resetAllocator() catch unreachable;
+    var failure: zozz.Failure = .{};
+    try zozz.setAllocator(std.testing.allocator, &failure);
+    defer zozz.resetAllocator(&failure) catch |e| std.debug.panic("zozz: {s}", .{@errorName(e)});
 
     var chain = try Chain.init();
     defer chain.deinit();
@@ -213,17 +222,36 @@ test "a destination smaller than the skeleton is refused whatever the range" {
         .from = 0,
         .to = 1,
         .out = &models,
-    }).run());
+    }).run(&failure));
+    try std.testing.expectEqualSlices(zozz.Frame, &.{.{ .call = .local_to_model, .result = .buffer_too_small }}, failure.frames());
 }
 
 test "max_joints is ozz's own ceiling, and a pose cannot exceed it" {
-    try zozz.setAllocator(std.testing.allocator);
-    defer zozz.resetAllocator() catch unreachable;
+    var failure: zozz.Failure = .{};
+    try zozz.setAllocator(std.testing.allocator, &failure);
+    defer zozz.resetAllocator(&failure) catch |e| std.debug.panic("zozz: {s}", .{@errorName(e)});
 
     try std.testing.expectEqual(@as(i32, 1024), zozz.max_joints);
     try std.testing.expectError(
         zozz.Error.InvalidArgument,
-        zozz.soaBlocks(@as(u32, @intCast(zozz.max_joints)) + 1),
+        zozz.soaBlocks(@as(u32, @intCast(zozz.max_joints)) + 1, &failure),
     );
-    try std.testing.expectEqual(@as(usize, 256), try zozz.soaBlocks(@intCast(zozz.max_joints)));
+    try std.testing.expectEqualSlices(zozz.Frame, &.{.{ .call = .soa_blocks, .result = .invalid_argument }}, failure.frames());
+    failure.reset();
+    try std.testing.expectEqual(@as(usize, 256), try zozz.soaBlocks(@intCast(zozz.max_joints), &failure));
+}
+
+test "a track count the C boundary cannot carry is refused, not narrowed" {
+    // `max_tracks` is a u32 and the boundary's parameter a c_int: 1 << 31 does
+    // not fit, and a narrowing cast would stop the program rather than refuse.
+    var failure: zozz.Failure = .{};
+    try std.testing.expectError(zozz.Error.InvalidArgument, zozz.SamplingContext.init(1 << 31, &failure));
+    try std.testing.expectEqualSlices(zozz.Frame, &.{.{ .call = .sampling_context_create, .result = .invalid_argument }}, failure.frames());
+
+    failure.reset();
+    var context = try zozz.SamplingContext.init(4, &failure);
+    defer context.deinit();
+    try std.testing.expectError(zozz.Error.InvalidArgument, context.resize(1 << 31, &failure));
+    try std.testing.expectEqualSlices(zozz.Frame, &.{.{ .call = .sampling_context_resize, .result = .invalid_argument }}, failure.frames());
+    try std.testing.expectEqual(@as(u32, 4), context.maxTracks());
 }

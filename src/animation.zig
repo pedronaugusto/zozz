@@ -16,16 +16,17 @@ pub const TimeMode = enum {
 pub const Animation = struct {
     handle: ?*c.Animation,
 
-    pub fn initFromFile(path: [*:0]const u8) err.Error!Animation {
+    pub fn initFromFile(path: [*:0]const u8, failure: *err.Failure) err.Error!Animation {
         var handle: *c.Animation = undefined;
-        try err.check(c.zozzAnimationLoadFile(path, &handle));
+        try err.check(failure, .animation_load_file, c.zozzAnimationLoadFile(path, &handle));
         return .{ .handle = handle };
     }
 
     /// The bytes are read during the call only and need not outlive it.
-    pub fn initFromMemory(bytes: []const u8) err.Error!Animation {
+    pub fn initFromMemory(bytes: err.Bytes, failure: *err.Failure) err.Error!Animation {
+        const image = bytes.readForParse();
         var handle: *c.Animation = undefined;
-        try err.check(c.zozzAnimationLoadMemory(bytes.ptr, bytes.len, &handle));
+        try err.check(failure, .animation_load_memory, c.zozzAnimationLoadMemory(image.ptr, image.len, &handle));
         return .{ .handle = handle };
     }
 
@@ -36,17 +37,17 @@ pub const Animation = struct {
 
     /// Clip length in seconds. Always greater than zero for a loaded clip.
     pub fn duration(self: Animation) f32 {
-        return c.zozzAnimationDuration(self.handle.?);
+        return c.zozzAnimationDuration(err.live(self.handle));
     }
 
     /// Number of animated joints, which may be fewer than the skeleton's.
     pub fn numTracks(self: Animation) u32 {
-        return @intCast(c.zozzAnimationNumTracks(self.handle.?));
+        return err.reported(u32, c.zozzAnimationNumTracks(err.live(self.handle)));
     }
 
     /// Borrowed clip name; empty when the clip is unnamed.
     pub fn name(self: Animation) [:0]const u8 {
-        return std.mem.span(c.zozzAnimationName(self.handle.?));
+        return std.mem.span(c.zozzAnimationName(err.live(self.handle)));
     }
 
     /// Converts a time in seconds to the unit ratio sampling expects. `mode`
@@ -66,23 +67,23 @@ pub const Animation = struct {
 
     /// Number of SoA blocks matching `numTracks`: `(numTracks + 3) / 4`.
     pub fn numSoaTracks(self: Animation) u32 {
-        return @intCast(c.zozzAnimationNumSoaTracks(self.handle.?));
+        return err.reported(u32, c.zozzAnimationNumSoaTracks(err.live(self.handle)));
     }
 
     /// Estimated size of the clip's compressed keyframe data, in bytes.
     pub fn size(self: Animation) usize {
-        return c.zozzAnimationSize(self.handle.?);
+        return c.zozzAnimationSize(err.live(self.handle));
     }
 
     /// Number of distinct time points shared across the clip's keyframes.
     pub fn numTimepoints(self: Animation) u32 {
-        return @intCast(c.zozzAnimationNumTimepoints(self.handle.?));
+        return err.reported(u32, c.zozzAnimationNumTimepoints(err.live(self.handle)));
     }
 
     /// Writes the clip's time points, in seconds and ascending order. `out`
     /// must hold at least `numTimepoints` entries.
-    pub fn timepoints(self: Animation, out: []f32) err.Error!void {
-        try err.check(c.zozzAnimationTimepoints(self.handle.?, out.ptr, out.len));
+    pub fn timepoints(self: Animation, out: []f32, failure: *err.Failure) err.Error!void {
+        try err.check(failure, .animation_timepoints, c.zozzAnimationTimepoints(err.live(self.handle), out.ptr, out.len));
     }
 
     /// One of the three compressed keyframe streams a clip carries.
@@ -92,28 +93,28 @@ pub const Animation = struct {
     /// the four readers below fill.
     pub const KeyframesCtrl = c.KeyframesCtrl;
 
-    pub fn keyframesCtrl(self: Animation, channel: Channel) err.Error!KeyframesCtrl {
+    pub fn keyframesCtrl(self: Animation, channel: Channel, failure: *err.Failure) err.Error!KeyframesCtrl {
         var out: KeyframesCtrl = undefined;
-        try err.check(c.zozzAnimationKeyframesCtrl(self.handle.?, channel, &out));
+        try err.check(failure, .animation_keyframes_ctrl, c.zozzAnimationKeyframesCtrl(err.live(self.handle), channel, &out));
         return out;
     }
 
     /// Indices into the clip's time points. One or two bytes per keyframe,
     /// whichever the time-point count needs; ozz decides that per clip.
-    pub fn keyframeRatios(self: Animation, channel: Channel, out: []u8) err.Error!void {
-        try err.check(c.zozzAnimationKeyframeRatios(self.handle.?, channel, out.ptr, out.len));
+    pub fn keyframeRatios(self: Animation, channel: Channel, out: []u8, failure: *err.Failure) err.Error!void {
+        try err.check(failure, .animation_keyframe_ratios, c.zozzAnimationKeyframeRatios(err.live(self.handle), channel, out.ptr, out.len));
     }
 
-    pub fn keyframePreviouses(self: Animation, channel: Channel, out: []u16) err.Error!void {
-        try err.check(c.zozzAnimationKeyframePreviouses(self.handle.?, channel, out.ptr, out.len));
+    pub fn keyframePreviouses(self: Animation, channel: Channel, out: []u16, failure: *err.Failure) err.Error!void {
+        try err.check(failure, .animation_keyframe_previouses, c.zozzAnimationKeyframePreviouses(err.live(self.handle), channel, out.ptr, out.len));
     }
 
     /// Group-varint encoded; decode with the same scheme ozz's own reader uses.
-    pub fn keyframeIframeEntries(self: Animation, channel: Channel, out: []u8) err.Error!void {
-        try err.check(c.zozzAnimationKeyframeIframeEntries(self.handle.?, channel, out.ptr, out.len));
+    pub fn keyframeIframeEntries(self: Animation, channel: Channel, out: []u8, failure: *err.Failure) err.Error!void {
+        try err.check(failure, .animation_keyframe_iframe_entries, c.zozzAnimationKeyframeIframeEntries(err.live(self.handle), channel, out.ptr, out.len));
     }
 
-    pub fn keyframeIframeDesc(self: Animation, channel: Channel, out: []u32) err.Error!void {
-        try err.check(c.zozzAnimationKeyframeIframeDesc(self.handle.?, channel, out.ptr, out.len));
+    pub fn keyframeIframeDesc(self: Animation, channel: Channel, out: []u32, failure: *err.Failure) err.Error!void {
+        try err.check(failure, .animation_keyframe_iframe_desc, c.zozzAnimationKeyframeIframeDesc(err.live(self.handle), channel, out.ptr, out.len));
     }
 };

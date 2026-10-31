@@ -17,14 +17,16 @@ fn blocks(comptime n: u32) u32 {
 }
 
 fn poseOf(comptime n: u32, transforms: []const zozz.Transform) ![blocks(n)]zozz.SoaTransform {
+    var failure: zozz.Failure = .{};
     var out: [blocks(n)]zozz.SoaTransform = undefined;
-    try zozz.pose.fromLocalTransforms(transforms, &out);
+    try zozz.pose.fromLocalTransforms(transforms, &out, &failure);
     return out;
 }
 
 fn identityPose(comptime n: u32) ![blocks(n)]zozz.SoaTransform {
+    var failure: zozz.Failure = .{};
     var out: [blocks(n)]zozz.SoaTransform = undefined;
-    try zozz.pose.setIdentity(&out);
+    try zozz.pose.setIdentity(&out, &failure);
     return out;
 }
 
@@ -35,14 +37,16 @@ fn translated(x: f32) zozz.Transform {
 }
 
 test "the comptime block count matches the library's" {
+    var failure: zozz.Failure = .{};
     inline for ([_]u32{ 1, 3, 4, 5, 8, 1024 }) |n| {
-        try std.testing.expectEqual(@as(usize, blocks(n)), try zozz.soaBlocks(n));
+        try std.testing.expectEqual(@as(usize, blocks(n)), try zozz.soaBlocks(n, &failure));
     }
 }
 
 test "two layers blended at 0.5 land between them, per joint" {
-    try zozz.setAllocator(std.testing.allocator);
-    defer zozz.resetAllocator() catch unreachable;
+    var failure: zozz.Failure = .{};
+    try zozz.setAllocator(std.testing.allocator, &failure);
+    defer zozz.resetAllocator(&failure) catch |e| std.debug.panic("zozz: {s}", .{@errorName(e)});
 
     const n = 5; // crosses the 4-wide SoA block boundary.
     var a_t: [n]zozz.Transform = undefined;
@@ -64,10 +68,10 @@ test "two layers blended at 0.5 land between them, per joint" {
         },
         .rest_pose = &rest,
         .out = &out,
-    }).run();
+    }).run(&failure);
 
     var result: [n]zozz.Transform = undefined;
-    try zozz.pose.toLocalTransforms(&out, &result);
+    try zozz.pose.toLocalTransforms(&out, &result, &failure);
     for (0..n) |i| {
         const f: f32 = @floatFromInt(i);
         try std.testing.expectApproxEqAbs(f + 5, result[i].translation[0], 1e-4);
@@ -75,8 +79,9 @@ test "two layers blended at 0.5 land between them, per joint" {
 }
 
 test "weight 0 on a layer yields exactly the other layer" {
-    try zozz.setAllocator(std.testing.allocator);
-    defer zozz.resetAllocator() catch unreachable;
+    var failure: zozz.Failure = .{};
+    try zozz.setAllocator(std.testing.allocator, &failure);
+    defer zozz.resetAllocator(&failure) catch |e| std.debug.panic("zozz: {s}", .{@errorName(e)});
 
     const n = 4;
     var a_t: [n]zozz.Transform = undefined;
@@ -109,10 +114,10 @@ test "weight 0 on a layer yields exactly the other layer" {
         },
         .rest_pose = &rest,
         .out = &out,
-    }).run();
+    }).run(&failure);
 
     var result: [n]zozz.Transform = undefined;
-    try zozz.pose.toLocalTransforms(&out, &result);
+    try zozz.pose.toLocalTransforms(&out, &result, &failure);
     for (a_t, result) |expected, actual| {
         for (expected.translation, actual.translation) |e, a| {
             try std.testing.expectApproxEqAbs(e, a, 1e-4);
@@ -127,8 +132,9 @@ test "weight 0 on a layer yields exactly the other layer" {
 }
 
 test "an additive layer at weight 0 changes nothing, and at weight 1 applies fully" {
-    try zozz.setAllocator(std.testing.allocator);
-    defer zozz.resetAllocator() catch unreachable;
+    var failure: zozz.Failure = .{};
+    try zozz.setAllocator(std.testing.allocator, &failure);
+    defer zozz.resetAllocator(&failure) catch |e| std.debug.panic("zozz: {s}", .{@errorName(e)});
 
     const n = 4;
     const base_transform: zozz.Transform = .{
@@ -159,9 +165,9 @@ test "an additive layer at weight 0 changes nothing, and at weight 1 applies ful
         .additive_layers = &.{zozz.blending.layer(0, &delta_pose)},
         .rest_pose = &rest,
         .out = &out,
-    }).run();
+    }).run(&failure);
     var result: [n]zozz.Transform = undefined;
-    try zozz.pose.toLocalTransforms(&out, &result);
+    try zozz.pose.toLocalTransforms(&out, &result, &failure);
     for (result) |t| {
         try std.testing.expectApproxEqAbs(@as(f32, 1), t.translation[0], 1e-4);
         try std.testing.expectApproxEqAbs(@as(f32, 2), t.translation[1], 1e-4);
@@ -175,8 +181,8 @@ test "an additive layer at weight 0 changes nothing, and at weight 1 applies ful
         .additive_layers = &.{zozz.blending.layer(1, &delta_pose)},
         .rest_pose = &rest,
         .out = &out,
-    }).run();
-    try zozz.pose.toLocalTransforms(&out, &result);
+    }).run(&failure);
+    try zozz.pose.toLocalTransforms(&out, &result, &failure);
     for (result) |t| {
         // Translation adds.
         try std.testing.expectApproxEqAbs(@as(f32, 6), t.translation[0], 1e-4);
@@ -195,8 +201,9 @@ test "an additive layer at weight 0 changes nothing, and at weight 1 applies ful
 }
 
 test "a partial blend with per-joint weights affects only the weighted joints" {
-    try zozz.setAllocator(std.testing.allocator);
-    defer zozz.resetAllocator() catch unreachable;
+    var failure: zozz.Failure = .{};
+    try zozz.setAllocator(std.testing.allocator, &failure);
+    defer zozz.resetAllocator(&failure) catch |e| std.debug.panic("zozz: {s}", .{@errorName(e)});
 
     const n = 8; // two SoA blocks, with the mask interleaved within each.
     var a_t: [n]zozz.Transform = undefined;
@@ -213,7 +220,7 @@ test "a partial blend with per-joint weights affects only the weighted joints" {
     var out = try identityPose(n);
 
     var mask: [blocks(n)]zozz.math.SimdFloat4 = undefined;
-    try zozz.pose.packJointWeights(&joint_weights, &mask);
+    try zozz.pose.packJointWeights(&joint_weights, &mask, &failure);
 
     // Layer A always contributes at weight 1; layer B contributes at weight
     // 1 only where the mask says so. Where the mask is 0, layer B's combined
@@ -226,10 +233,10 @@ test "a partial blend with per-joint weights affects only the weighted joints" {
         },
         .rest_pose = &rest,
         .out = &out,
-    }).run();
+    }).run(&failure);
 
     var result: [n]zozz.Transform = undefined;
-    try zozz.pose.toLocalTransforms(&out, &result);
+    try zozz.pose.toLocalTransforms(&out, &result, &failure);
     for (0..n) |i| {
         const expected: f32 = if (i % 2 == 0) 5 else 0;
         try std.testing.expectApproxEqAbs(expected, result[i].translation[0], 1e-4);
@@ -237,14 +244,15 @@ test "a partial blend with per-joint weights affects only the weighted joints" {
 }
 
 test "packJointWeights fills the lanes past the joint count with 1.0" {
-    try zozz.setAllocator(std.testing.allocator);
-    defer zozz.resetAllocator() catch unreachable;
+    var failure: zozz.Failure = .{};
+    try zozz.setAllocator(std.testing.allocator, &failure);
+    defer zozz.resetAllocator(&failure) catch |e| std.debug.panic("zozz: {s}", .{@errorName(e)});
 
     // 5 joints: the second block holds one real lane and three padding ones,
     // and ozz reads whole blocks, so the padding must mean "fully weighted".
     const weights = [_]f32{ 0, 0.25, 0.5, 0.75, 1 };
     var mask: [blocks(5)]zozz.math.SimdFloat4 = undefined;
-    try zozz.pose.packJointWeights(&weights, &mask);
+    try zozz.pose.packJointWeights(&weights, &mask, &failure);
 
     for (weights, 0..) |expected, i| {
         const lanes: [4]f32 = mask[i / 4];
@@ -257,18 +265,22 @@ test "packJointWeights fills the lanes past the joint count with 1.0" {
     var one: [1]zozz.math.SimdFloat4 = undefined;
     try std.testing.expectError(
         zozz.Error.BufferTooSmall,
-        zozz.pose.packJointWeights(&weights, &one),
+        zozz.pose.packJointWeights(&weights, &one, &failure),
     );
+    try std.testing.expectEqualSlices(zozz.Frame, &.{.{ .call = .soa_weights_pack, .result = .buffer_too_small }}, failure.frames());
+    failure.reset();
     const nan = [_]f32{ 1, std.math.nan(f32), 1, 1 };
     try std.testing.expectError(
         zozz.Error.InvalidArgument,
-        zozz.pose.packJointWeights(&nan, &one),
+        zozz.pose.packJointWeights(&nan, &one, &failure),
     );
+    try std.testing.expectEqualSlices(zozz.Frame, &.{.{ .call = .soa_weights_pack, .result = .invalid_argument }}, failure.frames());
 }
 
 test "a rest pose shorter than the output is refused, not read past its end" {
-    try zozz.setAllocator(std.testing.allocator);
-    defer zozz.resetAllocator() catch unreachable;
+    var failure: zozz.Failure = .{};
+    try zozz.setAllocator(std.testing.allocator, &failure);
+    defer zozz.resetAllocator(&failure) catch |e| std.debug.panic("zozz: {s}", .{@errorName(e)});
 
     const n = 8; // two SoA blocks, so one block is a genuinely short rest pose.
     const pose = try identityPose(n);
@@ -284,7 +296,9 @@ test "a rest pose shorter than the output is refused, not read past its end" {
         .layers = &.{zozz.blending.layer(1, &pose)},
         .rest_pose = short_rest,
         .out = &out,
-    }).run());
+    }).run(&failure));
+    try std.testing.expectEqualSlices(zozz.Frame, &.{.{ .call = .blending_run, .result = .invalid_argument }}, failure.frames());
+    failure.reset();
 
     // Longer than the output is fine — ozz only ever reads `out.len` of it.
     var one_block = try identityPose(4);
@@ -292,5 +306,5 @@ test "a rest pose shorter than the output is refused, not read past its end" {
         .layers = &.{zozz.blending.layer(1, &pose)},
         .rest_pose = &pose,
         .out = &one_block,
-    }).run();
+    }).run(&failure);
 }

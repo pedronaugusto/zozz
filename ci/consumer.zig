@@ -14,6 +14,7 @@ fn restAt(translation: [3]f32) zozz.Transform {
 }
 
 pub fn main() !void {
+    var failure: zozz.Failure = .{};
     var gpa_state: std.heap.SafeAllocator = .init(std.heap.page_allocator, .{});
     defer std.debug.assert(gpa_state.deinit() == 0);
     const gpa = gpa_state.allocator();
@@ -21,19 +22,19 @@ pub fn main() !void {
     // The allocator seam is process-wide, mirroring ozz. A leak or a
     // double-free anywhere below fails the SafeAllocator's deinit above,
     // which is the strongest assertion this consumer can make.
-    try zozz.setAllocator(gpa);
+    try zozz.setAllocator(gpa, &failure);
     // Restoring ozz's own allocator is refused while blocks this one produced
     // are still live, so this defer runs last and its error is a real one.
-    defer zozz.resetAllocator() catch |e| std.debug.panic("zozz: {s}", .{@errorName(e)});
+    defer zozz.resetAllocator(&failure) catch |e| std.debug.panic("zozz: {s}", .{@errorName(e)});
 
     // Author a two-joint skeleton and a clip that translates its root, using
     // the offline builders — no asset files, so this runs anywhere.
-    var raw_skeleton = try zozz.RawSkeleton.init();
+    var raw_skeleton = try zozz.RawSkeleton.init(&failure);
     defer raw_skeleton.deinit();
-    const root = try raw_skeleton.addJoint(null, "root", zozz.transform_identity);
-    _ = try raw_skeleton.addJoint(root, "child", restAt(.{ 0, 1, 0 }));
+    const root = try raw_skeleton.addJoint(null, "root", zozz.transform_identity, &failure);
+    _ = try raw_skeleton.addJoint(root, "child", restAt(.{ 0, 1, 0 }), &failure);
 
-    var skeleton = try raw_skeleton.build();
+    var skeleton = try raw_skeleton.build(&failure);
     defer skeleton.deinit();
     if (skeleton.numJoints() != 2) return error.WrongJointCount;
     if (skeleton.jointParent(0) != zozz.no_parent) return error.RootHasAParent;
@@ -43,34 +44,34 @@ pub fn main() !void {
     // IDENTITY rather than the rest pose, because a raw animation never sees
     // a skeleton — so a consumer whose rule is "unanimated joints hold the
     // rest pose" has to author those keys, exactly as here.
-    var raw_clip = try zozz.RawAnimation.init(2, 2.0, "walk");
+    var raw_clip = try zozz.RawAnimation.init(2, 2.0, "walk", &failure);
     defer raw_clip.deinit();
-    try raw_clip.pushTranslation(0, 0.0, .{ 0, 0, 0 });
-    try raw_clip.pushTranslation(0, 2.0, .{ 4, 0, 0 });
-    try raw_clip.pushTranslation(1, 0.0, .{ 0, 1, 0 });
+    try raw_clip.pushTranslation(0, 0.0, .{ 0, 0, 0 }, &failure);
+    try raw_clip.pushTranslation(0, 2.0, .{ 4, 0, 0 }, &failure);
+    try raw_clip.pushTranslation(1, 0.0, .{ 0, 1, 0 }, &failure);
     for (0..2) |track| {
-        try raw_clip.pushRotation(@intCast(track), 0.0, .{ 0, 0, 0, 1 });
-        try raw_clip.pushScale(@intCast(track), 0.0, .{ 1, 1, 1 });
+        try raw_clip.pushRotation(@intCast(track), 0.0, .{ 0, 0, 0, 1 }, &failure);
+        try raw_clip.pushScale(@intCast(track), 0.0, .{ 1, 1, 1 }, &failure);
     }
 
-    var clip = try raw_clip.build();
+    var clip = try raw_clip.build(&failure);
     defer clip.deinit();
 
     // The caller owns the pose: two joints are one SoA block, on the stack.
     var pose: [1]zozz.SoaTransform = undefined;
-    var context = try zozz.SamplingContext.initForSkeleton(skeleton);
+    var context = try zozz.SamplingContext.initForSkeleton(skeleton, &failure);
     defer context.deinit();
 
-    try skeleton.restPoseSoa(&pose);
+    try skeleton.restPoseSoa(&pose, &failure);
     try (zozz.SamplingJob{
         .animation = clip,
         .context = context,
         .ratio = clip.ratioAt(1.0, .clamp),
         .out = &pose,
-    }).run();
+    }).run(&failure);
 
     var locals: [2]zozz.Transform = undefined;
-    try zozz.pose.toLocalTransforms(&pose, &locals);
+    try zozz.pose.toLocalTransforms(&pose, &locals, &failure);
 
     // The whole point of linking a library rather than a header: halfway
     // through a 0 -> 4 lerp the root must have moved. The tolerance is the
@@ -92,7 +93,7 @@ pub fn main() !void {
         .locals = &pose,
         .root = null,
         .out = &models,
-    }).run();
+    }).run(&failure);
     if (!std.math.approxEqAbs(f32, models[1].m[12], 2, 1e-2) or
         !std.math.approxEqAbs(f32, models[1].m[13], 1, 1e-2))
     {

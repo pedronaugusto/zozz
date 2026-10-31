@@ -44,10 +44,10 @@ fn prefixSize(alignment: std.mem.Alignment) usize {
 /// The alignment the backing allocation must use: at least the caller's, and
 /// at least what the header itself needs.
 fn backingAlignment(alignment: std.mem.Alignment) std.mem.Alignment {
-    return @fromBackingInt(@intCast(@max(
+    return @fromBackingInt(@max(
         @backingInt(alignment),
         @backingInt(std.mem.Alignment.of(Header)),
-    )));
+    ));
 }
 
 /// The allocator `user` guards, copied out under its lock so the allocation
@@ -114,13 +114,13 @@ var installed: aegis.Guarded(std.mem.Allocator) = .init(undefined);
 /// any other allocator, ozz's own built-in one included, still has blocks
 /// live. `installed` is written only after the seam accepts the bridge, so a
 /// refused call leaves the previous one readable.
-pub fn setAllocator(gpa: std.mem.Allocator) err.Error!void {
+pub fn setAllocator(gpa: std.mem.Allocator, failure: *err.Failure) err.Error!void {
     const bridge = c.Allocator{
         .allocate = allocate,
         .deallocate = deallocate,
         .user = @ptrCast(&installed), // aegis: no-danger: the guarded allocator's address, which allocate reads back
     };
-    try err.check(c.zozzSetAllocator(&bridge));
+    try err.check(failure, .set_allocator, c.zozzSetAllocator(&bridge));
     var held = installed.acquire();
     defer held.deinit();
     held.value().* = gpa;
@@ -131,8 +131,8 @@ pub fn setAllocator(gpa: std.mem.Allocator) err.Error!void {
 /// `free` would be handed a block it never malloc'd. Destroy every handle
 /// first — `liveBlocks` says how many are outstanding. A reset while none is
 /// installed changes nothing and always succeeds.
-pub fn resetAllocator() err.Error!void {
-    try err.check(c.zozzSetAllocator(null));
+pub fn resetAllocator(failure: *err.Failure) err.Error!void {
+    try err.check(failure, .set_allocator, c.zozzSetAllocator(null));
 }
 
 /// Blocks ozz has been handed and has not yet freed — through the installed
@@ -145,23 +145,24 @@ pub fn liveBlocks() usize {
     return c.zozzAllocatorLiveBlocks();
 }
 
-/// Reads back the raw `c.Allocator` `setAllocator` most recently installed —
-/// `null` if none is. No equivalent returns a `std.mem.Allocator`. Same
-/// save-and-restore `zozzGetAllocator` documents in zozz_core.h: read here
-/// before installing a temporary allocator (via `c.zozzSetAllocator`, for a
-/// non-Zig one), then pass the result back afterward. That sequence can only
-/// start while nothing is live, since a different allocator is refused.
-pub fn getAllocator() err.Error!?c.Allocator {
+/// The raw `c.Allocator` `setAllocator` most recently installed, `null` if
+/// none is; no equivalent returns a `std.mem.Allocator`. Read it before
+/// installing a temporary non-Zig one via `c.zozzSetAllocator`, then pass it
+/// back (the save-and-restore zozz_core.h documents), which can only start
+/// while nothing is live. Never fails: the seam refuses only a null
+/// out-pointer, and this passes none.
+pub fn getAllocator() ?c.Allocator {
     var out: c.Allocator = undefined;
     var is_installed: bool = undefined;
-    try err.check(c.zozzGetAllocator(&out, &is_installed));
+    err.map(c.zozzGetAllocator(&out, &is_installed)) catch aegis.assert.never("zozz: zozzGetAllocator refused two live out-pointers");
     return if (is_installed) out else null;
 }
 
 test "allocator bridge round-trips every alignment ozz may ask for" {
     const gpa = std.testing.allocator;
-    try setAllocator(gpa);
-    defer resetAllocator() catch unreachable;
+    var failure: err.Failure = .{};
+    try setAllocator(gpa, &failure);
+    defer resetAllocator(&failure) catch |e| std.debug.panic("zozz: {s}", .{@errorName(e)});
 
     // Exercised through the C entry points so the test covers the real path,
     // not just the Zig helpers.
@@ -180,8 +181,9 @@ test "allocator bridge round-trips every alignment ozz may ask for" {
 
 test "allocator bridge tolerates a zero-size request and a null free" {
     const gpa = std.testing.allocator;
-    try setAllocator(gpa);
-    defer resetAllocator() catch unreachable;
+    var failure: err.Failure = .{};
+    try setAllocator(gpa, &failure);
+    defer resetAllocator(&failure) catch |e| std.debug.panic("zozz: {s}", .{@errorName(e)});
 
     const block = allocate(@ptrCast(&installed), 0, 16) orelse {
         return error.TestUnexpectedResult;
@@ -192,8 +194,9 @@ test "allocator bridge tolerates a zero-size request and a null free" {
 
 test "allocator bridge rejects a non-power-of-two alignment" {
     const gpa = std.testing.allocator;
-    try setAllocator(gpa);
-    defer resetAllocator() catch unreachable;
+    var failure: err.Failure = .{};
+    try setAllocator(gpa, &failure);
+    defer resetAllocator(&failure) catch |e| std.debug.panic("zozz: {s}", .{@errorName(e)});
 
     try std.testing.expect(allocate(@ptrCast(&installed), 32, 3) == null);
     try std.testing.expect(allocate(@ptrCast(&installed), 32, 0) == null);
@@ -202,22 +205,23 @@ test "allocator bridge rejects a non-power-of-two alignment" {
 test "getAllocator distinguishes a never-installed state from the exact allocator installed" {
     // Restore to a known baseline first: another test earlier in this file
     // may have left an allocator installed.
-    try resetAllocator();
-    try std.testing.expect((try getAllocator()) == null);
+    var failure: err.Failure = .{};
+    try resetAllocator(&failure);
+    try std.testing.expect(getAllocator() == null);
 
     const gpa = std.testing.allocator;
-    try setAllocator(gpa);
-    defer resetAllocator() catch unreachable;
+    try setAllocator(gpa, &failure);
+    defer resetAllocator(&failure) catch |e| std.debug.panic("zozz: {s}", .{@errorName(e)});
 
-    const got = (try getAllocator()) orelse return error.TestUnexpectedResult;
+    const got = getAllocator() orelse return error.TestUnexpectedResult;
     try std.testing.expect(got.allocate != null);
     try std.testing.expect(got.allocate.? == &allocate);
     try std.testing.expect(got.deallocate != null);
     try std.testing.expect(got.deallocate.? == &deallocate);
     try std.testing.expectEqual(@as(?*anyopaque, @ptrCast(&installed)), got.user);
 
-    try resetAllocator();
-    try std.testing.expect((try getAllocator()) == null);
+    try resetAllocator(&failure);
+    try std.testing.expect(getAllocator() == null);
 }
 
 test "a block outstanding across a swap is freed by the allocator that produced it" {
@@ -227,8 +231,9 @@ test "a block outstanding across a swap is freed by the allocator that produced 
     var first: std.heap.SafeAllocator = .init(std.heap.page_allocator, .{ .canary = 0x1f1f1f1f });
     var second: std.heap.SafeAllocator = .init(std.heap.page_allocator, .{ .canary = 0x2e2e2e2e });
 
-    try resetAllocator();
-    try setAllocator(first.allocator());
+    var failure: err.Failure = .{};
+    try resetAllocator(&failure);
+    try setAllocator(first.allocator(), &failure);
 
     const block = allocate(@ptrCast(&installed), 128, 16) orelse {
         return error.TestUnexpectedResult;
@@ -237,31 +242,33 @@ test "a block outstanding across a swap is freed by the allocator that produced 
 
     // The swap is the same ZozzAllocator either way — same two functions, same
     // `user` — so the seam accepts it, and the header is what keeps it sound.
-    try setAllocator(second.allocator());
+    try setAllocator(second.allocator(), &failure);
     deallocate(@ptrCast(&installed), block);
 
-    try resetAllocator();
+    try resetAllocator(&failure);
     try std.testing.expectEqual(@as(usize, 0), first.deinit());
     try std.testing.expectEqual(@as(usize, 0), second.deinit());
 }
 
 test "the seam refuses to change allocator while blocks it produced are live" {
     const gpa = std.testing.allocator;
-    try resetAllocator();
-    try setAllocator(gpa);
+    var failure: err.Failure = .{};
+    try resetAllocator(&failure);
+    try setAllocator(gpa, &failure);
 
     // Allocated through ozz's own seam, so the counter sees it: a raw call to
     // `allocate` here would bypass the adapter that does the counting.
-    var context = try @import("sampling.zig").SamplingContext.init(8);
+    var context = try @import("sampling.zig").SamplingContext.init(8, &failure);
     try std.testing.expect(liveBlocks() > 0);
 
-    try std.testing.expectError(error.AllocatorInUse, resetAllocator());
+    try std.testing.expectError(error.AllocatorInUse, resetAllocator(&failure));
+    try std.testing.expectEqualSlices(err.Frame, &.{.{ .call = .set_allocator, .result = .allocator_in_use }}, failure.frames());
 
     // The refusal left the allocator installed, so the handle still frees
     // through the allocator that produced it.
     context.deinit();
     try std.testing.expectEqual(@as(usize, 0), liveBlocks());
-    try resetAllocator();
+    try resetAllocator(&failure);
 }
 
 test "the seam refuses to install an allocator while ozz's own blocks are live" {
@@ -271,16 +278,18 @@ test "the seam refuses to install an allocator while ozz's own blocks are live" 
     // handle is destroyed, not through the one that produced the block. Were
     // the install allowed here, `deinit` would hand a malloc'd pointer to the
     // Zig bridge, which would read the bytes ahead of it as a header.
-    try resetAllocator();
-    try std.testing.expect((try getAllocator()) == null);
+    var failure: err.Failure = .{};
+    try resetAllocator(&failure);
+    try std.testing.expect(getAllocator() == null);
 
-    var context = try @import("sampling.zig").SamplingContext.init(8);
+    var context = try @import("sampling.zig").SamplingContext.init(8, &failure);
     try std.testing.expect(liveBlocks() > 0);
 
-    try std.testing.expectError(error.AllocatorInUse, setAllocator(std.testing.allocator));
+    try std.testing.expectError(error.AllocatorInUse, setAllocator(std.testing.allocator, &failure));
+    try std.testing.expectEqualSlices(err.Frame, &.{.{ .call = .set_allocator, .result = .allocator_in_use }}, failure.frames());
     // Refused means untouched: still ozz's own allocator, which is what the
     // handle needs.
-    try std.testing.expect((try getAllocator()) == null);
+    try std.testing.expect(getAllocator() == null);
 
     context.deinit();
     try std.testing.expectEqual(@as(usize, 0), liveBlocks());

@@ -66,9 +66,10 @@ fn hostInterface() zozz.ImporterInterface {
 //=============================================================================
 
 test "gltf: import a skeleton and an animation from a fixture file" {
+    var failure: zozz.Failure = .{};
     if (!zozz.options.gltf) return error.SkipZigTest;
 
-    var importer = try zozz.Importer.initFromGltf(fixture_path);
+    var importer = try zozz.Importer.initFromGltf(fixture_path, &failure);
     defer importer.deinit();
 
     const all_types = zozz.ImportNodeType{
@@ -80,7 +81,7 @@ test "gltf: import a skeleton and an animation from a fixture file" {
         .null = true,
         .any = true,
     };
-    var raw_skel = try importer.importSkeleton(all_types);
+    var raw_skel = try importer.importSkeleton(all_types, &failure);
     defer raw_skel.deinit();
 
     // Joint names and parent indices: root -> child, depth-first.
@@ -90,7 +91,7 @@ test "gltf: import a skeleton and an animation from a fixture file" {
     try std.testing.expectEqual(@as(?u32, null), raw_skel.jointParent(0));
     try std.testing.expectEqual(@as(?u32, 0), raw_skel.jointParent(1));
 
-    var skel = try raw_skel.build();
+    var skel = try raw_skel.build(&failure);
     defer skel.deinit();
 
     var animation_count: usize = 0;
@@ -102,11 +103,11 @@ test "gltf: import a skeleton and an animation from a fixture file" {
             ctx.count.* += 1;
             if (std.mem.eql(u8, name, "clip")) ctx.found.* = true;
         }
-    }.visit);
+    }.visit, &failure);
     try std.testing.expectEqual(@as(usize, 1), animation_count);
     try std.testing.expect(found_clip);
 
-    var raw_anim = try importer.importAnimation("clip", skel, 0.0);
+    var raw_anim = try importer.importAnimation("clip", skel, 0.0, &failure);
     defer raw_anim.deinit();
     try std.testing.expectEqual(@as(u32, 2), raw_anim.numTracks());
     try std.testing.expectEqual(@as(f32, 1.0), raw_anim.duration());
@@ -115,13 +116,13 @@ test "gltf: import a skeleton and an animation from a fixture file" {
     // interpolation copies gltf keyframes to ozz ones exactly
     // (gltf2ozz.cc's SampleLinearChannel), so sampling exactly at each
     // keyframe's own time reads back the authored value.
-    const first = try raw_anim.sampleTrack(1, 0.0);
+    const first = try raw_anim.sampleTrack(1, 0.0, &failure);
     try std.testing.expectApproxEqAbs(@as(f32, 0), first.rotation[0], 1e-5);
     try std.testing.expectApproxEqAbs(@as(f32, 0), first.rotation[1], 1e-5);
     try std.testing.expectApproxEqAbs(@as(f32, 0), first.rotation[2], 1e-5);
     try std.testing.expectApproxEqAbs(@as(f32, 1), first.rotation[3], 1e-5);
 
-    const last = try raw_anim.sampleTrack(1, 1.0);
+    const last = try raw_anim.sampleTrack(1, 1.0, &failure);
     try std.testing.expectApproxEqAbs(@as(f32, 0), last.rotation[0], 1e-4);
     try std.testing.expectApproxEqAbs(@as(f32, 0), last.rotation[1], 1e-4);
     try std.testing.expectApproxEqAbs(@as(f32, 0.70710678), last.rotation[2], 1e-4);
@@ -129,8 +130,10 @@ test "gltf: import a skeleton and an animation from a fixture file" {
 }
 
 test "gltf: unsupported without -Dgltf" {
+    var failure: zozz.Failure = .{};
     if (zozz.options.gltf) return error.SkipZigTest;
-    try std.testing.expectError(zozz.Error.Unsupported, zozz.Importer.initFromGltf(fixture_path));
+    try std.testing.expectError(zozz.Error.Unsupported, zozz.Importer.initFromGltf(fixture_path, &failure));
+    try std.testing.expectEqualSlices(zozz.Frame, &.{.{ .call = .gltf_importer_create, .result = .unsupported }}, failure.frames());
 }
 
 //=============================================================================
@@ -138,14 +141,15 @@ test "gltf: unsupported without -Dgltf" {
 //=============================================================================
 
 test "gltf: a host-supplied importer round-trips a two-joint skeleton" {
+    var failure: zozz.Failure = .{};
     if (!zozz.options.options) return error.SkipZigTest;
 
     var interface = hostInterface();
-    var importer = try zozz.Importer.init(&interface);
+    var importer = try zozz.Importer.init(&interface, &failure);
     defer importer.deinit();
-    try importer.load("ignored-by-the-host");
+    try importer.load("ignored-by-the-host", &failure);
 
-    var raw_skel = try importer.importSkeleton(std.mem.zeroes(zozz.ImportNodeType));
+    var raw_skel = try importer.importSkeleton(std.mem.zeroes(zozz.ImportNodeType), &failure);
     defer raw_skel.deinit();
 
     try std.testing.expectEqual(@as(u32, 2), raw_skel.numJoints());
@@ -156,23 +160,27 @@ test "gltf: a host-supplied importer round-trips a two-joint skeleton" {
 
     // Round-trips through a built runtime skeleton and back into an
     // animation import too, exercising the whole host path end to end.
-    var skel = try raw_skel.build();
+    var skel = try raw_skel.build(&failure);
     defer skel.deinit();
-    var raw_anim = try importer.importAnimation("clip", skel, 0.0);
+    var raw_anim = try importer.importAnimation("clip", skel, 0.0, &failure);
     defer raw_anim.deinit();
     try std.testing.expectEqual(@as(u32, 2), raw_anim.numTracks());
 }
 
 test "gltf: a required host callback missing is rejected at Importer.init" {
+    var failure: zozz.Failure = .{};
     if (!zozz.options.options) return error.SkipZigTest;
     var interface = std.mem.zeroes(zozz.ImporterInterface);
-    try std.testing.expectError(zozz.Error.InvalidArgument, zozz.Importer.init(&interface));
+    try std.testing.expectError(zozz.Error.InvalidArgument, zozz.Importer.init(&interface, &failure));
+    try std.testing.expectEqualSlices(zozz.Frame, &.{.{ .call = .importer_create, .result = .invalid_argument }}, failure.frames());
 }
 
 test "gltf: the host-implementable interface is unsupported without -Doptions" {
+    var failure: zozz.Failure = .{};
     if (zozz.options.options) return error.SkipZigTest;
     var interface = std.mem.zeroes(zozz.ImporterInterface);
-    try std.testing.expectError(zozz.Error.Unsupported, zozz.Importer.init(&interface));
+    try std.testing.expectError(zozz.Error.Unsupported, zozz.Importer.init(&interface, &failure));
+    try std.testing.expectEqualSlices(zozz.Frame, &.{.{ .call = .importer_create, .result = .unsupported }}, failure.frames());
 }
 
 //=============================================================================
@@ -183,19 +191,22 @@ test "gltf: the host-implementable interface is unsupported without -Doptions" {
 //=============================================================================
 
 test "gltf: the CLI driver is always unsupported (jsoncpp is not vendored)" {
+    var failure: zozz.Failure = .{};
     const argv = [_][*:0]const u8{"prog"};
 
     if (zozz.options.gltf) {
-        var importer = try zozz.Importer.initFromGltf(fixture_path);
+        var importer = try zozz.Importer.initFromGltf(fixture_path, &failure);
         defer importer.deinit();
-        try std.testing.expectError(zozz.Error.Unsupported, importer.run(&argv));
+        try std.testing.expectError(zozz.Error.Unsupported, importer.run(&argv, &failure));
+        try std.testing.expectEqualSlices(zozz.Frame, &.{.{ .call = .importer_run, .result = .unsupported }}, failure.frames());
         return;
     }
     if (zozz.options.options) {
         var interface = hostInterface();
-        var importer = try zozz.Importer.init(&interface);
+        var importer = try zozz.Importer.init(&interface, &failure);
         defer importer.deinit();
-        try std.testing.expectError(zozz.Error.Unsupported, importer.run(&argv));
+        try std.testing.expectError(zozz.Error.Unsupported, importer.run(&argv, &failure));
+        try std.testing.expectEqualSlices(zozz.Frame, &.{.{ .call = .importer_run, .result = .unsupported }}, failure.frames());
         return;
     }
     return error.SkipZigTest;

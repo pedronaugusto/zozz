@@ -13,6 +13,7 @@
 //! weight 0 rather than running it for an identity, as ozz's own samples do.
 
 const std = @import("std");
+const aegis = @import("aegis");
 const c = @import("c.zig");
 const err = @import("error.zig");
 const math = @import("math.zig");
@@ -48,7 +49,7 @@ pub const TwoBoneJob = struct {
     end_joint: *const math.Mat4,
 
     /// Runs a two-bone IK solve.
-    pub fn run(self: TwoBoneJob) err.Error!TwoBoneResult {
+    pub fn run(self: TwoBoneJob, failure: *err.Failure) err.Error!TwoBoneResult {
         var start_correction: c.SimdFloat4 = undefined;
         var mid_correction: c.SimdFloat4 = undefined;
         var reached: bool = false;
@@ -66,7 +67,7 @@ pub const TwoBoneJob = struct {
             .mid_joint_correction = &mid_correction,
             .reached = &reached,
         };
-        try err.check(c.zozzIKTwoBoneJobRun(&raw));
+        try err.check(failure, .ik_two_bone_job_run, c.zozzIKTwoBoneJobRun(&raw));
         return .{
             .start_joint_correction = start_correction.f,
             .mid_joint_correction = mid_correction.f,
@@ -103,7 +104,7 @@ pub const AimJob = struct {
     joint: *const math.Mat4,
 
     /// Runs an aim IK solve.
-    pub fn run(self: AimJob) err.Error!AimResult {
+    pub fn run(self: AimJob, failure: *err.Failure) err.Error!AimResult {
         var joint_correction: c.SimdFloat4 = undefined;
         var reached: bool = false;
         var raw = c.IKAimJob{
@@ -118,7 +119,7 @@ pub const AimJob = struct {
             .joint_correction = &joint_correction,
             .reached = &reached,
         };
-        try err.check(c.zozzIKAimJobRun(&raw));
+        try err.check(failure, .ik_aim_job_run, c.zozzIKAimJobRun(&raw));
         return .{ .joint_correction = joint_correction.f, .reached = reached };
     }
 };
@@ -134,9 +135,11 @@ pub const AimResult = struct {
 /// compares against the header; `correction` below is how one is built.
 pub const JointCorrection = c.JointCorrection;
 
-/// Pairs a joint index with the rotation an IK job produced for it.
+/// Pairs a joint index with the rotation an IK job produced for it. A
+/// `joint` past `i32` is held as -1, an index `applyCorrections` refuses
+/// like any other out of range.
 pub fn correction(joint: u32, rotation: Vec4) JointCorrection {
-    return .{ .rotation = .{ .f = rotation }, .joint = @intCast(joint) };
+    return .{ .rotation = .{ .f = rotation }, .joint = aegis.int.narrow(i32, joint) orelse -1 };
 }
 
 /// Left-multiplies each correction onto its joint's current local-space
@@ -144,8 +147,8 @@ pub fn correction(joint: u32, rotation: Vec4) JointCorrection {
 /// pose is next converted to model-space. One call for the whole pass, not
 /// one per joint, and corrections in the same SoA block share one transpose.
 /// Nothing is written unless every index is in range.
-pub fn applyCorrections(pose: []SoaTransform, corrections: []const JointCorrection) err.Error!void {
-    try err.check(c.zozzSoaPoseApplyLocalCorrections(
+pub fn applyCorrections(pose: []SoaTransform, corrections: []const JointCorrection, failure: *err.Failure) err.Error!void {
+    try err.check(failure, .soa_pose_apply_local_corrections, c.zozzSoaPoseApplyLocalCorrections(
         pose.ptr,
         pose.len,
         corrections.ptr,
@@ -154,7 +157,7 @@ pub fn applyCorrections(pose: []SoaTransform, corrections: []const JointCorrecti
 }
 
 /// `applyCorrections` for a single joint. Same call, one-element batch.
-pub fn applyCorrection(pose: []SoaTransform, joint: u32, rotation: Vec4) err.Error!void {
+pub fn applyCorrection(pose: []SoaTransform, joint: u32, rotation: Vec4, failure: *err.Failure) err.Error!void {
     const one = [_]JointCorrection{correction(joint, rotation)};
-    try applyCorrections(pose, &one);
+    try applyCorrections(pose, &one, failure);
 }

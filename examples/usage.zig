@@ -13,33 +13,34 @@ const zozz = @import("zozz");
 /// same two objects with the offline builders and writes them, so the example
 /// needs no assets and still loads the way an application does.
 fn authorAssets() !void {
-    var raw_skeleton = try zozz.RawSkeleton.init();
+    var failure: zozz.Failure = .{};
+    var raw_skeleton = try zozz.RawSkeleton.init(&failure);
     defer raw_skeleton.deinit();
-    const root = try raw_skeleton.addJoint(null, "root", zozz.transform_identity);
+    const root = try raw_skeleton.addJoint(null, "root", zozz.transform_identity, &failure);
     var child_rest = zozz.transform_identity;
     child_rest.translation = .{ 0, 1, 0 };
-    _ = try raw_skeleton.addJoint(root, "child", child_rest);
+    _ = try raw_skeleton.addJoint(root, "child", child_rest, &failure);
 
-    var skeleton = try raw_skeleton.build();
+    var skeleton = try raw_skeleton.build(&failure);
     defer skeleton.deinit();
-    try zozz.saveSkeletonToFile(skeleton, "skeleton.ozz");
+    try zozz.saveSkeletonToFile(skeleton, "skeleton.ozz", &failure);
 
     // Every track is fully keyed, the child's included: a raw animation never
     // sees a skeleton, so a track with no keys bakes IDENTITY rather than the
     // rest pose.
-    var raw_clip = try zozz.RawAnimation.init(2, 2.0, "walk");
+    var raw_clip = try zozz.RawAnimation.init(2, 2.0, "walk", &failure);
     defer raw_clip.deinit();
-    try raw_clip.pushTranslation(0, 0.0, .{ 0, 0, 0 });
-    try raw_clip.pushTranslation(0, 2.0, .{ 4, 0, 0 });
-    try raw_clip.pushTranslation(1, 0.0, .{ 0, 1, 0 });
+    try raw_clip.pushTranslation(0, 0.0, .{ 0, 0, 0 }, &failure);
+    try raw_clip.pushTranslation(0, 2.0, .{ 4, 0, 0 }, &failure);
+    try raw_clip.pushTranslation(1, 0.0, .{ 0, 1, 0 }, &failure);
     for (0..2) |track| {
-        try raw_clip.pushRotation(@intCast(track), 0.0, .{ 0, 0, 0, 1 });
-        try raw_clip.pushScale(@intCast(track), 0.0, .{ 1, 1, 1 });
+        try raw_clip.pushRotation(@intCast(track), 0.0, .{ 0, 0, 0, 1 }, &failure);
+        try raw_clip.pushScale(@intCast(track), 0.0, .{ 1, 1, 1 }, &failure);
     }
 
-    var clip = try raw_clip.build();
+    var clip = try raw_clip.build(&failure);
     defer clip.deinit();
-    try zozz.saveAnimationToFile(clip, "walk.ozz");
+    try zozz.saveAnimationToFile(clip, "walk.ozz", &failure);
 }
 
 pub fn main() !void {
@@ -56,43 +57,46 @@ pub fn main() !void {
     const time_seconds: f32 = 0.5;
 
     // --- README:usage ---
-    try zozz.setAllocator(gpa);
+    // Every call that can fail takes a `Failure`, which a refusal leaves
+    // holding the entry point that refused and the result it gave.
+    var failure: zozz.Failure = .{};
+    try zozz.setAllocator(gpa, &failure);
     // Runs last, and can fail: restoring ozz's own allocator is refused while
     // blocks this one produced are still live.
-    defer zozz.resetAllocator() catch |e| std.debug.panic("zozz: {s}", .{@errorName(e)});
+    defer zozz.resetAllocator(&failure) catch |e| std.debug.panic("zozz: {s}", .{@errorName(e)});
 
     // A handle is destroyed through a pointer, so it is a `var`: `deinit`
     // nulls it, which makes a second destroy a no-op and a use after it a
     // checked panic rather than a read of freed memory.
-    var skeleton = try zozz.Skeleton.initFromFile("skeleton.ozz");
+    var skeleton = try zozz.Skeleton.initFromFile("skeleton.ozz", &failure);
     defer skeleton.deinit();
 
-    var clip = try zozz.Animation.initFromFile("walk.ozz");
+    var clip = try zozz.Animation.initFromFile("walk.ozz", &failure);
     defer clip.deinit();
 
     // The caller owns the pose. It can be a stack array, an arena slice, or a
     // sub-range of a batch; `soaBlocks` says how long it has to be.
-    const blocks = try zozz.soaBlocks(skeleton.numJoints());
+    const blocks = try zozz.soaBlocks(skeleton.numJoints(), &failure);
     const pose = try gpa.alloc(zozz.SoaTransform, blocks);
     defer gpa.free(pose);
 
-    var context = try zozz.SamplingContext.initForSkeleton(skeleton);
+    var context = try zozz.SamplingContext.initForSkeleton(skeleton, &failure);
     defer context.deinit();
 
     // Per frame:
-    try skeleton.restPoseSoa(pose);
+    try skeleton.restPoseSoa(pose, &failure);
     try (zozz.SamplingJob{
         .animation = clip,
         .context = context,
         // `.loop` wraps in both directions; `.clamp` holds the end poses.
         .ratio = clip.ratioAt(time_seconds, .loop),
         .out = pose,
-    }).run();
+    }).run(&failure);
 
     // Either read local transforms out...
     const locals = try gpa.alloc(zozz.Transform, skeleton.numJoints());
     defer gpa.free(locals);
-    try zozz.pose.toLocalTransforms(pose, locals);
+    try zozz.pose.toLocalTransforms(pose, locals, &failure);
 
     // ...or flatten the hierarchy to model space. Note the 16-byte alignment.
     const models = try gpa.alignedAlloc(zozz.Mat4, .@"16", skeleton.numJoints());
@@ -102,7 +106,7 @@ pub fn main() !void {
         .locals = pose,
         .root = null,
         .out = models,
-    }).run();
+    }).run(&failure);
 
     // Blending takes the same spans and allocates nothing per call. `walk`
     // and `run` here are two more poses, sampled the same way as `pose`.
@@ -114,12 +118,12 @@ pub fn main() !void {
     defer gpa.free(rest);
     @memcpy(walk, pose);
     @memcpy(run, pose);
-    try skeleton.restPoseSoa(rest);
+    try skeleton.restPoseSoa(rest, &failure);
     try (zozz.BlendingJob{
         .layers = &.{ zozz.blending.layer(0.5, walk), zozz.blending.layer(0.5, run) },
         .rest_pose = rest,
         .out = pose,
-    }).run();
+    }).run(&failure);
 
     // A joint's skinning matrix is its model matrix times its inverse bind
     // pose — the inverse of where the joint sat when the mesh was authored.

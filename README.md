@@ -16,43 +16,46 @@ and run; the gate fails when this file and that example differ.
 ```zig
 const zozz = @import("zozz");
 
-try zozz.setAllocator(gpa);
+// Every call that can fail takes a `Failure`, which a refusal leaves
+// holding the entry point that refused and the result it gave.
+var failure: zozz.Failure = .{};
+try zozz.setAllocator(gpa, &failure);
 // Runs last, and can fail: restoring ozz's own allocator is refused while
 // blocks this one produced are still live.
-defer zozz.resetAllocator() catch |e| std.debug.panic("zozz: {s}", .{@errorName(e)});
+defer zozz.resetAllocator(&failure) catch |e| std.debug.panic("zozz: {s}", .{@errorName(e)});
 
 // A handle is destroyed through a pointer, so it is a `var`: `deinit`
 // nulls it, which makes a second destroy a no-op and a use after it a
 // checked panic rather than a read of freed memory.
-var skeleton = try zozz.Skeleton.initFromFile("skeleton.ozz");
+var skeleton = try zozz.Skeleton.initFromFile("skeleton.ozz", &failure);
 defer skeleton.deinit();
 
-var clip = try zozz.Animation.initFromFile("walk.ozz");
+var clip = try zozz.Animation.initFromFile("walk.ozz", &failure);
 defer clip.deinit();
 
 // The caller owns the pose. It can be a stack array, an arena slice, or a
 // sub-range of a batch; `soaBlocks` says how long it has to be.
-const blocks = try zozz.soaBlocks(skeleton.numJoints());
+const blocks = try zozz.soaBlocks(skeleton.numJoints(), &failure);
 const pose = try gpa.alloc(zozz.SoaTransform, blocks);
 defer gpa.free(pose);
 
-var context = try zozz.SamplingContext.initForSkeleton(skeleton);
+var context = try zozz.SamplingContext.initForSkeleton(skeleton, &failure);
 defer context.deinit();
 
 // Per frame:
-try skeleton.restPoseSoa(pose);
+try skeleton.restPoseSoa(pose, &failure);
 try (zozz.SamplingJob{
     .animation = clip,
     .context = context,
     // `.loop` wraps in both directions; `.clamp` holds the end poses.
     .ratio = clip.ratioAt(time_seconds, .loop),
     .out = pose,
-}).run();
+}).run(&failure);
 
 // Either read local transforms out...
 const locals = try gpa.alloc(zozz.Transform, skeleton.numJoints());
 defer gpa.free(locals);
-try zozz.pose.toLocalTransforms(pose, locals);
+try zozz.pose.toLocalTransforms(pose, locals, &failure);
 
 // ...or flatten the hierarchy to model space. Note the 16-byte alignment.
 const models = try gpa.alignedAlloc(zozz.Mat4, .@"16", skeleton.numJoints());
@@ -62,7 +65,7 @@ try (zozz.LocalToModelJob{
     .locals = pose,
     .root = null,
     .out = models,
-}).run();
+}).run(&failure);
 
 // Blending takes the same spans and allocates nothing per call. `walk`
 // and `run` here are two more poses, sampled the same way as `pose`.
@@ -74,12 +77,12 @@ const rest = try gpa.alloc(zozz.SoaTransform, blocks);
 defer gpa.free(rest);
 @memcpy(walk, pose);
 @memcpy(run, pose);
-try skeleton.restPoseSoa(rest);
+try skeleton.restPoseSoa(rest, &failure);
 try (zozz.BlendingJob{
     .layers = &.{ zozz.blending.layer(0.5, walk), zozz.blending.layer(0.5, run) },
     .rest_pose = rest,
     .out = pose,
-}).run();
+}).run(&failure);
 
 // A joint's skinning matrix is its model matrix times its inverse bind
 // pose — the inverse of where the joint sat when the mesh was authored.

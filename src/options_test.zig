@@ -58,24 +58,25 @@ fn silencingStdout(comptime Result: type, comptime func: anytype, args: anytype)
 }
 
 test "options: register int/float/bool/string, parse a command line, read values" {
+    var failure: zozz.Failure = .{};
     if (!zozz.options.options) return error.SkipZigTest;
 
-    var parser = try zozz.OptionsParser.init();
+    var parser = try zozz.OptionsParser.init(&failure);
     defer parser.deinit();
 
-    var int_opt = try zozz.IntOption.init("count", "an int option", 1, false);
+    var int_opt = try zozz.IntOption.init("count", "an int option", 1, false, &failure);
     defer int_opt.deinit();
-    var float_opt = try zozz.FloatOption.init("scale", "a float option", 1.0, false);
+    var float_opt = try zozz.FloatOption.init("scale", "a float option", 1.0, false, &failure);
     defer float_opt.deinit();
-    var bool_opt = try zozz.BoolOption.init("verbose", "a bool option", false, false);
+    var bool_opt = try zozz.BoolOption.init("verbose", "a bool option", false, false, &failure);
     defer bool_opt.deinit();
-    var string_opt = try zozz.StringOption.init("name", "a string option", "default", true);
+    var string_opt = try zozz.StringOption.init("name", "a string option", "default", true, &failure);
     defer string_opt.deinit();
 
-    try parser.register(int_opt);
-    try parser.register(float_opt);
-    try parser.register(bool_opt);
-    try parser.register(string_opt);
+    try parser.register(int_opt, &failure);
+    try parser.register(float_opt, &failure);
+    try parser.register(bool_opt, &failure);
+    try parser.register(string_opt, &failure);
 
     // 32-slot capacity minus the two built-ins (--help, --version).
     try std.testing.expectEqual(@as(u32, 30), parser.maxOptions());
@@ -83,13 +84,13 @@ test "options: register int/float/bool/string, parse a command line, read values
     // Well-formed and fully satisfied: Parse() never touches stdout here, so
     // this one call needs no silencing.
     const argv = [_][*:0]const u8{ "prog", "--count=42", "--scale=2.5", "--verbose", "--name=hello" };
-    const result = try parser.parseCommandLine(&argv, "1.0", "a test usage string");
+    const result = try parser.parseCommandLine(&argv, "1.0", "a test usage string", &failure);
     try std.testing.expectEqual(zozz.OptionsParseResult.success, result);
 
-    try std.testing.expectEqual(@as(i32, 42), try int_opt.value());
-    try std.testing.expectApproxEqAbs(@as(f32, 2.5), try float_opt.value(), 1e-6);
-    try std.testing.expect(try bool_opt.value());
-    try std.testing.expectEqualStrings("hello", try string_opt.value());
+    try std.testing.expectEqual(@as(i32, 42), try int_opt.value(&failure));
+    try std.testing.expectApproxEqAbs(@as(f32, 2.5), try float_opt.value(&failure), 1e-6);
+    try std.testing.expect(try bool_opt.value(&failure));
+    try std.testing.expectEqualStrings("hello", try string_opt.value(&failure));
 
     try std.testing.expect(int_opt.statisfied());
     try std.testing.expect(!int_opt.required());
@@ -100,95 +101,113 @@ test "options: register int/float/bool/string, parse a command line, read values
     try std.testing.expectEqualStrings("prog", parser.executableName());
     try std.testing.expectEqualStrings("a test usage string", parser.usage());
 
-    try int_opt.restoreDefault();
-    try std.testing.expectEqual(@as(i32, 1), try int_opt.value());
+    try int_opt.restoreDefault(&failure);
+    try std.testing.expectEqual(@as(i32, 1), try int_opt.value(&failure));
 
-    try parser.unregister(int_opt);
-    try parser.unregister(float_opt);
-    try parser.unregister(bool_opt);
-    try parser.unregister(string_opt);
+    try parser.unregister(int_opt, &failure);
+    try parser.unregister(float_opt, &failure);
+    try parser.unregister(bool_opt, &failure);
+    try parser.unregister(string_opt, &failure);
 }
 
 test "options: an unknown argument fails the parse" {
+    var failure: zozz.Failure = .{};
     if (!zozz.options.options) return error.SkipZigTest;
 
-    var parser = try zozz.OptionsParser.init();
+    var parser = try zozz.OptionsParser.init(&failure);
     defer parser.deinit();
 
     const argv = [_][*:0]const u8{ "prog", "--this-option-does-not-exist" };
     const result = try silencingStdout(
         zozz.Error!zozz.OptionsParseResult,
         zozz.OptionsParser.parseCommandLine,
-        .{ parser, &argv, @as(?[*:0]const u8, "1.0"), @as(?[*:0]const u8, "usage") },
+        .{ parser, &argv, @as(?[*:0]const u8, "1.0"), @as(?[*:0]const u8, "usage"), &failure },
     );
     try std.testing.expectEqual(zozz.OptionsParseResult.exit_failure, result);
 }
 
 test "options: a missing required option fails the parse" {
+    var failure: zozz.Failure = .{};
     if (!zozz.options.options) return error.SkipZigTest;
 
-    var parser = try zozz.OptionsParser.init();
+    var parser = try zozz.OptionsParser.init(&failure);
     defer parser.deinit();
-    var required = try zozz.StringOption.init("mandatory", null, "", true);
+    var required = try zozz.StringOption.init("mandatory", null, "", true, &failure);
     defer required.deinit();
-    try parser.register(required);
+    try parser.register(required, &failure);
 
     const argv = [_][*:0]const u8{"prog"};
     const result = try silencingStdout(
         zozz.Error!zozz.OptionsParseResult,
         zozz.OptionsParser.parseCommandLine,
-        .{ parser, &argv, @as(?[*:0]const u8, null), @as(?[*:0]const u8, null) },
+        .{ parser, &argv, @as(?[*:0]const u8, null), @as(?[*:0]const u8, null), &failure },
     );
     try std.testing.expectEqual(zozz.OptionsParseResult.exit_failure, result);
     try std.testing.expect(!required.statisfied());
 
-    try parser.unregister(required);
+    try parser.unregister(required, &failure);
 }
 
 test "options: --help returns the help result rather than crashing" {
+    var failure: zozz.Failure = .{};
     if (!zozz.options.options) return error.SkipZigTest;
 
-    var parser = try zozz.OptionsParser.init();
+    var parser = try zozz.OptionsParser.init(&failure);
     defer parser.deinit();
 
     const argv = [_][*:0]const u8{ "prog", "--help" };
     const result = try silencingStdout(
         zozz.Error!zozz.OptionsParseResult,
         zozz.OptionsParser.parseCommandLine,
-        .{ parser, &argv, @as(?[*:0]const u8, "1.0"), @as(?[*:0]const u8, "usage") },
+        .{ parser, &argv, @as(?[*:0]const u8, "1.0"), @as(?[*:0]const u8, "usage"), &failure },
     );
     try std.testing.expectEqual(zozz.OptionsParseResult.exit_success, result);
 
     // The direct call writes the same screen to stdout on demand.
-    try silencingStdout(zozz.Error!void, zozz.OptionsParser.help, .{parser});
+    try silencingStdout(zozz.Error!void, zozz.OptionsParser.help, .{ parser, &failure });
 }
 
 test "options: register/unregister failures are errors, not crashes" {
+    var failure: zozz.Failure = .{};
     if (!zozz.options.options) return error.SkipZigTest;
 
-    var parser = try zozz.OptionsParser.init();
+    var parser = try zozz.OptionsParser.init(&failure);
     defer parser.deinit();
-    var opt = try zozz.BoolOption.init("flag", null, false, false);
+    var opt = try zozz.BoolOption.init("flag", null, false, false, &failure);
     defer opt.deinit();
 
     // Not registered anywhere yet.
-    try std.testing.expectError(zozz.Error.InvalidArgument, parser.unregister(opt));
+    try std.testing.expectError(zozz.Error.InvalidArgument, parser.unregister(opt, &failure));
+    try std.testing.expectEqualSlices(zozz.Frame, &.{.{ .call = .options_parser_unregister, .result = .invalid_argument }}, failure.frames());
+    failure.reset();
 
-    try parser.register(opt);
+    try parser.register(opt, &failure);
     // Duplicate name.
-    var dup = try zozz.BoolOption.init("flag", null, true, false);
+    var dup = try zozz.BoolOption.init("flag", null, true, false, &failure);
     defer dup.deinit();
-    try std.testing.expectError(zozz.Error.InvalidArgument, parser.register(dup));
+    try std.testing.expectError(zozz.Error.InvalidArgument, parser.register(dup, &failure));
+    try std.testing.expectEqualSlices(zozz.Frame, &.{.{ .call = .options_parser_register, .result = .invalid_argument }}, failure.frames());
+    failure.reset();
 
-    try parser.unregister(opt);
+    try parser.unregister(opt, &failure);
 }
 
 test "options: every entry point is unsupported without -Doptions" {
+    var failure: zozz.Failure = .{};
     if (zozz.options.options) return error.SkipZigTest;
 
-    try std.testing.expectError(zozz.Error.Unsupported, zozz.OptionsParser.init());
-    try std.testing.expectError(zozz.Error.Unsupported, zozz.IntOption.init("x", null, 0, false));
-    try std.testing.expectError(zozz.Error.Unsupported, zozz.FloatOption.init("x", null, 0, false));
-    try std.testing.expectError(zozz.Error.Unsupported, zozz.BoolOption.init("x", null, false, false));
-    try std.testing.expectError(zozz.Error.Unsupported, zozz.StringOption.init("x", null, null, false));
+    try std.testing.expectError(zozz.Error.Unsupported, zozz.OptionsParser.init(&failure));
+    try std.testing.expectEqualSlices(zozz.Frame, &.{.{ .call = .options_parser_create, .result = .unsupported }}, failure.frames());
+    failure.reset();
+    try std.testing.expectError(zozz.Error.Unsupported, zozz.IntOption.init("x", null, 0, false, &failure));
+    try std.testing.expectEqualSlices(zozz.Frame, &.{.{ .call = .int_option_create, .result = .unsupported }}, failure.frames());
+    failure.reset();
+    try std.testing.expectError(zozz.Error.Unsupported, zozz.FloatOption.init("x", null, 0, false, &failure));
+    try std.testing.expectEqualSlices(zozz.Frame, &.{.{ .call = .float_option_create, .result = .unsupported }}, failure.frames());
+    failure.reset();
+    try std.testing.expectError(zozz.Error.Unsupported, zozz.BoolOption.init("x", null, false, false, &failure));
+    try std.testing.expectEqualSlices(zozz.Frame, &.{.{ .call = .bool_option_create, .result = .unsupported }}, failure.frames());
+    failure.reset();
+    try std.testing.expectError(zozz.Error.Unsupported, zozz.StringOption.init("x", null, null, false, &failure));
+    try std.testing.expectEqualSlices(zozz.Frame, &.{.{ .call = .string_option_create, .result = .unsupported }}, failure.frames());
 }

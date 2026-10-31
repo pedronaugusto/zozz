@@ -31,7 +31,8 @@ const Fixture = struct {
     animation: zozz.Animation,
 
     fn init() !Fixture {
-        var raw_skeleton = try zozz.RawSkeleton.init();
+        var failure: zozz.Failure = .{};
+        var raw_skeleton = try zozz.RawSkeleton.init(&failure);
         defer raw_skeleton.deinit();
         var parent: ?u32 = null;
         var names: [joint_count][3:0]u8 = undefined;
@@ -39,16 +40,16 @@ const Fixture = struct {
             names[i] = .{ 'j', '0' + @as(u8, @intCast(i)), 0 };
             var local = zozz.transform_identity;
             local.translation = .{ if (i == 0) 0 else 1, 0, 0 };
-            parent = try raw_skeleton.addJoint(parent, &names[i], local);
+            parent = try raw_skeleton.addJoint(parent, &names[i], local, &failure);
         }
-        var skeleton = try raw_skeleton.build();
+        var skeleton = try raw_skeleton.build(&failure);
         errdefer skeleton.deinit();
 
-        var raw_animation = try zozz.RawAnimation.init(joint_count, 1.0, "concurrent");
+        var raw_animation = try zozz.RawAnimation.init(joint_count, 1.0, "concurrent", &failure);
         defer raw_animation.deinit();
-        try raw_animation.pushTranslation(0, 0.0, .{ 0, 0, 0 });
-        try raw_animation.pushTranslation(0, 1.0, .{ travel, 0, 0 });
-        const animation = try raw_animation.build();
+        try raw_animation.pushTranslation(0, 0.0, .{ 0, 0, 0 }, &failure);
+        try raw_animation.pushTranslation(0, 1.0, .{ travel, 0, 0 }, &failure);
+        const animation = try raw_animation.build(&failure);
 
         return .{ .skeleton = skeleton, .animation = animation };
     }
@@ -84,8 +85,9 @@ fn work(fixture: *const Fixture, first_error: *std.atomic.Value(u16)) void {
 }
 
 fn frame(fixture: *const Fixture, worker: *Worker, ratio: f32) !void {
-    try fixture.skeleton.restPoseSoa(&worker.rest);
-    var context = try zozz.SamplingContext.init(joint_count);
+    var failure: zozz.Failure = .{};
+    try fixture.skeleton.restPoseSoa(&worker.rest, &failure);
+    var context = try zozz.SamplingContext.init(joint_count, &failure);
     defer context.deinit();
 
     const sampling = zozz.SamplingJob{
@@ -94,7 +96,7 @@ fn frame(fixture: *const Fixture, worker: *Worker, ratio: f32) !void {
         .ratio = ratio,
         .out = &worker.sampled,
     };
-    try sampling.run();
+    try sampling.run(&failure);
 
     const layers = [_]zozz.blending.Layer{zozz.blending.layer(1.0, &worker.sampled)};
     const blending = zozz.blending.BlendingJob{
@@ -102,14 +104,14 @@ fn frame(fixture: *const Fixture, worker: *Worker, ratio: f32) !void {
         .rest_pose = &worker.rest,
         .out = &worker.blended,
     };
-    try blending.run();
+    try blending.run(&failure);
 
     const flatten = zozz.LocalToModelJob{
         .skeleton = fixture.skeleton,
         .locals = &worker.blended,
         .out = &worker.models,
     };
-    try flatten.run();
+    try flatten.run(&failure);
 
     // The root slides from 0 to `travel` over the clip, so a torn or
     // half-written result is visible rather than merely suspected.
@@ -119,11 +121,12 @@ fn frame(fixture: *const Fixture, worker: *Worker, ratio: f32) !void {
 }
 
 test "distinct handles are usable from several threads at once" {
+    var failure: zozz.Failure = .{};
     if (@import("builtin").single_threaded) return error.SkipZigTest;
 
     var debug_allocator: std.heap.SafeAllocator = .init(std.heap.page_allocator, .{});
-    try zozz.resetAllocator();
-    try zozz.setAllocator(debug_allocator.allocator());
+    try zozz.resetAllocator(&failure);
+    try zozz.setAllocator(debug_allocator.allocator(), &failure);
 
     var fixture = try Fixture.init();
     var first_error: std.atomic.Value(u16) = .init(0);
@@ -135,7 +138,7 @@ test "distinct handles are usable from several threads at once" {
     for (threads) |thread| thread.join();
 
     fixture.deinit();
-    try zozz.resetAllocator();
+    try zozz.resetAllocator(&failure);
 
     const code = first_error.load(.monotonic);
     if (code != 0) {

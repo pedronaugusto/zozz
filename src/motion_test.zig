@@ -27,11 +27,12 @@ fn expectVec3(expected: [3]f32, actual: [3]f32, tolerance: f32) !void {
 /// `.skeleton` reference below is measured against; the other two references
 /// must ignore it.
 fn buildSkeleton() !zozz.Skeleton {
-    var raw = try zozz.RawSkeleton.init();
+    var failure: zozz.Failure = .{};
+    var raw = try zozz.RawSkeleton.init(&failure);
     defer raw.deinit();
-    const root = try raw.addJoint(null, "root", translated(1, 0, 0));
-    _ = try raw.addJoint(root, "child", translated(0, 1, 0));
-    return raw.build();
+    const root = try raw.addJoint(null, "root", translated(1, 0, 0), &failure);
+    _ = try raw.addJoint(root, "child", translated(0, 1, 0), &failure);
+    return raw.build(&failure);
 }
 
 const key_times = [_]f32{ 0, duration / 2, duration };
@@ -45,15 +46,16 @@ fn rootTranslationAt(time: f32) [3]f32 {
 }
 
 fn buildWalk() !zozz.RawAnimation {
-    var raw = try zozz.RawAnimation.init(2, duration, "walk");
+    var failure: zozz.Failure = .{};
+    var raw = try zozz.RawAnimation.init(2, duration, "walk", &failure);
     errdefer raw.deinit();
     for (key_times) |time| {
-        try raw.pushTranslation(0, time, rootTranslationAt(time));
-        try raw.pushRotation(0, time, .{ 0, 0, 0, 1 });
-        try raw.pushScale(0, time, .{ 1, 1, 1 });
-        try raw.pushTranslation(1, time, .{ 0, 1, 0 });
-        try raw.pushRotation(1, time, .{ 0, 0, 0, 1 });
-        try raw.pushScale(1, time, .{ 1, 1, 1 });
+        try raw.pushTranslation(0, time, rootTranslationAt(time), &failure);
+        try raw.pushRotation(0, time, .{ 0, 0, 0, 1 }, &failure);
+        try raw.pushScale(0, time, .{ 1, 1, 1 }, &failure);
+        try raw.pushTranslation(1, time, .{ 0, 1, 0 }, &failure);
+        try raw.pushRotation(1, time, .{ 0, 0, 0, 1 }, &failure);
+        try raw.pushScale(1, time, .{ 1, 1, 1 }, &failure);
     }
     return raw;
 }
@@ -75,37 +77,38 @@ const no_rotation: zozz.MotionSettings = .{
 };
 
 test "extracting root motion yields the root's translation, and the clip no longer has it" {
+    var failure: zozz.Failure = .{};
     const gpa = std.testing.allocator;
-    try zozz.setAllocator(gpa);
-    defer zozz.resetAllocator() catch unreachable;
+    try zozz.setAllocator(gpa, &failure);
+    defer zozz.resetAllocator(&failure) catch |e| std.debug.panic("zozz: {s}", .{@errorName(e)});
 
     var skel = try buildSkeleton();
     defer skel.deinit();
     var input = try buildWalk();
     defer input.deinit();
 
-    var extractor = try zozz.MotionExtractor.init();
+    var extractor = try zozz.MotionExtractor.init(&failure);
     defer extractor.deinit();
-    try extractor.setRootJoint(0);
+    try extractor.setRootJoint(0, &failure);
     try std.testing.expectEqual(@as(u32, 0), extractor.rootJoint());
-    try extractor.setPositionSettings(positionSettings(.absolute, true));
-    try extractor.setRotationSettings(no_rotation);
+    try extractor.setPositionSettings(positionSettings(.absolute, true), &failure);
+    try extractor.setRotationSettings(no_rotation, &failure);
 
-    var motion_position = try zozz.RawFloat3Track.init();
+    var motion_position = try zozz.RawFloat3Track.init(&failure);
     defer motion_position.deinit();
-    var motion_rotation = try zozz.RawQuaternionTrack.init();
+    var motion_rotation = try zozz.RawQuaternionTrack.init(&failure);
     defer motion_rotation.deinit();
-    var output = try zozz.RawAnimation.init(2, duration, null);
+    var output = try zozz.RawAnimation.init(2, duration, null, &failure);
     defer output.deinit();
 
-    try extractor.run(input, skel, motion_position, motion_rotation, output);
+    try extractor.run(input, skel, motion_position, motion_rotation, output, &failure);
 
     // One motion key per input translation key. The motion track is indexed
     // by RATIO, not seconds — a clip's key at t seconds becomes a track key
     // at t/duration, and a host sampling the two together has to convert.
     try std.testing.expectEqual(@as(u32, key_times.len), motion_position.numKeyframes());
 
-    var position_track = try motion_position.build();
+    var position_track = try motion_position.build(&failure);
     defer position_track.deinit();
 
     // The motion IS the root's X and Z, unshifted (reference = absolute).
@@ -114,7 +117,7 @@ test "extracting root motion yields the root's translation, and the clip no long
         const original = rootTranslationAt(time);
         try expectVec3(
             .{ original[0], 0, original[2] },
-            try position_track.sample(ratio),
+            try position_track.sample(ratio, &failure),
             1e-4,
         );
     }
@@ -123,14 +126,14 @@ test "extracting root motion yields the root's translation, and the clip no long
     // whatever the reference was (0 here); Y, which was never asked for, is
     // untouched at 3.
     for (key_times) |time| {
-        const residual = try output.sampleTrack(0, time);
+        const residual = try output.sampleTrack(0, time, &failure);
         try expectVec3(.{ 0, 3, 0 }, residual.translation, 1e-4);
     }
 
     // The non-root joint is not touched at all — extraction is a property of
     // one track, not of the clip.
     for (key_times) |time| {
-        const child = try output.sampleTrack(1, time);
+        const child = try output.sampleTrack(1, time, &failure);
         try expectVec3(.{ 0, 1, 0 }, child.translation, 1e-5);
     }
     try std.testing.expectApproxEqAbs(duration, output.duration(), 1e-6);
@@ -138,31 +141,32 @@ test "extracting root motion yields the root's translation, and the clip no long
 }
 
 test "the residual clip and the extracted motion recompose the original" {
+    var failure: zozz.Failure = .{};
     const gpa = std.testing.allocator;
-    try zozz.setAllocator(gpa);
-    defer zozz.resetAllocator() catch unreachable;
+    try zozz.setAllocator(gpa, &failure);
+    defer zozz.resetAllocator(&failure) catch |e| std.debug.panic("zozz: {s}", .{@errorName(e)});
 
     var skel = try buildSkeleton();
     defer skel.deinit();
     var input = try buildWalk();
     defer input.deinit();
 
-    var extractor = try zozz.MotionExtractor.init();
+    var extractor = try zozz.MotionExtractor.init(&failure);
     defer extractor.deinit();
     // `.skeleton` this time, so the reference is a non-zero offset and a
     // recomposition that quietly dropped it would show.
-    try extractor.setPositionSettings(positionSettings(.skeleton, true));
-    try extractor.setRotationSettings(no_rotation);
+    try extractor.setPositionSettings(positionSettings(.skeleton, true), &failure);
+    try extractor.setRotationSettings(no_rotation, &failure);
 
-    var motion_position = try zozz.RawFloat3Track.init();
+    var motion_position = try zozz.RawFloat3Track.init(&failure);
     defer motion_position.deinit();
-    var motion_rotation = try zozz.RawQuaternionTrack.init();
+    var motion_rotation = try zozz.RawQuaternionTrack.init(&failure);
     defer motion_rotation.deinit();
-    var output = try zozz.RawAnimation.init(2, duration, null);
+    var output = try zozz.RawAnimation.init(2, duration, null, &failure);
     defer output.deinit();
-    try extractor.run(input, skel, motion_position, motion_rotation, output);
+    try extractor.run(input, skel, motion_position, motion_rotation, output, &failure);
 
-    var position_track = try motion_position.build();
+    var position_track = try motion_position.build(&failure);
     defer position_track.deinit();
 
     // This is the whole reason the bake exists: a runtime that samples the
@@ -172,8 +176,8 @@ test "the residual clip and the extracted motion recompose the original" {
     // key.
     for (0..21) |i| {
         const time = duration * @as(f32, @floatFromInt(i)) / 20.0;
-        const residual = try output.sampleTrack(0, time);
-        const motion = try position_track.sample(time / duration);
+        const residual = try output.sampleTrack(0, time, &failure);
+        const motion = try position_track.sample(time / duration, &failure);
 
         var recomposed: [3]f32 = undefined;
         for (&recomposed, residual.translation, motion) |*sum, r, m| sum.* = r + m;
@@ -182,18 +186,19 @@ test "the residual clip and the extracted motion recompose the original" {
 }
 
 test "the reference setting decides what the extracted motion is measured from" {
+    var failure: zozz.Failure = .{};
     const gpa = std.testing.allocator;
-    try zozz.setAllocator(gpa);
-    defer zozz.resetAllocator() catch unreachable;
+    try zozz.setAllocator(gpa, &failure);
+    defer zozz.resetAllocator(&failure) catch |e| std.debug.panic("zozz: {s}", .{@errorName(e)});
 
     var skel = try buildSkeleton();
     defer skel.deinit();
     var input = try buildWalk();
     defer input.deinit();
 
-    var extractor = try zozz.MotionExtractor.init();
+    var extractor = try zozz.MotionExtractor.init(&failure);
     defer extractor.deinit();
-    try extractor.setRotationSettings(no_rotation);
+    try extractor.setRotationSettings(no_rotation, &failure);
 
     // The clip starts at x = 5; the skeleton's rest root sits at x = 1. At
     // ratio 0: absolute -> 5 (raw component), skeleton -> 4 (from rest pose),
@@ -207,41 +212,42 @@ test "the reference setting decides what the extracted motion is measured from" 
     };
 
     for (cases) |case| {
-        try extractor.setPositionSettings(positionSettings(case.reference, true));
-        const read_back = try extractor.positionSettings();
+        try extractor.setPositionSettings(positionSettings(case.reference, true), &failure);
+        const read_back = try extractor.positionSettings(&failure);
         try std.testing.expectEqual(case.reference, read_back.reference);
         try std.testing.expect(read_back.x and !read_back.y and read_back.z);
 
-        var motion_position = try zozz.RawFloat3Track.init();
+        var motion_position = try zozz.RawFloat3Track.init(&failure);
         defer motion_position.deinit();
-        var motion_rotation = try zozz.RawQuaternionTrack.init();
+        var motion_rotation = try zozz.RawQuaternionTrack.init(&failure);
         defer motion_rotation.deinit();
-        var output = try zozz.RawAnimation.init(2, duration, null);
+        var output = try zozz.RawAnimation.init(2, duration, null, &failure);
         defer output.deinit();
-        try extractor.run(input, skel, motion_position, motion_rotation, output);
+        try extractor.run(input, skel, motion_position, motion_rotation, output, &failure);
 
-        var track = try motion_position.build();
+        var track = try motion_position.build(&failure);
         defer track.deinit();
 
-        try expectVec3(.{ case.at_zero, 0, 0 }, try track.sample(0), 1e-4);
+        try expectVec3(.{ case.at_zero, 0, 0 }, try track.sample(0, &failure), 1e-4);
         // Whatever the reference, the DISTANCE travelled is the same: the
         // reference shifts the origin of the motion track, it does not
         // rescale it.
-        try expectVec3(.{ case.at_zero + 4, 0, 6 }, try track.sample(1), 1e-4);
+        try expectVec3(.{ case.at_zero + 4, 0, 6 }, try track.sample(1, &failure), 1e-4);
     }
 }
 
 test "blending root-motion deltas preserves distance travelled, and never scale" {
+    var failure: zozz.Failure = .{};
     const gpa = std.testing.allocator;
-    try zozz.setAllocator(gpa);
-    defer zozz.resetAllocator() catch unreachable;
+    try zozz.setAllocator(gpa, &failure);
+    defer zozz.resetAllocator(&failure) catch |e| std.debug.panic("zozz: {s}", .{@errorName(e)});
 
     var out: zozz.Transform = undefined;
 
     // No layers is the identity — a host with every clip weighted off gets a
     // character that stands still, not one that jumps to the origin with a
     // zero scale.
-    try (zozz.MotionBlendingJob{ .layers = &[_]zozz.BlendLayer{}, .out = &out }).run();
+    try (zozz.MotionBlendingJob{ .layers = &[_]zozz.BlendLayer{}, .out = &out }).run(&failure);
     try expectVec3(.{ 0, 0, 0 }, out.translation, 1e-6);
     try expectVec3(.{ 1, 1, 1 }, out.scale, 1e-6);
     try std.testing.expectApproxEqAbs(@as(f32, 1), out.rotation[3], 1e-6);
@@ -258,7 +264,7 @@ test "blending root-motion deltas preserves distance travelled, and never scale"
     for ([_]f32{ 0.1, 1.0, 25.0 }) |weight| {
         try (zozz.MotionBlendingJob{ .layers = &[_]zozz.BlendLayer{
             .{ .weight = weight, .delta = &single },
-        }, .out = &out }).run();
+        }, .out = &out }).run(&failure);
         try expectVec3(.{ 3, 0, 4 }, out.translation, 1e-4);
         try expectVec3(.{ 1, 1, 1 }, out.scale, 1e-6);
     }
@@ -282,7 +288,7 @@ test "blending root-motion deltas preserves distance travelled, and never scale"
     try (zozz.MotionBlendingJob{ .layers = &[_]zozz.BlendLayer{
         .{ .weight = 0.5, .delta = &east },
         .{ .weight = 0.5, .delta = &north },
-    }, .out = &out }).run();
+    }, .out = &out }).run(&failure);
     const half_root_two = @sqrt(2.0) / 2.0;
     try expectVec3(.{ half_root_two, 0, half_root_two }, out.translation, 1e-4);
     const length = @sqrt(
@@ -297,7 +303,7 @@ test "blending root-motion deltas preserves distance travelled, and never scale"
     try (zozz.MotionBlendingJob{ .layers = &[_]zozz.BlendLayer{
         .{ .weight = 5, .delta = &east },
         .{ .weight = 5, .delta = &north },
-    }, .out = &scaled_weights }).run();
+    }, .out = &scaled_weights }).run(&failure);
     try expectVec3(out.translation, scaled_weights.translation, 1e-5);
 
     // A layer at weight 0 (or below) drops out entirely rather than dragging
@@ -306,7 +312,7 @@ test "blending root-motion deltas preserves distance travelled, and never scale"
         .{ .weight = 1, .delta = &east },
         .{ .weight = 0, .delta = &north },
         .{ .weight = -3, .delta = &north },
-    }, .out = &out }).run();
+    }, .out = &out }).run(&failure);
     try expectVec3(.{ 1, 0, 0 }, out.translation, 1e-5);
 
     // A NaN weight is refused rather than poisoning the whole blend: ozz's
@@ -315,5 +321,6 @@ test "blending root-motion deltas preserves distance travelled, and never scale"
     try std.testing.expectError(zozz.Error.InvalidArgument, (zozz.MotionBlendingJob{
         .layers = &[_]zozz.BlendLayer{.{ .weight = std.math.nan(f32), .delta = &east }},
         .out = &out,
-    }).run());
+    }).run(&failure));
+    try std.testing.expectEqualSlices(zozz.Frame, &.{.{ .call = .motion_blend, .result = .invalid_argument }}, failure.frames());
 }

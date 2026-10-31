@@ -14,17 +14,18 @@ pub const FloatTrack = struct {
     handle: ?*c.FloatTrack,
 
     /// Loads a track from a `.ozz` file on disk.
-    pub fn initFromFile(path: [*:0]const u8) err.Error!FloatTrack {
+    pub fn initFromFile(path: [*:0]const u8, failure: *err.Failure) err.Error!FloatTrack {
         var handle: *c.FloatTrack = undefined;
-        try err.check(c.zozzFloatTrackLoadFile(path, &handle));
+        try err.check(failure, .float_track_load_file, c.zozzFloatTrackLoadFile(path, &handle));
         return .{ .handle = handle };
     }
 
     /// Loads a track from a memory image of a `.ozz` file. The bytes are read
     /// during the call only and need not outlive it.
-    pub fn initFromMemory(bytes: []const u8) err.Error!FloatTrack {
+    pub fn initFromMemory(bytes: err.Bytes, failure: *err.Failure) err.Error!FloatTrack {
+        const image = bytes.readForParse();
         var handle: *c.FloatTrack = undefined;
-        try err.check(c.zozzFloatTrackLoadMemory(bytes.ptr, bytes.len, &handle));
+        try err.check(failure, .float_track_load_memory, c.zozzFloatTrackLoadMemory(image.ptr, image.len, &handle));
         return .{ .handle = handle };
     }
 
@@ -36,27 +37,27 @@ pub const FloatTrack = struct {
     /// Borrowed track name; "" if unnamed. Valid only while the track is
     /// alive.
     pub fn name(self: FloatTrack) [:0]const u8 {
-        return std.mem.span(c.zozzFloatTrackName(self.handle.?));
+        return std.mem.span(c.zozzFloatTrackName(err.live(self.handle)));
     }
 
     /// Samples the track at `ratio` (out-of-range values are clamped by ozz).
     /// An empty track samples as 0.
-    pub fn sample(self: FloatTrack, ratio: f32) err.Error!f32 {
+    pub fn sample(self: FloatTrack, ratio: f32, failure: *err.Failure) err.Error!f32 {
         var out: f32 = undefined;
-        try err.check(c.zozzFloatTrackSample(self.handle.?, ratio, &out));
+        try err.check(failure, .float_track_sample, c.zozzFloatTrackSample(err.live(self.handle), ratio, &out));
         return out;
     }
 
     /// Number of authored keyframes.
     pub fn numKeyframes(self: FloatTrack) u32 {
-        return @intCast(c.zozzFloatTrackNumKeyframes(self.handle.?));
+        return err.reported(u32, c.zozzFloatTrackNumKeyframes(err.live(self.handle)));
     }
 
     /// Each keyframe's ratio, ascending. ozz's own array, borrowed: valid
     /// while the track is alive, and empty for a track with no keyframes.
     pub fn ratios(self: FloatTrack) []const f32 {
         var count: usize = 0;
-        const ptr = c.zozzFloatTrackRatios(self.handle.?, &count) orelse return &.{};
+        const ptr = c.zozzFloatTrackRatios(err.live(self.handle), &count) orelse return &.{};
         return ptr[0..count];
     }
 
@@ -65,7 +66,7 @@ pub const FloatTrack = struct {
     /// Borrowed like `ratios`.
     pub fn values(self: FloatTrack) []const f32 {
         var count: usize = 0;
-        const ptr = c.zozzFloatTrackValues(self.handle.?, &count) orelse return &.{};
+        const ptr = c.zozzFloatTrackValues(err.live(self.handle), &count) orelse return &.{};
         return ptr[0..count];
     }
 
@@ -73,21 +74,21 @@ pub const FloatTrack = struct {
     /// this is sized in BYTES. `interpolations` decodes it.
     pub fn steps(self: FloatTrack) []const u8 {
         var count: usize = 0;
-        const ptr = c.zozzFloatTrackSteps(self.handle.?, &count) orelse return &.{};
+        const ptr = c.zozzFloatTrackSteps(err.live(self.handle), &count) orelse return &.{};
         return ptr[0..count];
     }
 
     /// Each keyframe's interpolation mode, index-aligned with `ratios`,
     /// decoded into `out`, which must hold at least `numKeyframes` entries.
-    pub fn interpolations(self: FloatTrack, out: []c.TrackInterpolation) err.Error![]c.TrackInterpolation {
-        return decodeSteps(self.steps(), self.numKeyframes(), out);
+    pub fn interpolations(self: FloatTrack, out: []c.TrackInterpolation, failure: *err.Failure) err.Error![]c.TrackInterpolation {
+        return decodeSteps(self.steps(), self.numKeyframes(), out, failure);
     }
 };
 
 /// The one decode of ozz's packed steps bitset, shared by all five track
 /// types: the bit order lives in the C ABI, not repeated here.
-fn decodeSteps(step_bits: []const u8, num_keys: u32, out: []c.TrackInterpolation) err.Error![]c.TrackInterpolation {
-    try err.check(c.zozzTrackInterpolations(
+fn decodeSteps(step_bits: []const u8, num_keys: u32, out: []c.TrackInterpolation, failure: *err.Failure) err.Error![]c.TrackInterpolation {
+    try err.check(failure, .track_interpolations, c.zozzTrackInterpolations(
         step_bits.ptr,
         step_bits.len,
         num_keys,
@@ -100,9 +101,11 @@ fn decodeSteps(step_bits: []const u8, num_keys: u32, out: []c.TrackInterpolation
 /// The C entry points for one vector track value type, gathered so the four
 /// same-shaped tracks (`Float2Track`, `Float3Track`, `Float4Track`,
 /// `QuaternionTrack`) can share one implementation instead of duplicating it
-/// four times by hand.
+/// four times by hand. `call` is the entry points' shared prefix as `err.Call`
+/// spells it, which names each refusal's frame.
 fn VectorOps(comptime Handle: type, comptime n: usize) type {
     return struct {
+        call: []const u8,
         loadFile: fn ([*:0]const u8, **Handle) callconv(.c) c.Result,
         loadMemory: fn ([*]const u8, usize, **Handle) callconv(.c) c.Result,
         destroy: fn (?*Handle) callconv(.c) void,
@@ -122,17 +125,18 @@ fn VectorTrack(comptime Handle: type, comptime n: usize, comptime ops: VectorOps
         const Self = @This();
 
         /// Loads a track from a `.ozz` file on disk.
-        pub fn initFromFile(path: [*:0]const u8) err.Error!Self {
+        pub fn initFromFile(path: [*:0]const u8, failure: *err.Failure) err.Error!Self {
             var handle: *Handle = undefined;
-            try err.check(ops.loadFile(path, &handle));
+            try err.check(failure, @field(err.Call, ops.call ++ "_load_file"), ops.loadFile(path, &handle));
             return .{ .handle = handle };
         }
 
         /// Loads a track from a memory image of a `.ozz` file. The bytes are
         /// read during the call only and need not outlive it.
-        pub fn initFromMemory(bytes: []const u8) err.Error!Self {
+        pub fn initFromMemory(bytes: err.Bytes, failure: *err.Failure) err.Error!Self {
+            const image = bytes.readForParse();
             var handle: *Handle = undefined;
-            try err.check(ops.loadMemory(bytes.ptr, bytes.len, &handle));
+            try err.check(failure, @field(err.Call, ops.call ++ "_load_memory"), ops.loadMemory(image.ptr, image.len, &handle));
             return .{ .handle = handle };
         }
 
@@ -144,28 +148,28 @@ fn VectorTrack(comptime Handle: type, comptime n: usize, comptime ops: VectorOps
         /// Borrowed track name; "" if unnamed. Valid only while the track is
         /// alive.
         pub fn name(self: Self) [:0]const u8 {
-            return std.mem.span(ops.name(self.handle.?));
+            return std.mem.span(ops.name(err.live(self.handle)));
         }
 
         /// Samples the track at `ratio` (out-of-range values are clamped by
         /// ozz). An empty track samples as the value type's identity (zero
         /// for a vector, the identity quaternion for `QuaternionTrack`).
-        pub fn sample(self: Self, ratio: f32) err.Error![n]f32 {
+        pub fn sample(self: Self, ratio: f32, failure: *err.Failure) err.Error![n]f32 {
             var out: [n]f32 = undefined;
-            try err.check(ops.sample(self.handle.?, ratio, &out));
+            try err.check(failure, @field(err.Call, ops.call ++ "_sample"), ops.sample(err.live(self.handle), ratio, &out));
             return out;
         }
 
         /// Number of authored keyframes.
         pub fn numKeyframes(self: Self) u32 {
-            return @intCast(ops.numKeyframes(self.handle.?));
+            return err.reported(u32, ops.numKeyframes(err.live(self.handle)));
         }
 
         /// Each keyframe's ratio, ascending. ozz's own array, borrowed:
         /// valid while the track is alive, empty for a keyframe-less track.
         pub fn ratios(self: Self) []const f32 {
             var count: usize = 0;
-            const ptr = ops.ratios(self.handle.?, &count) orelse return &.{};
+            const ptr = ops.ratios(err.live(self.handle), &count) orelse return &.{};
             return ptr[0..count];
         }
 
@@ -174,7 +178,7 @@ fn VectorTrack(comptime Handle: type, comptime n: usize, comptime ops: VectorOps
         /// sample. Borrowed like `ratios`.
         pub fn values(self: Self) []const [n]f32 {
             var count: usize = 0;
-            const ptr = ops.values(self.handle.?, &count) orelse return &.{};
+            const ptr = ops.values(err.live(self.handle), &count) orelse return &.{};
             return ptr[0..count];
         }
 
@@ -182,19 +186,20 @@ fn VectorTrack(comptime Handle: type, comptime n: usize, comptime ops: VectorOps
         /// keyframe, so this is sized in BYTES. `interpolations` decodes it.
         pub fn steps(self: Self) []const u8 {
             var count: usize = 0;
-            const ptr = ops.steps(self.handle.?, &count) orelse return &.{};
+            const ptr = ops.steps(err.live(self.handle), &count) orelse return &.{};
             return ptr[0..count];
         }
 
         /// Each keyframe's interpolation mode, index-aligned with `ratios`,
         /// decoded into `out`, which must hold `numKeyframes` entries.
-        pub fn interpolations(self: Self, out: []c.TrackInterpolation) err.Error![]c.TrackInterpolation {
-            return decodeSteps(self.steps(), self.numKeyframes(), out);
+        pub fn interpolations(self: Self, out: []c.TrackInterpolation, failure: *err.Failure) err.Error![]c.TrackInterpolation {
+            return decodeSteps(self.steps(), self.numKeyframes(), out, failure);
         }
     };
 }
 
 pub const Float2Track = VectorTrack(c.Float2Track, 2, .{
+    .call = "float2_track",
     .loadFile = c.zozzFloat2TrackLoadFile,
     .loadMemory = c.zozzFloat2TrackLoadMemory,
     .destroy = c.zozzFloat2TrackDestroy,
@@ -207,6 +212,7 @@ pub const Float2Track = VectorTrack(c.Float2Track, 2, .{
 });
 
 pub const Float3Track = VectorTrack(c.Float3Track, 3, .{
+    .call = "float3_track",
     .loadFile = c.zozzFloat3TrackLoadFile,
     .loadMemory = c.zozzFloat3TrackLoadMemory,
     .destroy = c.zozzFloat3TrackDestroy,
@@ -219,6 +225,7 @@ pub const Float3Track = VectorTrack(c.Float3Track, 3, .{
 });
 
 pub const Float4Track = VectorTrack(c.Float4Track, 4, .{
+    .call = "float4_track",
     .loadFile = c.zozzFloat4TrackLoadFile,
     .loadMemory = c.zozzFloat4TrackLoadMemory,
     .destroy = c.zozzFloat4TrackDestroy,
@@ -233,6 +240,7 @@ pub const Float4Track = VectorTrack(c.Float4Track, 4, .{
 /// A quaternion track. `sample` and `values` return (x, y, z, w) — w LAST,
 /// matching `Transform.rotation` and every other quaternion in this package.
 pub const QuaternionTrack = VectorTrack(c.QuaternionTrack, 4, .{
+    .call = "quaternion_track",
     .loadFile = c.zozzQuaternionTrackLoadFile,
     .loadMemory = c.zozzQuaternionTrackLoadMemory,
     .destroy = c.zozzQuaternionTrackDestroy,
@@ -252,9 +260,9 @@ pub const QuaternionTrack = VectorTrack(c.QuaternionTrack, 4, .{
 // and there is nothing to free:
 //
 //     var edges: zozz.TrackTriggering = undefined;
-//     try edges.run(track, 0, 1, 0.5);
-//     while (edges.valid()) : (try edges.next()) {
-//         const edge = try edges.get();
+//     try edges.run(track, 0, 1, 0.5, &failure);
+//     while (edges.valid()) : (try edges.next(&failure)) {
+//         const edge = try edges.get(&failure);
 //     }
 //=============================================================================
 
@@ -282,8 +290,8 @@ pub const TrackTriggering = struct {
     /// the track more than once. On return the session sits on the first
     /// edge, or past the end if `from == to` or no edge exists — check
     /// `valid` before `get`. By pointer: the storage records its own address.
-    pub fn run(self: *TrackTriggering, track: FloatTrack, from: f32, to: f32, threshold: f32) err.Error!void {
-        try err.check(c.zozzFloatTrackTriggeringJobRun(track.handle.?, from, to, threshold, &self.state));
+    pub fn run(self: *TrackTriggering, track: FloatTrack, from: f32, to: f32, threshold: f32, failure: *err.Failure) err.Error!void {
+        try err.check(failure, .float_track_triggering_job_run, c.zozzFloatTrackTriggeringJobRun(err.live(track.handle), from, to, threshold, &self.state));
     }
 
     /// True if the session refers to a real edge (safe to pass to `get`);
@@ -295,15 +303,15 @@ pub const TrackTriggering = struct {
 
     /// Advances to the next edge. Returns `Error.InvalidArgument`, without
     /// advancing, if the session is already past the end.
-    pub fn next(self: *TrackTriggering) err.Error!void {
-        try err.check(c.zozzTrackTriggeringIteratorNext(&self.state));
+    pub fn next(self: *TrackTriggering, failure: *err.Failure) err.Error!void {
+        try err.check(failure, .track_triggering_iterator_next, c.zozzTrackTriggeringIteratorNext(&self.state));
     }
 
     /// Reads the edge the session currently refers to. Returns
     /// `Error.InvalidArgument` if it is past the end.
-    pub fn get(self: *const TrackTriggering) err.Error!TrackEdge {
+    pub fn get(self: *const TrackTriggering, failure: *err.Failure) err.Error!TrackEdge {
         var edge: c.TrackEdge = undefined;
-        try err.check(c.zozzTrackTriggeringIteratorGet(&self.state, &edge));
+        try err.check(failure, .track_triggering_iterator_get, c.zozzTrackTriggeringIteratorGet(&self.state, &edge));
         return .{ .ratio = edge.ratio, .rising = edge.rising };
     }
 };
