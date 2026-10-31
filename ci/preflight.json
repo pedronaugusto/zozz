@@ -9,7 +9,8 @@
       "loadFloatTrack", "loadFloat2Track", "loadFloat3Track", "loadFloat4Track", "loadQuaternionTrack",
       "loadRawSkeleton", "loadRawAnimation",
       "loadRawFloatTrack", "loadRawFloat2Track", "loadRawFloat3Track", "loadRawFloat4Track", "loadRawQuaternionTrack",
-      "decodeGV4", "decodeGV4Stream"
+      "decodeGV4", "decodeGV4Stream",
+      "initFromGltf"
     ]
   },
   "shipped": {

@@ -76,6 +76,10 @@ could not express, so a port has the reason and not only the diff.
   section, and its Platforms section says what preflight's matrix runs: the
   suite on `x86_64-windows-msvc` is executed on a Windows machine before a
   release, not by CI.
+- `Importer.initFromGltf` is listed among the parsers of untrusted input
+  (`ci/preflight.json`'s `fuzz.parsers`), with no fuzz target, so every gate
+  run reports it unfuzzed. A reason in the docs said the same thing and
+  nothing checked it; the report stands until the backend is rebuilt.
 
 ### Fixed
 

@@ -334,7 +334,8 @@ refused, and the whole archives still load.
 The glTF backend (`-Dgltf`, `Importer.initFromGltf`) is outside all of this.
 It is ozz's `gltf2ozz` over tinygltf, a second glTF parser that no property
 here fuzzes, and it opens its file with C stdio. It is off by default and
-not hardened against hostile input; import only glTF you trust.
+not hardened against hostile input; import only glTF you trust. It sits in
+`fuzz.parsers` with no target, so every gate run reports it unfuzzed.
 
 ## The ABI guard
 
