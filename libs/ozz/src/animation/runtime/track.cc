@@ -28,6 +28,7 @@
 #include "ozz/animation/runtime/track.h"
 
 #include <cassert>
+#include <limits>
 
 #include "ozz/base/io/archive.h"
 #include "ozz/base/log.h"
@@ -132,6 +133,7 @@ void Track<_ValueType>::Load(ozz::io::IArchive& _archive, uint32_t _version) {
 
   if (_version > 1) {
     log::Err() << "Unsupported Track version " << _version << "." << std::endl;
+    _archive.Refuse("Track.version", _version, 1);
     return;
   }
 
@@ -140,6 +142,15 @@ void Track<_ValueType>::Load(ozz::io::IArchive& _archive, uint32_t _version) {
 
   int32_t name_len;
   _archive >> name_len;
+
+  // A key stores its value and its ratio; a name, one byte per character.
+  if (!_archive.CheckCount("Track.num_keys", num_keys,
+                           sizeof(_ValueType) + sizeof(float),
+                           std::numeric_limits<uint32_t>::max()) ||
+      !_archive.CheckCount("Track.name_len", static_cast<uint32_t>(name_len),
+                           1, std::numeric_limits<int32_t>::max())) {
+    return;
+  }
 
   Allocate(num_keys, name_len);
 

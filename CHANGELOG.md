@@ -19,9 +19,11 @@ could not express, so a port has the reason and not only the diff.
 - Every archive loader takes a `ZozzRefusal*` as its last parameter (C): each
   `*LoadMemory`, `*LoadFile` and `zozzIArchiveLoad<Type>`, NULL allowed. A
   loader clears it on entry, and a refusal for the archive's content fills it
-  with the count that failed (`what`, a static string such as
+  with the version or count that failed (`what`, a static string such as
   `Skeleton.num_joints`), what the archive held (`value`) and the bound it
-  broke (`limit`), only ever with `ZOZZ_RESULT_BAD_FORMAT`. In Zig a
+  broke (`limit`): with `ZOZZ_RESULT_BAD_FORMAT` when a bound of ozz's is
+  broken, and with `ZOZZ_RESULT_IO` when a count runs past the bytes the
+  archive has left, `limit` then being what fits. In Zig a
   `zozz.Frame` carries it as `refusal` (`frame.refusal.named()`, `value`,
   `limit`). `BadFormat` alone could not say which count broke or by how much:
   a skeleton one joint over ozz's limit and bytes that are not an archive at
@@ -52,6 +54,16 @@ could not express, so a port has the reason and not only the diff.
 
 ### Fixed
 
+- A crafted archive could drive ozz's own `Load` into an allocation sized by
+  a count it never checked: a skeleton whose name block claims a negative
+  size faulted inside `Skeleton::Load`, and a raw archive's vector or string
+  count reached `resize` as it stood. An unsupported version loaded as an
+  empty object. `libs/ozz` now carries `libs/patches/ozz-archive-counts.patch`,
+  which checks every version and count against ozz's limits and the bytes
+  left before anything is sized, bounds a raw skeleton's nesting, and refuses
+  through the record above. `libs/ozz` was upstream byte for byte, and had no
+  way to say so short of crashing; `check-vendor` now proves upstream plus
+  exactly the listed patches.
 - A caller's `u32` or `usize` past what the C boundary's `int` carries
   (`SamplingContext.init(1 << 31)`, a joint, track or vertex count) was
   `@intCast`, a panic in a safe build and undefined in ReleaseFast; it is

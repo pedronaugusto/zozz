@@ -80,6 +80,7 @@
 #include <stdint.h>
 
 #include <cassert>
+#include <cstring>
 
 #include "ozz/base/endianness.h"
 #include "ozz/base/io/archive_traits.h"
@@ -183,12 +184,19 @@ class OZZ_BASE_DLL IArchive {
 
   // Loads _size bytes of binary data to _data.
   size_t LoadBinary(void* _data, size_t _size) {
+    if (refused()) {
+      std::memset(_data, 0, _size);
+      return _size;
+    }
     return stream_->Read(_data, _size);
   }
 
   // Class type loading.
   template <typename _Ty>
   void operator>>(_Ty& _ty) {
+    if (refused()) {
+      return;
+    }
     // Only uses tag validation for assertions, as reading cannot fail.
     OZZ_IF_DEBUG(bool valid =) internal::Tagger<const _Ty>::Validate(*this);
     assert(valid && "Type tag does not match archive content.");
@@ -201,6 +209,10 @@ class OZZ_BASE_DLL IArchive {
 // Primitive type loading.
 #define OZZ_IO_PRIMITIVE_TYPE(_type)                          \
   void operator>>(_type& _v) {                                \
+    if (refused()) {                                          \
+      _v = _type();                                           \
+      return;                                                 \
+    }                                                         \
     _type v;                                                  \
     OZZ_IF_DEBUG(size_t size =) stream_->Read(&v, sizeof(v)); \
     assert(size == sizeof(v));                                \
@@ -236,6 +248,40 @@ class OZZ_BASE_DLL IArchive {
   // Returns input stream.
   Stream* stream() const { return stream_; }
 
+  // Records that a Load found the archive malformed, which it then leaves
+  // empty: _what names the count or invariant it broke and must have static
+  // storage, _value is what the archive held and _limit the bound. The first
+  // refusal is kept, and the archive reads nothing after it: a primitive
+  // loads as zero, binary data as zeros, an object not at all, and every
+  // check fails, so the Load that refused and those enclosing it unwind
+  // without reading past what was refused.
+  void Refuse(const char* _what, uint64_t _value, uint64_t _limit);
+
+  // True once a Load refused the archive.
+  bool refused() const { return refusal_what_ != nullptr; }
+  const char* refusal_what() const { return refusal_what_; }
+  uint64_t refusal_value() const { return refusal_value_; }
+  uint64_t refusal_limit() const { return refusal_limit_; }
+  // True when the refusal's bound was the bytes left in the stream rather
+  // than a limit of ozz's: the archive ends before what it claims.
+  bool refusal_past_end() const { return refusal_past_end_; }
+
+  // The bytes the stream holds past its read position.
+  size_t remaining() const;
+
+  // Whether _count elements, each taking at least _element_size bytes in the
+  // archive, fit both _limit and the bytes left to read. Refuses as _what
+  // otherwise, with the tighter of the two as the limit; an _element_size of 0
+  // checks _limit alone. _count is the value as stored, so a negative int32
+  // count arrives as its unsigned image.
+  bool CheckCount(const char* _what, uint64_t _count, size_t _element_size,
+                  uint64_t _limit);
+
+  // Bounds how deeply a recursive type nests: Enter refuses as _what past
+  // _limit levels, and each Enter that succeeds is paired with a Leave.
+  bool Enter(const char* _what, uint64_t _limit);
+  void Leave() { --depth_; }
+
  private:
   template <typename _Ty>
   uint32_t LoadVersion() {
@@ -251,6 +297,15 @@ class OZZ_BASE_DLL IArchive {
 
   // Endian swap state, true if a conversion is required while reading.
   bool endian_swap_;
+
+  // The first refusal a Load recorded, refusal_what_ null while none.
+  const char* refusal_what_ = nullptr;
+  uint64_t refusal_value_ = 0;
+  uint64_t refusal_limit_ = 0;
+  bool refusal_past_end_ = false;
+
+  // How many Enter calls are open.
+  uint64_t depth_ = 0;
 };
 
 // Primitive type are not versionable.

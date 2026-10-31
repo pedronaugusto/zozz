@@ -53,5 +53,52 @@ IArchive::IArchive(Stream* _stream) : stream_(_stream), endian_swap_(false) {
   *this >> endianness;
   endian_swap_ = endianness != GetNativeEndianness();
 }
+
+void IArchive::Refuse(const char* _what, uint64_t _value, uint64_t _limit) {
+  if (refusal_what_ != nullptr) {
+    return;
+  }
+  refusal_what_ = _what;
+  refusal_value_ = _value;
+  refusal_limit_ = _limit;
+}
+
+size_t IArchive::remaining() const {
+  const int tell = stream_->Tell();
+  const size_t size = stream_->Size();
+  if (tell < 0 || static_cast<size_t>(tell) >= size) {
+    return 0;
+  }
+  return size - static_cast<size_t>(tell);
+}
+
+bool IArchive::CheckCount(const char* _what, uint64_t _count,
+                          size_t _element_size, uint64_t _limit) {
+  if (refused()) {
+    return false;
+  }
+  const uint64_t fit = _element_size ? remaining() / _element_size : _limit;
+  const uint64_t limit = fit < _limit ? fit : _limit;
+  if (_count <= limit) {
+    return true;
+  }
+  if (!refused()) {
+    refusal_past_end_ = fit < _limit;
+  }
+  Refuse(_what, _count, limit);
+  return false;
+}
+
+bool IArchive::Enter(const char* _what, uint64_t _limit) {
+  if (refused()) {
+    return false;
+  }
+  if (depth_ >= _limit) {
+    Refuse(_what, depth_ + 1, _limit);
+    return false;
+  }
+  ++depth_;
+  return true;
+}
 }  // namespace io
 }  // namespace ozz

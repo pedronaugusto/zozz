@@ -30,6 +30,8 @@
 #include "ozz/base/io/archive.h"
 #include "ozz/base/maths/math_ex.h"
 
+#include <limits>
+
 namespace ozz {
 namespace io {
 void Extern<string>::Save(OArchive& _archive, const string* _values,
@@ -55,6 +57,11 @@ void Extern<string>::Load(IArchive& _archive, string* _values, size_t _count,
 
     uint32_t size;
     _archive >> size;
+    if (_archive.refused() ||
+        !_archive.CheckCount("string.size", size, 1,
+                             std::numeric_limits<uint32_t>::max())) {
+      return;
+    }
     string.reserve(size);
 
     // Prepares temporary buffer used for reading.

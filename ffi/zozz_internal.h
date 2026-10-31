@@ -66,9 +66,10 @@ constexpr int SoaBlocks(int num_joints) { return (num_joints + 3) / 4; }
 // The refusal record
 //
 // Every loader clears the caller's ZozzRefusal on entry and hands it down to
-// the parse and to the post-parse checks. Refuse is the only way one is
-// filled, and it returns ZOZZ_RESULT_BAD_FORMAT, so a record can never arrive
-// with any other result. `what` binds to a string literal, never a pointer.
+// the parse and to the post-parse checks. Refuse and RefusedBy are the only
+// ways one is filled; they return BAD_FORMAT, or IO for a count past the
+// bytes left, so no other result arrives with a record. `what` is a string
+// literal: zozz's bind to one, and IArchive::Refuse requires static storage.
 //===----------------------------------------------------------------------===//
 
 /// Empties `refusal`, which may be NULL.
@@ -83,6 +84,20 @@ ZozzResult Refuse(ZozzRefusal* refusal, const char (&what)[N], uint64_t value,
                   uint64_t limit) {
   if (refusal != nullptr) *refusal = ZozzRefusal{what, value, limit};
   return ZOZZ_RESULT_BAD_FORMAT;
+}
+
+/// The refusal an ozz Load recorded on `archive`, carried into `refusal`
+/// (libs/patches/ozz-archive-counts.patch): IO when a count ran past the
+/// bytes left, since the archive ends before what it claims; BAD_FORMAT
+/// when it broke a bound of ozz's.
+inline ZozzResult RefusedBy(const ozz::io::IArchive& archive,
+                            ZozzRefusal* refusal) {
+  if (refusal != nullptr) {
+    *refusal = ZozzRefusal{archive.refusal_what(), archive.refusal_value(),
+                           archive.refusal_limit()};
+  }
+  return archive.refusal_past_end() ? ZOZZ_RESULT_IO
+                                    : ZOZZ_RESULT_BAD_FORMAT;
 }
 
 //===----------------------------------------------------------------------===//
@@ -261,11 +276,11 @@ ZozzResult LoadTagged(ConstMemoryStream* stream, T* out,
   ozz::io::IArchive archive(stream);
   if (!archive.TestTag<T>()) return ZOZZ_RESULT_BAD_FORMAT;
   if (stream->truncated()) return ZOZZ_RESULT_IO;
-  // ozz's Load reports no content refusal of its own yet: `refusal` reaches
-  // this parse so that one has a single place to land.
-  static_cast<void>(refusal);
   archive >> *out;
+  // A truncated stream fed the parse zeros, so whatever Load then refused,
+  // the cause is the missing bytes.
   if (stream->truncated()) return ZOZZ_RESULT_IO;
+  if (archive.refused()) return RefusedBy(archive, refusal);
   return ZOZZ_RESULT_OK;
 }
 

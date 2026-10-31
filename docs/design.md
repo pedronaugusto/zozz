@@ -8,10 +8,12 @@ boundary stands in front of, and how each claim the README makes is checked.
 ozz is C++, and C++ does not cross a linking boundary intact, so the package
 is three layers and a new capability lands in each.
 
-1. **`libs/ozz` is upstream, byte for byte.** Nothing is added or changed
-   there; `zig build check-vendor` compares it against the pinned commit, both
-   ways, and fails on a local edit or a file upstream does not have.
-   Behaviour upstream lacks belongs in the next layer.
+1. **`libs/ozz` is upstream with its listed patches, and nothing else.**
+   `zig build check-vendor` applies `libs/patches` to the pinned commit and
+   compares the result with `libs/ozz` both ways, failing on any other edit,
+   a file upstream does not have, or a patch that no longer applies. A patch
+   closes one class of defect at its cause, where no outer layer can reach
+   it ([Patches](#patches)); behaviour upstream lacks belongs in the next layer.
 2. **`ffi/` is the C boundary.** One translation unit per concern
    (`zozz_sampling.cpp`, `zozz_archive.cpp`, …), each entry point `ZOZZ_API`
    and `zozz`-prefixed, declared in one header per concern that `ffi/zozz.h`
@@ -158,7 +160,7 @@ in `src/c.zig`, the file the guard walks.
   passes a refusal on pushes nothing, so one refusal is one frame. A loader
   goes through `err.checkLoad` instead, which carries the loader's
   `c.Refusal` into its frame and stops in every build if one arrives beside a
-  result other than `bad_format`. Tests in
+  result other than `bad_format` or `io`. Tests in
   `src/error.zig` read the modules and fail when a frame names another call,
   when an error leaves any other way, or when a module makes a `Failure` of
   its own. `err.map`, which pushes none, is only for a result
@@ -256,17 +258,24 @@ object, with no error returned.
 
 **The refusal record.** Every loader (`*LoadMemory`, `*LoadFile`,
 `zozzIArchiveLoad<Type>`) takes a `ZozzRefusal*` last, NULL allowed, and
-clears it on entry. A post-parse check that refuses a count fills it with the
-count's name (`Skeleton.num_joints`), what the archive held and the bound it
-broke, through `zozz::Refuse` (`ffi/zozz_internal.h`), which returns
-`ZOZZ_RESULT_BAD_FORMAT`: no other result ever carries one. `what` is a static
-string, never freed. A wrong tag, a truncated archive or a missing file leave
-the record empty, as does a duration that is not positive, which has no count
-to report. The Zig wrapper copies the record into the refusal's frame
-(`Frame.refusal`), so `error.BadFormat` says which count broke and by how
-much. The parse itself receives the record too (`zozz::LoadTagged`,
-`LoadTaggedObject`) and fills none yet: ozz's `Load` functions return nothing
-to fill it from.
+clears it on entry. It is filled with the name of the version, count or
+invariant that failed (`Skeleton.num_joints`), what the archive held and the
+bound it broke, from two places. ozz's own `Load` refuses through
+`IArchive`'s record ([Patches](#patches)), which `zozz::LoadTagged` and
+`LoadTaggedObject` carry out through `zozz::RefusedBy`; a post-parse check
+refuses through `zozz::Refuse` (`ffi/zozz_internal.h`). Either returns
+`ZOZZ_RESULT_BAD_FORMAT`, or `ZOZZ_RESULT_IO` when a count runs past the bytes
+the archive has left, since an archive that ends before what it claims cannot
+be told from a truncated one; `limit` is then what fits. No other result
+carries one. A stream that ran short before the refusal makes it IO with no
+record, the zeros it fed the parse being the cause. `what` is a static string,
+never freed. A wrong tag, a missing file or a duration that is not positive
+leave the record empty. The Zig wrapper copies the record into the refusal's
+frame (`Frame.refusal`), so `error.BadFormat` says which count broke and by
+how much. The host-stream bridge measures its stream's length by seeking to
+the end and back, as `ozz::io::File::Size` does, since every count is checked
+against the bytes left; and a `zozzIArchive` that refused stays refused, its
+stream left inside the refused object.
 
 NaN ratios are refused, and every entry point taking SoA memory or a matrix
 buffer checks the 16-byte boundary and returns
@@ -283,8 +292,9 @@ Sampling, once loaded, allocates nothing.
 
 ozz's parser is not hardened against arbitrary hostile input, and zozz cannot
 make it so from outside. What holds is that truncation and type confusion
-fail cleanly and deterministically, with counts bounded rather than
-attacker-chosen. To load `.ozz` from an untrusted source, put a
+fail cleanly and deterministically, and that every version and count is
+checked against ozz's limits and the bytes left before anything is sized from
+it ([Patches](#patches)). To load `.ozz` from an untrusted source, put a
 length-and-checksum container around it and validate that first.
 
 Every prefix of a valid archive, across both fixtures, is tested to be
@@ -363,7 +373,8 @@ host's ABI only.
 
 ## The vendored upstream
 
-`libs/ozz` is a pinned copy of upstream ozz-animation, unmodified.
+`libs/ozz` is a pinned copy of upstream ozz-animation with the patches below
+applied, and nothing else.
 
 | | |
 |---|---|
@@ -376,7 +387,22 @@ host's ABI only.
 Upstream rather than a fork: engine-integrated forks of ozz exist, patched
 onto their host's containers and allocator and usable only inside that host.
 Clean upstream has the allocator abstraction this package exposes
-(`ozz::memory::Allocator`) as a first-class seam, so nothing needs patching.
+(`ozz::memory::Allocator`) as a first-class seam, so nothing is patched for
+integration; a patch is only ever a defect fix.
+
+### Patches
+
+Vendored at upstream head, 0.17.0; nothing upstream fixes these as of
+2026-10-31. Each patch in `libs/patches` closes one class of defect at its
+cause, opens with what it changes and the evidence for it, keeps upstream's
+style and failure paths, and is written to be offered upstream as it stands.
+`ci/vendor.zig` lists them in the order they apply, and `check-vendor` fails
+when one stops applying or this list does not name it. A re-vendor that
+finds one fixed upstream drops it.
+
+| Patch | Defect it closes |
+|---|---|
+| `ozz-archive-counts.patch` | Every `Load` sized allocations from counts read off the archive unchecked, and an unsupported version loaded as an empty object. `IArchive` gains a refusal record, the bytes left and a count check; every version and count is checked against ozz's own limits and the bytes left before anything is allocated, and `RawSkeleton` nesting is bounded. |
 
 ### What was taken, and what was left behind
 
@@ -407,11 +433,11 @@ unimported.
 ### Archive versions
 
 ozz versions its archives per type and refuses what it does not recognise;
-the README's table is generated from the vendored tree. ozz itself logs a
+the README's table is generated from the vendored tree. Upstream logs a
 version mismatch and leaves the object empty rather than failing the load,
-so the refusal is clean only because `ffi/zozz_animation.cpp` validates after
-loading: without that check a version-6 clip would present as a
-zero-duration animation and sample as garbage.
+so a version-6 clip presents as a zero-duration animation and a skeleton as
+an empty one. `ozz-archive-counts.patch` refuses it through the record
+instead, naming the version found and the one expected.
 
 ### Known upstream behaviour
 
@@ -420,8 +446,8 @@ each check here is not mistaken for arbitrary defensiveness.
 
 | Upstream | What zozz does |
 |---|---|
-| `IArchive::operator>>` reads a primitive and only asserts the size (`include/ozz/base/io/archive.h`); under `NDEBUG` a short read leaves stack garbage, and a count read that way sizes an allocation. The tag check is an assert too. | Every archive, files included, is parsed through `ConstMemoryStream`, which never reads short and latches a truncation flag; a tag test runs first. |
-| `Animation::Load` logs `Unsupported animation version N.` and returns an empty object; the caller sees no failure. | Validates after load: `duration() > 0`, joint counts in range. |
+| `IArchive::operator>>` reads a primitive and only asserts the size (`include/ozz/base/io/archive.h`); under `NDEBUG` a short read leaves stack garbage. The tag check is an assert too. | Every archive, files included, is parsed through `ConstMemoryStream`, which never reads short and latches a truncation flag; a tag test runs first. |
+| Every `Load` sizes allocations from counts it reads, and an unsupported version logs and returns an empty object; the caller sees no failure. | Patched at the cause: `ozz-archive-counts.patch`. `ffi/` still validates after load: `duration() > 0`, joint counts in range. |
 | `ozz::New` is `new (allocator->Allocate(...)) T(...)`: a failed allocation is a placement-new at address zero. | Replaced by a checked `zozz::New` in `ffi/zozz_internal.h`. |
 | `Skeleton::Allocate` (`src/animation/runtime/skeleton.cc:81`) and `Animation::Allocate` (`src/animation/runtime/animation.cc:105`) build spans over an allocation with no null check and write through them. | Not closable from outside: the allocation happens inside a call zozz makes. A load under memory pressure is a null dereference. Sampling allocates nothing. |
 | `MemoryStream::Write` (`src/base/io/stream.cc:160`) calls `memcpy` without a size check, and an empty `ozz::vector` hands it a null source, which `memcpy` declares nonnull even for size 0. Every short clip's empty `iframe_entries` reaches it on save; found by a sanitized CI arm (run `32667186311`). | The vendored units compile with `-fno-sanitize=nonnull-attribute`, rather than excusing the affected tests from the sanitizer, which would unsanitize the normal path. |
@@ -432,11 +458,14 @@ each check here is not mistaken for arbitrary defensiveness.
 
 ### Re-vendoring
 
-`zig build check-vendor` fetches the pinned commit and diffs it against
-`libs/`, and runs in the gate. Run it after each step.
+`zig build check-vendor` fetches the pinned commit, applies `libs/patches`
+and diffs the result against `libs/`, and runs in the gate. Run it after each
+step.
 
 1. Clone upstream at the new tag; copy `include/` and `src/` over
-   `libs/ozz/`, applying the exclusions above.
+   `libs/ozz/`, applying the exclusions above, then each patch in order
+   (`git apply`). A patch that no longer applies is rebased onto the new
+   tree, or dropped if upstream now fixes its defect.
 2. Update the table at the top of this section, the `ozz` pin in
    `build.zig.zon` and `zozzOzzVersion()` in `ffi/zozz_core.cpp`.
 3. `bay test`. The docs check fails until the README's archive-version
@@ -475,9 +504,11 @@ the failure it names; it runs outside the gate, a rebuild per probe.
 
 These are the rules that fail a build.
 
-- **`libs/ozz` is vendored and is not edited.** `zig build check-vendor`
-  compares it against the pinned commit. Work around upstream in `ffi/` and
-  record the reason under [Known upstream behaviour](#known-upstream-behaviour).
+- **`libs/ozz` is edited only by a patch in `libs/patches`.** `zig build
+  check-vendor` applies them to the pinned commit and compares. Work around
+  upstream in `ffi/` where that reaches the defect, and record the reason
+  under [Known upstream behaviour](#known-upstream-behaviour); patch it, one
+  patch per class of defect, only where nothing outside can.
 - **`bay test` is green before a push**, in every optimize mode a change can
   reach.
 - **A new public ozz name gets a verdict in `ci/coverage/`**: bound across

@@ -27,6 +27,8 @@
 
 #include "ozz/animation/offline/raw_skeleton.h"
 
+#include "ozz/animation/runtime/skeleton.h"
+
 #include "ozz/base/io/archive.h"
 #include "ozz/base/maths/math_archive.h"
 
@@ -47,7 +49,10 @@ void Extern<animation::offline::RawSkeleton>::Save(
 void Extern<animation::offline::RawSkeleton>::Load(
     IArchive& _archive, animation::offline::RawSkeleton* _skeletons,
     size_t _count, uint32_t _version) {
-  (void)_version;
+  if (_version != 1) {
+    _archive.Refuse("RawSkeleton.version", _version, 1);
+    return;
+  }
   for (size_t i = 0; i < _count; ++i) {
     animation::offline::RawSkeleton& skeleton = _skeletons[i];
     _archive >> skeleton.roots;
@@ -76,9 +81,15 @@ struct Extern<animation::offline::RawSkeleton::Joint> {
     (void)_version;
     for (size_t i = 0; i < _count; ++i) {
       animation::offline::RawSkeleton::Joint& joint = _joints[i];
+      // Children load recursively, so nesting is bounded like the joints.
+      if (!_archive.Enter("RawSkeleton.depth",
+                          animation::Skeleton::kMaxJoints)) {
+        return;
+      }
       _archive >> joint.name;
       _archive >> joint.transform;
       _archive >> joint.children;
+      _archive.Leave();
     }
   }
 };

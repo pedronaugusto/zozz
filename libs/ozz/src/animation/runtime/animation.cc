@@ -31,6 +31,7 @@
 #include <cstring>
 #include <limits>
 
+#include "ozz/animation/runtime/skeleton.h"
 #include "ozz/base/io/archive.h"
 #include "ozz/base/log.h"
 #include "ozz/base/maths/math_archive.h"
@@ -284,6 +285,7 @@ void Animation::Load(ozz::io::IArchive& _archive, uint32_t _version) {
   if (_version != 7) {
     log::Err() << "Unsupported animation version " << _version << "."
                << std::endl;
+    _archive.Refuse("Animation.version", _version, 7);
     return;
   }
 
@@ -315,6 +317,37 @@ void Animation::Load(ozz::io::IArchive& _archive, uint32_t _version) {
   _archive >> s_iframe_entries_count;
   uint32_t s_iframe_desc_count;
   _archive >> s_iframe_desc_count;
+
+  // Every count against ozz's own limits and the bytes left. A key stores its
+  // value, a previous and at least one byte of ratio.
+  const uint64_t any = std::numeric_limits<uint32_t>::max();
+  const size_t key_ctrl = sizeof(uint16_t) + sizeof(uint8_t);
+  if (!_archive.CheckCount("Animation.num_tracks", num_tracks, 0,
+                           Skeleton::kMaxJoints) ||
+      !_archive.CheckCount("Animation.name_len", name_len, 1, any) ||
+      !_archive.CheckCount("Animation.timepoints_count", timepoints_count,
+                           sizeof(float), std::numeric_limits<uint16_t>::max()) ||
+      !_archive.CheckCount("Animation.translation_count", translation_count,
+                           sizeof(internal::Float3Key) + key_ctrl, any) ||
+      !_archive.CheckCount("Animation.rotation_count", rotation_count,
+                           sizeof(internal::QuaternionKey) + key_ctrl, any) ||
+      !_archive.CheckCount("Animation.scale_count", scale_count,
+                           sizeof(internal::Float3Key) + key_ctrl, any) ||
+      !_archive.CheckCount("Animation.t_iframe_entries_count",
+                           t_iframe_entries_count, 1, any) ||
+      !_archive.CheckCount("Animation.t_iframe_desc_count",
+                           t_iframe_desc_count, sizeof(uint32_t), any) ||
+      !_archive.CheckCount("Animation.r_iframe_entries_count",
+                           r_iframe_entries_count, 1, any) ||
+      !_archive.CheckCount("Animation.r_iframe_desc_count",
+                           r_iframe_desc_count, sizeof(uint32_t), any) ||
+      !_archive.CheckCount("Animation.s_iframe_entries_count",
+                           s_iframe_entries_count, 1, any) ||
+      !_archive.CheckCount("Animation.s_iframe_desc_count",
+                           s_iframe_desc_count, sizeof(uint32_t), any)) {
+    num_tracks_ = 0;
+    return;
+  }
 
   const AllocateParams params{name_len,
                               timepoints_count,

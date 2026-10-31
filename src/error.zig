@@ -367,10 +367,11 @@ pub fn check(failure: *Failure, call: Call, result: c.Result) Error!void {
 
 /// `check` for a loader: its frame carries `refusal`, the record the loader
 /// filled, when it names one. The boundary fills one only with `bad_format`,
-/// so a record beside any other result stops in every build.
+/// or `io` for a count past the bytes left, so a record beside any other
+/// result stops in every build.
 pub fn checkLoad(failure: *Failure, call: Call, result: c.Result, refusal: c.Refusal) Error!void {
     const what = refusal.what orelse return check(failure, call, result);
-    if (result != .bad_format) aegis.assert.never("zozz: a loader filled its refusal record with a result other than BAD_FORMAT");
+    if (result != .bad_format and result != .io) aegis.assert.never("zozz: a loader filled its refusal record with a result other than BAD_FORMAT or IO");
     map(result) catch |e| {
         failure.push(.{ .call = call, .result = result, .refusal = .{
             .what = Refusal.Name.copy(aegis.err.PublicSource.classify("a static name the C boundary's loader filled", std.mem.span(what))),
@@ -560,12 +561,22 @@ test "checkLoad carries a content refusal into the frame, and nothing else" {
         .value = 1025,
         .limit = 1024,
     }));
+    // A count past the bytes left: the archive ends before what it claims.
+    try std.testing.expectError(Error.ReadFailed, checkLoad(&failure, .float_track_load_memory, .io, .{
+        .what = "Track.num_keys",
+        .value = 1000,
+        .limit = 0,
+    }));
     const frames = failure.frames();
-    try std.testing.expectEqual(2, frames.len);
+    try std.testing.expectEqual(3, frames.len);
     try std.testing.expectEqual(@as(?[]const u8, null), frames[0].refusal.named());
     try std.testing.expectEqualStrings("Skeleton.num_joints", frames[1].refusal.named().?);
     try std.testing.expectEqual(1025, frames[1].refusal.value);
     try std.testing.expectEqual(1024, frames[1].refusal.limit);
+    try std.testing.expectEqual(c.Result.io, frames[2].result);
+    try std.testing.expectEqualStrings("Track.num_keys", frames[2].refusal.named().?);
+    try std.testing.expectEqual(1000, frames[2].refusal.value);
+    try std.testing.expectEqual(0, frames[2].refusal.limit);
 }
 
 test "no module refuses without a frame" {

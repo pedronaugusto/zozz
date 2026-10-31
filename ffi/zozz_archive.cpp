@@ -88,13 +88,31 @@ class HostReadStream : public ozz::io::Stream {
 
   int Tell() const override { return failed_ ? -1 : host_.tell(host_.user); }
 
-  size_t Size() const override { return 0; }
+  /// IArchive bounds each count it reads by the bytes left, Size less Tell,
+  /// so the length is measured as ozz::io::File::Size measures a file's:
+  /// seek to the end, tell, seek back. A seek or tell that fails latches
+  /// `failed_`, like a short read, and the load that asked returns IO.
+  size_t Size() const override {
+    if (failed_) return 0;
+    const int at = host_.tell(host_.user);
+    if (at < 0 || host_.seek(host_.user, 0, ZOZZ_SEEK_ORIGIN_END) != 0) {
+      failed_ = true;
+      return 0;
+    }
+    const int end = host_.tell(host_.user);
+    if (host_.seek(host_.user, at, ZOZZ_SEEK_ORIGIN_SET) != 0 || end < at) {
+      failed_ = true;
+      return 0;
+    }
+    return static_cast<size_t>(end);
+  }
 
   bool failed() const { return failed_; }
 
  private:
   ZozzStream host_;
-  bool failed_ = false;
+  // Size is const in ozz::io::Stream and may still find the stream failed.
+  mutable bool failed_ = false;
 };
 
 bool ValidWriteStream(const ZozzStream* stream) {
@@ -214,13 +232,20 @@ ZozzResult LoadTaggedObject(ZozzIArchive* archive, T* object,
                             ZozzRefusal* refusal) {
   if (archive == nullptr) return ZOZZ_RESULT_INVALID_ARGUMENT;
   if (archive->stream.failed()) return ZOZZ_RESULT_IO;
+  // A refused object was left part read, so the stream holds no next object
+  // to find: the archive stays refused, as a failed stream stays failed.
+  if (archive->archive.refused()) {
+    return zozz::RefusedBy(archive->archive, refusal);
+  }
   if (!archive->archive.TestTag<T>()) return ZOZZ_RESULT_BAD_FORMAT;
   if (archive->stream.failed()) return ZOZZ_RESULT_IO;
-  // As zozz::LoadTagged: ozz's Load reports no content refusal of its own
-  // yet, and `refusal` reaches this parse so that one has a place to land.
-  static_cast<void>(refusal);
   archive->archive >> *object;
-  return archive->stream.failed() ? ZOZZ_RESULT_IO : ZOZZ_RESULT_OK;
+  // As zozz::LoadTagged: a failed stream is the cause of anything refused.
+  if (archive->stream.failed()) return ZOZZ_RESULT_IO;
+  if (archive->archive.refused()) {
+    return zozz::RefusedBy(archive->archive, refusal);
+  }
+  return ZOZZ_RESULT_OK;
 }
 
 /// Shared shape of the loaders with no post-parse check: allocate the handle,

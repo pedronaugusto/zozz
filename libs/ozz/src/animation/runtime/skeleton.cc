@@ -28,6 +28,7 @@
 #include "ozz/animation/runtime/skeleton.h"
 
 #include <cstring>
+#include <limits>
 
 #include "ozz/base/io/archive.h"
 #include "ozz/base/log.h"
@@ -130,6 +131,7 @@ void Skeleton::Load(ozz::io::IArchive& _archive, uint32_t _version) {
   if (_version != 2) {
     log::Err() << "Unsupported Skeleton version " << _version << "."
                << std::endl;
+    _archive.Refuse("Skeleton.version", _version, 2);
     return;
   }
 
@@ -141,9 +143,27 @@ void Skeleton::Load(ozz::io::IArchive& _archive, uint32_t _version) {
     return;
   }
 
+  // Each joint stores a parent, at least a name's terminator, and a quarter
+  // of a SoA rest pose.
+  if (!_archive.CheckCount(
+          "Skeleton.num_joints", static_cast<uint32_t>(num_joints),
+          sizeof(int16_t) + 1 + sizeof(math::SoaTransform) / 4, kMaxJoints)) {
+    return;
+  }
+
   // Read names.
   int32_t chars_count;
   _archive >> chars_count;
+  if (!_archive.CheckCount("Skeleton.chars_count",
+                           static_cast<uint32_t>(chars_count), 1,
+                           std::numeric_limits<int32_t>::max())) {
+    return;
+  }
+  if (chars_count < num_joints) {
+    _archive.Refuse("Skeleton.chars_count", static_cast<uint32_t>(chars_count),
+                    static_cast<uint32_t>(num_joints));
+    return;
+  }
 
   // Allocates all skeleton data members.
   char* cursor = Allocate(chars_count, num_joints);

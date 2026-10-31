@@ -488,7 +488,7 @@ pub fn dev(b: *std.Build, tools: type) void {
     _ = tool(b, p, test_step, "archive-versions", "ci/archive_versions.zig", "Print README.md's archive-version table, read from the vendored tree");
 
     // libs/ozz against upstream at the pinned commit, which the manifest
-    // fetches as a development dependency.
+    // fetches as a development dependency, with libs/patches applied.
     const vendor = b.addExecutable(.{
         .name = "zozz-vendor",
         .root_module = b.createModule(.{ .root_source_file = p.path("ci/vendor.zig"), .target = b.graph.host, .optimize = .debug }),
@@ -497,10 +497,11 @@ pub fn dev(b: *std.Build, tools: type) void {
     const verify = b.addRunArtifact(vendor);
     verify.addDirectoryArg2(p.path("libs/ozz"), .{});
     verify.addDirectoryArg2(b.dependency("ozz", .{}).path("."), .{});
+    verify.addDirectoryArg2(p.path("libs/patches"), .{});
     verify.addFileArg(p.path("build.zig.zon"));
     verify.addFileArg(p.path("docs/design.md"));
     verify.step.dependOn(&b.addRunArtifact(b.addTest(.{ .root_module = vendor.root_module })).step);
-    b.step("check-vendor", "Prove libs/ozz is upstream at the pinned commit").dependOn(&verify.step);
+    b.step("check-vendor", "Prove libs/ozz is upstream at the pinned commit with libs/patches applied").dependOn(&verify.step);
 
     // Outside the gate, a rebuild per input: the mutation probes. Their own
     // tests run with the suite.

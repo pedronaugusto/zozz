@@ -68,7 +68,8 @@ typedef enum ZozzResult {
   ZOZZ_RESULT_FILE_NOT_FOUND = 1,
   /// The stream ended early or could not be read.
   ZOZZ_RESULT_IO = 2,
-  /// The archive tag did not identify the expected ozz object type.
+  /// The archive is not the expected ozz object: its tag names another type,
+  /// or a version, count or invariant breaks what ozz holds (ZozzRefusal).
   ZOZZ_RESULT_BAD_FORMAT = 3,
   /// The allocator returned NULL.
   ZOZZ_RESULT_OUT_OF_MEMORY = 4,
@@ -96,12 +97,15 @@ typedef enum ZozzResult {
 /// Static, never-NULL description of a result code. Borrowed; do not free.
 ZOZZ_API const char* zozzResultName(ZozzResult result);
 
-/// Why a load was refused for the archive's content: the count or invariant
-/// that failed, what the archive held and the bound it broke. Every loader
-/// (each *LoadMemory, *LoadFile and zozzIArchiveLoad<Type>) takes one as its
-/// LAST parameter; NULL is allowed and asks for none. A loader clears it on
-/// entry, so `what` is NULL after every outcome but a content refusal, and
-/// it is filled only with ZOZZ_RESULT_BAD_FORMAT.
+/// Why a load was refused for the archive's content: the version, count or
+/// invariant that failed, what the archive held and the bound it broke. Every
+/// loader (each *LoadMemory, *LoadFile and zozzIArchiveLoad<Type>) takes one
+/// as its LAST parameter; NULL is allowed and asks for none. A loader clears
+/// it on entry, so `what` is NULL after every outcome but a content refusal.
+/// It is filled with ZOZZ_RESULT_BAD_FORMAT when a bound of ozz's is broken,
+/// and with ZOZZ_RESULT_IO when a count runs past the bytes the archive has
+/// left: the archive ends before what it claims, and `limit` is what fits.
+/// A zozzIArchive that refused once stays refused, its stream left mid-object.
 typedef struct ZozzRefusal {
   /// Static, never freed: "Skeleton.num_joints". NULL when there is none.
   const char* what;

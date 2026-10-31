@@ -1,0 +1,448 @@
+ozz-archive-counts: refuse an archive whose versions or counts ozz cannot hold
+
+Upstream ozz reads each count from the archive and sizes an allocation from
+it without a check: Skeleton::Load takes an int32 joint count and character
+count (a negative one wraps the buffer size), Animation::Load eleven uint32
+counts, Track::Load an int32 name length, and every vector and string a
+uint32 size. An unsupported version is logged and the object left empty,
+which reads the same as a valid empty one; RawTrack only asserts it.
+
+IArchive gains a refusal record (Refuse, refused, refusal_what, _value,
+_limit and _past_end), the bytes left in its stream (remaining), a count
+check against a limit and those bytes (CheckCount) and a nesting bound for
+recursive types (Enter/Leave). Every Load checks its version and each count
+against ozz's own limits (Skeleton::kMaxJoints, the uint16 timepoint range
+Animation::Allocate asserts, at least one name byte per skeleton joint) and
+the bytes left before it allocates, and refuses through the record; every
+vector and string Load checks its size before it resizes. refusal_past_end
+tells a count past the bytes left (the archive ends before what it claims)
+from one past a limit. Once refused, the archive reads nothing more: a
+primitive loads as zero, binary data as zeros, an object not at all, and
+every check fails, so enclosing Loads unwind without reading past the
+refusal. RawSkeleton's joints nest no deeper than kMaxJoints.
+
+Evidence: zozz's archive fuzz property, mutated fixture skeletons, faults in
+Skeleton::Load (skeleton.cc:149, 152) with "applying non-zero offset to null
+pointer" under UBSan and an access violation in release (measured,
+2026-10-31). The minimal inputs are src/testing/archives.zig's.
+
+diff --git a/libs/ozz/include/ozz/base/containers/vector_archive.h b/libs/ozz/include/ozz/base/containers/vector_archive.h
+index b96b36b..5b57652 100644
+--- a/libs/ozz/include/ozz/base/containers/vector_archive.h
++++ b/libs/ozz/include/ozz/base/containers/vector_archive.h
+@@ -28,6 +28,8 @@
+ #ifndef OZZ_OZZ_BASE_CONTAINERS_VECTOR_ARCHIVE_H_
+ #define OZZ_OZZ_BASE_CONTAINERS_VECTOR_ARCHIVE_H_
+ 
++#include <limits>
++
+ #include "ozz/base/containers/vector.h"
+ #include "ozz/base/io/archive.h"
+ #include "ozz/base/platform.h"
+@@ -60,6 +62,12 @@ struct Extern<std::vector<_Ty, _Allocator>> {
+       std::vector<_Ty, _Allocator>& vector = _values[i];
+       uint32_t size;
+       _archive >> size;
++      // Every element takes at least one byte in the archive.
++      if (_archive.refused() ||
++          !_archive.CheckCount("vector.size", size, 1,
++                               std::numeric_limits<uint32_t>::max())) {
++        return;
++      }
+       vector.resize(size);
+       if (size > 0) {
+         _archive >> ozz::io::MakeArray(vector.data(), size);
+diff --git a/libs/ozz/include/ozz/base/io/archive.h b/libs/ozz/include/ozz/base/io/archive.h
+index ddf3a3b..62852e9 100644
+--- a/libs/ozz/include/ozz/base/io/archive.h
++++ b/libs/ozz/include/ozz/base/io/archive.h
+@@ -80,6 +80,7 @@
+ #include <stdint.h>
+ 
+ #include <cassert>
++#include <cstring>
+ 
+ #include "ozz/base/endianness.h"
+ #include "ozz/base/io/archive_traits.h"
+@@ -183,12 +184,19 @@ class OZZ_BASE_DLL IArchive {
+ 
+   // Loads _size bytes of binary data to _data.
+   size_t LoadBinary(void* _data, size_t _size) {
++    if (refused()) {
++      std::memset(_data, 0, _size);
++      return _size;
++    }
+     return stream_->Read(_data, _size);
+   }
+ 
+   // Class type loading.
+   template <typename _Ty>
+   void operator>>(_Ty& _ty) {
++    if (refused()) {
++      return;
++    }
+     // Only uses tag validation for assertions, as reading cannot fail.
+     OZZ_IF_DEBUG(bool valid =) internal::Tagger<const _Ty>::Validate(*this);
+     assert(valid && "Type tag does not match archive content.");
+@@ -201,6 +209,10 @@ class OZZ_BASE_DLL IArchive {
+ // Primitive type loading.
+ #define OZZ_IO_PRIMITIVE_TYPE(_type)                          \
+   void operator>>(_type& _v) {                                \
++    if (refused()) {                                          \
++      _v = _type();                                           \
++      return;                                                 \
++    }                                                         \
+     _type v;                                                  \
+     OZZ_IF_DEBUG(size_t size =) stream_->Read(&v, sizeof(v)); \
+     assert(size == sizeof(v));                                \
+@@ -236,6 +248,40 @@ class OZZ_BASE_DLL IArchive {
+   // Returns input stream.
+   Stream* stream() const { return stream_; }
+ 
++  // Records that a Load found the archive malformed, which it then leaves
++  // empty: _what names the count or invariant it broke and must have static
++  // storage, _value is what the archive held and _limit the bound. The first
++  // refusal is kept, and the archive reads nothing after it: a primitive
++  // loads as zero, binary data as zeros, an object not at all, and every
++  // check fails, so the Load that refused and those enclosing it unwind
++  // without reading past what was refused.
++  void Refuse(const char* _what, uint64_t _value, uint64_t _limit);
++
++  // True once a Load refused the archive.
++  bool refused() const { return refusal_what_ != nullptr; }
++  const char* refusal_what() const { return refusal_what_; }
++  uint64_t refusal_value() const { return refusal_value_; }
++  uint64_t refusal_limit() const { return refusal_limit_; }
++  // True when the refusal's bound was the bytes left in the stream rather
++  // than a limit of ozz's: the archive ends before what it claims.
++  bool refusal_past_end() const { return refusal_past_end_; }
++
++  // The bytes the stream holds past its read position.
++  size_t remaining() const;
++
++  // Whether _count elements, each taking at least _element_size bytes in the
++  // archive, fit both _limit and the bytes left to read. Refuses as _what
++  // otherwise, with the tighter of the two as the limit; an _element_size of 0
++  // checks _limit alone. _count is the value as stored, so a negative int32
++  // count arrives as its unsigned image.
++  bool CheckCount(const char* _what, uint64_t _count, size_t _element_size,
++                  uint64_t _limit);
++
++  // Bounds how deeply a recursive type nests: Enter refuses as _what past
++  // _limit levels, and each Enter that succeeds is paired with a Leave.
++  bool Enter(const char* _what, uint64_t _limit);
++  void Leave() { --depth_; }
++
+  private:
+   template <typename _Ty>
+   uint32_t LoadVersion() {
+@@ -251,6 +297,15 @@ class OZZ_BASE_DLL IArchive {
+ 
+   // Endian swap state, true if a conversion is required while reading.
+   bool endian_swap_;
++
++  // The first refusal a Load recorded, refusal_what_ null while none.
++  const char* refusal_what_ = nullptr;
++  uint64_t refusal_value_ = 0;
++  uint64_t refusal_limit_ = 0;
++  bool refusal_past_end_ = false;
++
++  // How many Enter calls are open.
++  uint64_t depth_ = 0;
+ };
+ 
+ // Primitive type are not versionable.
+diff --git a/libs/ozz/src/animation/offline/raw_animation_archive.cc b/libs/ozz/src/animation/offline/raw_animation_archive.cc
+index 2bb9a01..10158df 100644
+--- a/libs/ozz/src/animation/offline/raw_animation_archive.cc
++++ b/libs/ozz/src/animation/offline/raw_animation_archive.cc
+@@ -54,6 +54,7 @@ void Extern<animation::offline::RawAnimation>::Load(
+   if (_version < 3) {
+     log::Err() << "Unsupported RawAnimation version " << _version << "."
+                << std::endl;
++    _archive.Refuse("RawAnimation.version", _version, 3);
+     return;
+   }
+   for (size_t i = 0; i < _count; ++i) {
+diff --git a/libs/ozz/src/animation/offline/raw_skeleton_archive.cc b/libs/ozz/src/animation/offline/raw_skeleton_archive.cc
+index a60093e..8d000ef 100644
+--- a/libs/ozz/src/animation/offline/raw_skeleton_archive.cc
++++ b/libs/ozz/src/animation/offline/raw_skeleton_archive.cc
+@@ -27,6 +27,8 @@
+ 
+ #include "ozz/animation/offline/raw_skeleton.h"
+ 
++#include "ozz/animation/runtime/skeleton.h"
++
+ #include "ozz/base/io/archive.h"
+ #include "ozz/base/maths/math_archive.h"
+ 
+@@ -47,7 +49,10 @@ void Extern<animation::offline::RawSkeleton>::Save(
+ void Extern<animation::offline::RawSkeleton>::Load(
+     IArchive& _archive, animation::offline::RawSkeleton* _skeletons,
+     size_t _count, uint32_t _version) {
+-  (void)_version;
++  if (_version != 1) {
++    _archive.Refuse("RawSkeleton.version", _version, 1);
++    return;
++  }
+   for (size_t i = 0; i < _count; ++i) {
+     animation::offline::RawSkeleton& skeleton = _skeletons[i];
+     _archive >> skeleton.roots;
+@@ -76,9 +81,15 @@ struct Extern<animation::offline::RawSkeleton::Joint> {
+     (void)_version;
+     for (size_t i = 0; i < _count; ++i) {
+       animation::offline::RawSkeleton::Joint& joint = _joints[i];
++      // Children load recursively, so nesting is bounded like the joints.
++      if (!_archive.Enter("RawSkeleton.depth",
++                          animation::Skeleton::kMaxJoints)) {
++        return;
++      }
+       _archive >> joint.name;
+       _archive >> joint.transform;
+       _archive >> joint.children;
++      _archive.Leave();
+     }
+   }
+ };
+diff --git a/libs/ozz/src/animation/offline/raw_track.cc b/libs/ozz/src/animation/offline/raw_track.cc
+index 64c5294..3059eb6 100644
+--- a/libs/ozz/src/animation/offline/raw_track.cc
++++ b/libs/ozz/src/animation/offline/raw_track.cc
+@@ -104,8 +104,10 @@ void RawTrack<_ValueType>::Save(io::OArchive& _archive) const {
+ 
+ template <typename _ValueType>
+ void RawTrack<_ValueType>::Load(io::IArchive& _archive, uint32_t _version) {
+-  (void)_version;
+-  assert(_version == 1);
++  if (_version != 1) {
++    _archive.Refuse("RawTrack.version", _version, 1);
++    return;
++  }
+   _archive >> keyframes;
+   _archive >> name;
+ }
+diff --git a/libs/ozz/src/animation/runtime/animation.cc b/libs/ozz/src/animation/runtime/animation.cc
+index 74a9fd8..832dbe6 100644
+--- a/libs/ozz/src/animation/runtime/animation.cc
++++ b/libs/ozz/src/animation/runtime/animation.cc
+@@ -31,6 +31,7 @@
+ #include <cstring>
+ #include <limits>
+ 
++#include "ozz/animation/runtime/skeleton.h"
+ #include "ozz/base/io/archive.h"
+ #include "ozz/base/log.h"
+ #include "ozz/base/maths/math_archive.h"
+@@ -284,6 +285,7 @@ void Animation::Load(ozz::io::IArchive& _archive, uint32_t _version) {
+   if (_version != 7) {
+     log::Err() << "Unsupported animation version " << _version << "."
+                << std::endl;
++    _archive.Refuse("Animation.version", _version, 7);
+     return;
+   }
+ 
+@@ -316,6 +318,37 @@ void Animation::Load(ozz::io::IArchive& _archive, uint32_t _version) {
+   uint32_t s_iframe_desc_count;
+   _archive >> s_iframe_desc_count;
+ 
++  // Every count against ozz's own limits and the bytes left. A key stores its
++  // value, a previous and at least one byte of ratio.
++  const uint64_t any = std::numeric_limits<uint32_t>::max();
++  const size_t key_ctrl = sizeof(uint16_t) + sizeof(uint8_t);
++  if (!_archive.CheckCount("Animation.num_tracks", num_tracks, 0,
++                           Skeleton::kMaxJoints) ||
++      !_archive.CheckCount("Animation.name_len", name_len, 1, any) ||
++      !_archive.CheckCount("Animation.timepoints_count", timepoints_count,
++                           sizeof(float), std::numeric_limits<uint16_t>::max()) ||
++      !_archive.CheckCount("Animation.translation_count", translation_count,
++                           sizeof(internal::Float3Key) + key_ctrl, any) ||
++      !_archive.CheckCount("Animation.rotation_count", rotation_count,
++                           sizeof(internal::QuaternionKey) + key_ctrl, any) ||
++      !_archive.CheckCount("Animation.scale_count", scale_count,
++                           sizeof(internal::Float3Key) + key_ctrl, any) ||
++      !_archive.CheckCount("Animation.t_iframe_entries_count",
++                           t_iframe_entries_count, 1, any) ||
++      !_archive.CheckCount("Animation.t_iframe_desc_count",
++                           t_iframe_desc_count, sizeof(uint32_t), any) ||
++      !_archive.CheckCount("Animation.r_iframe_entries_count",
++                           r_iframe_entries_count, 1, any) ||
++      !_archive.CheckCount("Animation.r_iframe_desc_count",
++                           r_iframe_desc_count, sizeof(uint32_t), any) ||
++      !_archive.CheckCount("Animation.s_iframe_entries_count",
++                           s_iframe_entries_count, 1, any) ||
++      !_archive.CheckCount("Animation.s_iframe_desc_count",
++                           s_iframe_desc_count, sizeof(uint32_t), any)) {
++    num_tracks_ = 0;
++    return;
++  }
++
+   const AllocateParams params{name_len,
+                               timepoints_count,
+                               translation_count,
+diff --git a/libs/ozz/src/animation/runtime/skeleton.cc b/libs/ozz/src/animation/runtime/skeleton.cc
+index 3094a41..0826f6a 100644
+--- a/libs/ozz/src/animation/runtime/skeleton.cc
++++ b/libs/ozz/src/animation/runtime/skeleton.cc
+@@ -28,6 +28,7 @@
+ #include "ozz/animation/runtime/skeleton.h"
+ 
+ #include <cstring>
++#include <limits>
+ 
+ #include "ozz/base/io/archive.h"
+ #include "ozz/base/log.h"
+@@ -130,6 +131,7 @@ void Skeleton::Load(ozz::io::IArchive& _archive, uint32_t _version) {
+   if (_version != 2) {
+     log::Err() << "Unsupported Skeleton version " << _version << "."
+                << std::endl;
++    _archive.Refuse("Skeleton.version", _version, 2);
+     return;
+   }
+ 
+@@ -141,9 +143,27 @@ void Skeleton::Load(ozz::io::IArchive& _archive, uint32_t _version) {
+     return;
+   }
+ 
++  // Each joint stores a parent, at least a name's terminator, and a quarter
++  // of a SoA rest pose.
++  if (!_archive.CheckCount(
++          "Skeleton.num_joints", static_cast<uint32_t>(num_joints),
++          sizeof(int16_t) + 1 + sizeof(math::SoaTransform) / 4, kMaxJoints)) {
++    return;
++  }
++
+   // Read names.
+   int32_t chars_count;
+   _archive >> chars_count;
++  if (!_archive.CheckCount("Skeleton.chars_count",
++                           static_cast<uint32_t>(chars_count), 1,
++                           std::numeric_limits<int32_t>::max())) {
++    return;
++  }
++  if (chars_count < num_joints) {
++    _archive.Refuse("Skeleton.chars_count", static_cast<uint32_t>(chars_count),
++                    static_cast<uint32_t>(num_joints));
++    return;
++  }
+ 
+   // Allocates all skeleton data members.
+   char* cursor = Allocate(chars_count, num_joints);
+diff --git a/libs/ozz/src/animation/runtime/track.cc b/libs/ozz/src/animation/runtime/track.cc
+index 29c168e..844e301 100644
+--- a/libs/ozz/src/animation/runtime/track.cc
++++ b/libs/ozz/src/animation/runtime/track.cc
+@@ -28,6 +28,7 @@
+ #include "ozz/animation/runtime/track.h"
+ 
+ #include <cassert>
++#include <limits>
+ 
+ #include "ozz/base/io/archive.h"
+ #include "ozz/base/log.h"
+@@ -132,6 +133,7 @@ void Track<_ValueType>::Load(ozz::io::IArchive& _archive, uint32_t _version) {
+ 
+   if (_version > 1) {
+     log::Err() << "Unsupported Track version " << _version << "." << std::endl;
++    _archive.Refuse("Track.version", _version, 1);
+     return;
+   }
+ 
+@@ -141,6 +143,15 @@ void Track<_ValueType>::Load(ozz::io::IArchive& _archive, uint32_t _version) {
+   int32_t name_len;
+   _archive >> name_len;
+ 
++  // A key stores its value and its ratio; a name, one byte per character.
++  if (!_archive.CheckCount("Track.num_keys", num_keys,
++                           sizeof(_ValueType) + sizeof(float),
++                           std::numeric_limits<uint32_t>::max()) ||
++      !_archive.CheckCount("Track.name_len", static_cast<uint32_t>(name_len),
++                           1, std::numeric_limits<int32_t>::max())) {
++    return;
++  }
++
+   Allocate(num_keys, name_len);
+ 
+   _archive >> ozz::io::MakeArray(ratios_);
+diff --git a/libs/ozz/src/base/containers/string_archive.cc b/libs/ozz/src/base/containers/string_archive.cc
+index 43ab24a..70a5efc 100644
+--- a/libs/ozz/src/base/containers/string_archive.cc
++++ b/libs/ozz/src/base/containers/string_archive.cc
+@@ -30,6 +30,8 @@
+ #include "ozz/base/io/archive.h"
+ #include "ozz/base/maths/math_ex.h"
+ 
++#include <limits>
++
+ namespace ozz {
+ namespace io {
+ void Extern<string>::Save(OArchive& _archive, const string* _values,
+@@ -55,6 +57,11 @@ void Extern<string>::Load(IArchive& _archive, string* _values, size_t _count,
+ 
+     uint32_t size;
+     _archive >> size;
++    if (_archive.refused() ||
++        !_archive.CheckCount("string.size", size, 1,
++                             std::numeric_limits<uint32_t>::max())) {
++      return;
++    }
+     string.reserve(size);
+ 
+     // Prepares temporary buffer used for reading.
+diff --git a/libs/ozz/src/base/io/archive.cc b/libs/ozz/src/base/io/archive.cc
+index ed4042b..8e33c9f 100644
+--- a/libs/ozz/src/base/io/archive.cc
++++ b/libs/ozz/src/base/io/archive.cc
+@@ -53,5 +53,52 @@ IArchive::IArchive(Stream* _stream) : stream_(_stream), endian_swap_(false) {
+   *this >> endianness;
+   endian_swap_ = endianness != GetNativeEndianness();
+ }
++
++void IArchive::Refuse(const char* _what, uint64_t _value, uint64_t _limit) {
++  if (refusal_what_ != nullptr) {
++    return;
++  }
++  refusal_what_ = _what;
++  refusal_value_ = _value;
++  refusal_limit_ = _limit;
++}
++
++size_t IArchive::remaining() const {
++  const int tell = stream_->Tell();
++  const size_t size = stream_->Size();
++  if (tell < 0 || static_cast<size_t>(tell) >= size) {
++    return 0;
++  }
++  return size - static_cast<size_t>(tell);
++}
++
++bool IArchive::CheckCount(const char* _what, uint64_t _count,
++                          size_t _element_size, uint64_t _limit) {
++  if (refused()) {
++    return false;
++  }
++  const uint64_t fit = _element_size ? remaining() / _element_size : _limit;
++  const uint64_t limit = fit < _limit ? fit : _limit;
++  if (_count <= limit) {
++    return true;
++  }
++  if (!refused()) {
++    refusal_past_end_ = fit < _limit;
++  }
++  Refuse(_what, _count, limit);
++  return false;
++}
++
++bool IArchive::Enter(const char* _what, uint64_t _limit) {
++  if (refused()) {
++    return false;
++  }
++  if (depth_ >= _limit) {
++    Refuse(_what, depth_ + 1, _limit);
++    return false;
++  }
++  ++depth_;
++  return true;
++}
+ }  // namespace io
+ }  // namespace ozz

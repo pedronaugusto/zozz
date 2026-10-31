@@ -24,9 +24,10 @@ extern "C" {
 // A host-provided stand-in for ozz::io::Stream, the role ZozzAllocator plays
 // for ozz::memory::Allocator; one struct covers both directions. OArchive
 // calls only opened() once and write() repeatedly. IArchive calls opened()
-// once, read() repeatedly, and seek()/tell() only to rewind after a tag test
-// (TestTag below); a sequential read never seeks. Size() is never called
-// either direction, so no host implementation of it is required.
+// once, read() repeatedly, and seek()/tell() to rewind after a tag test
+// (TestTag below) and to measure the stream: each count a load reads is
+// bounded by the bytes left, found by seeking to the end, telling and
+// seeking back. There is no size callback; the length is measured that way.
 //
 // A callback its direction does not need may be left NULL — rejected at
 // Create, not at first use: zozzOArchiveCreate requires `opened` and `write`;

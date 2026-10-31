@@ -639,11 +639,18 @@ test "a loader clears the caller's refusal record on every outcome but a content
     zozz.c.zozzSkeletonDestroy(handle);
     try expectCleared(refusal);
 
-    // A truncated archive is refused, but not for its content.
+    // An archive cut where no count reaches is refused, but not for its
+    // content: the stream ran short.
     refusal = stale_refusal;
-    const cut = zozz.c.zozzSkeletonLoadMemory(bytes.ptr, bytes.len / 2, &handle, &refusal);
-    try std.testing.expect(cut == .io or cut == .bad_format);
+    try std.testing.expectEqual(zozz.c.Result.io, zozz.c.zozzSkeletonLoadMemory(bytes.ptr, bytes.len - 1, &handle, &refusal));
     try expectCleared(refusal);
+
+    // Cut through its counts, it ends before what they claim: IO, naming the
+    // count and what fits.
+    refusal = stale_refusal;
+    try std.testing.expectEqual(zozz.c.Result.io, zozz.c.zozzSkeletonLoadMemory(bytes.ptr, bytes.len / 2, &handle, &refusal));
+    try std.testing.expect(refusal.what != null);
+    try std.testing.expect(refusal.limit < refusal.value);
 
     refusal = stale_refusal;
     try std.testing.expectEqual(zozz.c.Result.file_not_found, zozz.c.zozzSkeletonLoadFile("/nonexistent/zozz/skeleton.ozz", &handle, &refusal));
@@ -658,7 +665,7 @@ test "a loader clears the caller's refusal record on every outcome but a content
     zozz.c.zozzSkeletonDestroy(handle);
 
     // Through the wrapper, a refusal that is not about content carries none.
-    if (zozz.Skeleton.initFromMemory(.init(bytes[0 .. bytes.len / 2]), &failure)) |accepted| {
+    if (zozz.Skeleton.initFromMemory(.init(bytes[0 .. bytes.len - 1]), &failure)) |accepted| {
         var skeleton = accepted;
         skeleton.deinit();
         return error.TestUnexpectedResult;
@@ -704,4 +711,161 @@ test "a content refusal names the count, what the archive held and the bound it 
     try std.testing.expectError(err.Error.BadFormat, in_archive.loadSkeleton(&failure));
     try std.testing.expectEqual(@as(usize, 1), failure.frames().len);
     try expectRefusal(failure.frames()[0], .i_archive_load_skeleton, "Skeleton.num_joints", zozz.c.max_joints + 1, zozz.c.max_joints);
+}
+
+//=============================================================================
+// Versions and counts (libs/patches/ozz-archive-counts.patch)
+//=============================================================================
+
+const archives = @import("testing/archives.zig");
+
+fn expectRecord(frame: zozz.Frame, call: err.Call, result: zozz.c.Result, what: []const u8, value: u64, limit: u64) !void {
+    try std.testing.expectEqual(call, frame.call);
+    try std.testing.expectEqual(result, frame.result);
+    try std.testing.expectEqualStrings(what, frame.refusal.named() orelse return error.TestUnexpectedResult);
+    try std.testing.expectEqual(value, frame.refusal.value);
+    try std.testing.expectEqual(limit, frame.refusal.limit);
+}
+
+/// Loads `bytes` as a `T` through its Zig wrapper, expecting `e` and one
+/// frame carrying the record named. An object that loads is not freed: the
+/// test has failed, and the leak report says so a second time.
+fn expectLoadRefused(comptime T: type, bytes: []const u8, call: err.Call, e: err.Error, what: []const u8, value: u64, limit: u64) !void {
+    var failure: zozz.Failure = .{};
+    if (T.initFromMemory(.init(bytes), &failure)) |_| {
+        return error.TestUnexpectedResult;
+    } else |got| try std.testing.expectEqual(e, got);
+    try std.testing.expectEqual(@as(usize, 1), failure.frames().len);
+    try expectRecord(failure.frames()[0], call, err.resultOf(e), what, value, limit);
+}
+
+test "a version ozz cannot read is refused, not loaded as an empty object" {
+    var failure: zozz.Failure = .{};
+    const gpa = std.testing.allocator;
+    try zozz.setAllocator(gpa, &failure);
+    defer zozz.resetAllocator(&failure) catch |e| std.debug.panic("zozz: {s}", .{@errorName(e)});
+
+    var skeleton: archives.Writer = try .init(gpa, "ozz-skeleton", 3);
+    defer skeleton.deinit();
+    try expectLoadRefused(zozz.Skeleton, skeleton.bytes.items, .skeleton_load_memory, err.Error.BadFormat, "Skeleton.version", 3, 2);
+
+    var animation: archives.Writer = try .init(gpa, "ozz-animation", 6);
+    defer animation.deinit();
+    try expectLoadRefused(zozz.Animation, animation.bytes.items, .animation_load_memory, err.Error.BadFormat, "Animation.version", 6, 7);
+
+    var track: archives.Writer = try .init(gpa, "ozz-float_track", 2);
+    defer track.deinit();
+    try expectLoadRefused(zozz.FloatTrack, track.bytes.items, .float_track_load_memory, err.Error.BadFormat, "Track.version", 2, 1);
+
+    var raw: archives.Writer = try .init(gpa, "ozz-raw_skeleton", 2);
+    defer raw.deinit();
+    try expectLoadRefused(zozz.RawSkeleton, raw.bytes.items, .raw_skeleton_load_memory, err.Error.BadFormat, "RawSkeleton.version", 2, 1);
+}
+
+test "a count outside what ozz can hold is refused before Load allocates for it" {
+    var failure: zozz.Failure = .{};
+    const gpa = std.testing.allocator;
+    try zozz.setAllocator(gpa, &failure);
+    defer zozz.resetAllocator(&failure) catch |e| std.debug.panic("zozz: {s}", .{@errorName(e)});
+
+    // More timepoints than a uint16 ratio index can name, with the bytes to
+    // hold them, so ozz's limit is the bound and not the archive's length.
+    const timepoints = std.math.maxInt(u16) + 1;
+    var animation = try archives.animationHeader(gpa, .{ 0, timepoints, 0, 0, 0, 0, 0, 0, 0, 0, 0 });
+    defer animation.deinit();
+    try animation.zeros(timepoints * @sizeOf(f32));
+    try expectLoadRefused(zozz.Animation, animation.bytes.items, .animation_load_memory, err.Error.BadFormat, "Animation.timepoints_count", timepoints, std.math.maxInt(u16));
+
+    // Four joints cannot be named in one byte.
+    var skeleton = try archives.skeleton(gpa, 4, 1);
+    defer skeleton.deinit();
+    try expectLoadRefused(zozz.Skeleton, skeleton.bytes.items, .skeleton_load_memory, err.Error.BadFormat, "Skeleton.chars_count", 1, 4);
+}
+
+test "a count past the bytes left is an archive that ends early, and the frame says which" {
+    var failure: zozz.Failure = .{};
+    const gpa = std.testing.allocator;
+    try zozz.setAllocator(gpa, &failure);
+    defer zozz.resetAllocator(&failure) catch |e| std.debug.panic("zozz: {s}", .{@errorName(e)});
+
+    // The fuzzer's crash: a negative name-block size, read as a count, sized
+    // the skeleton's allocation (skeleton.cc, Allocate).
+    var skeleton = try archives.skeleton(gpa, 1, -1);
+    defer skeleton.deinit();
+    const after_count = 1 + @sizeOf(i16) + 160;
+    try expectLoadRefused(zozz.Skeleton, skeleton.bytes.items, .skeleton_load_memory, err.Error.ReadFailed, "Skeleton.chars_count", std.math.maxInt(u32), after_count);
+
+    var track = try archives.floatTrackHeader(gpa, 1000, 0);
+    defer track.deinit();
+    try expectLoadRefused(zozz.FloatTrack, track.bytes.items, .float_track_load_memory, err.Error.ReadFailed, "Track.num_keys", 1000, 0);
+
+    // A host's stream knows its length too.
+    var reader: ReadBuffer = .{ .bytes = track.bytes.items };
+    const bridge = reader.stream();
+    var in_archive = try zozz.IArchive.init(.init(&bridge), &failure);
+    defer in_archive.deinit();
+    try std.testing.expectError(err.Error.ReadFailed, in_archive.loadFloatTrack(&failure));
+    try std.testing.expectEqual(@as(usize, 1), failure.frames().len);
+    try expectRecord(failure.frames()[0], .i_archive_load_float_track, .io, "Track.num_keys", 1000, 0);
+}
+
+test "every vector and string a raw archive sizes is checked before it is resized" {
+    // A standard container has no way to report an allocation zozz's
+    // allocator refused (design.md), so no count read from an archive may
+    // reach a resize unchecked.
+    var failure: zozz.Failure = .{};
+    const gpa = std.testing.allocator;
+    try zozz.setAllocator(gpa, &failure);
+    defer zozz.resetAllocator(&failure) catch |e| std.debug.panic("zozz: {s}", .{@errorName(e)});
+
+    const count = std.math.maxInt(i32);
+    const Load = *const fn ([*]const u8, usize, *?*anyopaque, ?*zozz.c.Refusal) callconv(.c) Result;
+    const Loader = struct { tag: []const u8, load: Load, track: bool };
+    const loaders = [_]Loader{
+        .{ .tag = "ozz-raw_skeleton", .load = @ptrCast(&zozz.c.zozzRawSkeletonLoadMemory), .track = false },
+        .{ .tag = "ozz-raw_animation", .load = @ptrCast(&zozz.c.zozzRawAnimationLoadMemory), .track = false },
+        .{ .tag = "ozz-raw_float_track", .load = @ptrCast(&zozz.c.zozzRawFloatTrackLoadMemory), .track = true },
+        .{ .tag = "ozz-raw_float2_track", .load = @ptrCast(&zozz.c.zozzRawFloat2TrackLoadMemory), .track = true },
+        .{ .tag = "ozz-raw_float3_track", .load = @ptrCast(&zozz.c.zozzRawFloat3TrackLoadMemory), .track = true },
+        .{ .tag = "ozz-raw_float4_track", .load = @ptrCast(&zozz.c.zozzRawFloat4TrackLoadMemory), .track = true },
+        .{ .tag = "ozz-raw_quat_track", .load = @ptrCast(&zozz.c.zozzRawQuaternionTrackLoadMemory), .track = true },
+    };
+    var reached: usize = 0;
+    for (loaders) |loader| {
+        for (std.enums.values(archives.RawSize)) |size| {
+            const name = @tagName(size);
+            const fits = if (loader.track)
+                std.mem.startsWith(u8, name, "track_")
+            else
+                std.mem.startsWith(u8, name, loader.tag["ozz-raw_".len..]);
+            if (!fits) continue;
+            var w = try size.archive(gpa, loader.tag, count);
+            defer w.deinit();
+            var handle: ?*anyopaque = null;
+            var refusal = stale_refusal;
+            try std.testing.expectEqual(Result.io, loader.load(w.bytes.items.ptr, w.bytes.items.len, &handle, &refusal));
+            try std.testing.expectEqualStrings(size.what(), std.mem.span(refusal.what orelse return error.TestUnexpectedResult));
+            try std.testing.expectEqual(@as(u64, count), refusal.value);
+            try std.testing.expectEqual(@as(u64, 0), refusal.limit);
+            reached += 1;
+        }
+    }
+    // Three in a raw skeleton, five in a raw animation, two in each track.
+    try std.testing.expectEqual(@as(usize, 3 + 5 + 2 * 5), reached);
+}
+
+test "a raw skeleton nests no deeper than ozz's joint limit" {
+    var failure: zozz.Failure = .{};
+    const gpa = std.testing.allocator;
+    try zozz.setAllocator(gpa, &failure);
+    defer zozz.resetAllocator(&failure) catch |e| std.debug.panic("zozz: {s}", .{@errorName(e)});
+
+    var at_limit = try archives.rawSkeletonChain(gpa, zozz.c.max_joints);
+    defer at_limit.deinit();
+    var loaded = try zozz.RawSkeleton.initFromMemory(.init(at_limit.bytes.items), &failure);
+    loaded.deinit();
+
+    var over = try archives.rawSkeletonChain(gpa, zozz.c.max_joints + 1);
+    defer over.deinit();
+    try expectLoadRefused(zozz.RawSkeleton, over.bytes.items, .raw_skeleton_load_memory, err.Error.BadFormat, "RawSkeleton.depth", zozz.c.max_joints + 1, zozz.c.max_joints);
 }

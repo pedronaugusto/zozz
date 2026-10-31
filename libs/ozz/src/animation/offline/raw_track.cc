@@ -104,8 +104,10 @@ void RawTrack<_ValueType>::Save(io::OArchive& _archive) const {
 
 template <typename _ValueType>
 void RawTrack<_ValueType>::Load(io::IArchive& _archive, uint32_t _version) {
-  (void)_version;
-  assert(_version == 1);
+  if (_version != 1) {
+    _archive.Refuse("RawTrack.version", _version, 1);
+    return;
+  }
   _archive >> keyframes;
   _archive >> name;
 }

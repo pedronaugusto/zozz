@@ -28,6 +28,8 @@
 #ifndef OZZ_OZZ_BASE_CONTAINERS_VECTOR_ARCHIVE_H_
 #define OZZ_OZZ_BASE_CONTAINERS_VECTOR_ARCHIVE_H_
 
+#include <limits>
+
 #include "ozz/base/containers/vector.h"
 #include "ozz/base/io/archive.h"
 #include "ozz/base/platform.h"
@@ -60,6 +62,12 @@ struct Extern<std::vector<_Ty, _Allocator>> {
       std::vector<_Ty, _Allocator>& vector = _values[i];
       uint32_t size;
       _archive >> size;
+      // Every element takes at least one byte in the archive.
+      if (_archive.refused() ||
+          !_archive.CheckCount("vector.size", size, 1,
+                               std::numeric_limits<uint32_t>::max())) {
+        return;
+      }
       vector.resize(size);
       if (size > 0) {
         _archive >> ozz::io::MakeArray(vector.data(), size);

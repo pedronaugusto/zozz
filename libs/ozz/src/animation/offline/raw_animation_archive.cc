@@ -54,6 +54,7 @@ void Extern<animation::offline::RawAnimation>::Load(
   if (_version < 3) {
     log::Err() << "Unsupported RawAnimation version " << _version << "."
                << std::endl;
+    _archive.Refuse("RawAnimation.version", _version, 3);
     return;
   }
   for (size_t i = 0; i < _count; ++i) {
