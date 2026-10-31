@@ -899,6 +899,32 @@ test "a raw skeleton nests no deeper than ozz's joint limit" {
     try expectLoadRefused(zozz.RawSkeleton, over.bytes.items, .raw_skeleton_load_memory, err.Error.BadFormat, "RawSkeleton.depth", zozz.c.max_joints + 1, zozz.c.max_joints);
 }
 
+test "a raw track's keyframe interpolates by a mode ozz has, or the track is refused" {
+    var failure: zozz.Failure = .{};
+    const gpa = std.testing.allocator;
+    try zozz.setAllocator(gpa, &failure);
+    defer zozz.resetAllocator(&failure) catch |e| std.debug.panic("zozz: {s}", .{@errorName(e)});
+
+    inline for (.{
+        .{ zozz.RawFloatTrack, "ozz-raw_float_track", 1, .raw_float_track_load_memory },
+        .{ zozz.RawFloat2Track, "ozz-raw_float2_track", 2, .raw_float2_track_load_memory },
+        .{ zozz.RawFloat3Track, "ozz-raw_float3_track", 3, .raw_float3_track_load_memory },
+        .{ zozz.RawFloat4Track, "ozz-raw_float4_track", 4, .raw_float4_track_load_memory },
+        .{ zozz.RawQuaternionTrack, "ozz-raw_quat_track", 4, .raw_quaternion_track_load_memory },
+    }) |kind| {
+        // One keyframe, its version, then a mode past kLinear, a ratio and
+        // a value; no name.
+        var track: archives.Writer = try .init(gpa, kind[1], 1);
+        defer track.deinit();
+        try track.int(u32, 1);
+        try track.int(u32, 1);
+        try track.int(u8, 2);
+        try track.zeros(4 + 4 * kind[2]);
+        try track.int(u32, 0);
+        try expectLoadRefused(kind[0], track.bytes.items, kind[3], err.Error.BadFormat, "RawTrackKeyframe.interpolation", 2, 1);
+    }
+}
+
 //=============================================================================
 // Allocation (libs/patches/ozz-checked-allocation.patch)
 //=============================================================================

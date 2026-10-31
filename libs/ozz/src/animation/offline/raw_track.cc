@@ -66,6 +66,11 @@ struct Extern<animation::offline::RawTrackKeyframe<_ValueType>> {
           _keyframes[i];
       uint8_t interp;
       _archive >> interp;
+      if (interp > animation::offline::RawTrackInterpolation::kLinear) {
+        _archive.Refuse("RawTrackKeyframe.interpolation", interp,
+                        animation::offline::RawTrackInterpolation::kLinear);
+        return;
+      }
       keyframe.interpolation =
           static_cast<animation::offline::RawTrackInterpolation::Value>(interp);
       _archive >> keyframe.ratio;

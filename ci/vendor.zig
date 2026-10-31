@@ -25,6 +25,7 @@ const patches = [_][]const u8{
     "ozz-archive-invariants.patch",
     "ozz-gv4-padding.patch",
     "ozz-key-arrays-of-none.patch",
+    "ozz-raw-track-interpolation.patch",
 };
 /// Where a patch's file paths start.
 const patch_root = "libs/ozz/";

@@ -1,0 +1,31 @@
+ozz-raw-track-interpolation: refuse a raw track keyframe's unknown mode
+
+A raw track's keyframe stores its interpolation as one byte, and Load cast
+whatever byte the archive held to RawTrackInterpolation::Value: a value
+that is neither kStep nor kLinear, which is undefined to load back out, and
+which TrackBuilder then tests to build the track's step bits.
+
+Load refuses a mode past kLinear through the archive's refusal record.
+
+Evidence: zozz's src/integration_test.zig loads a raw track of each value
+type whose keyframe holds mode 2, and upstream loads it; zozz's fuzz
+property, building such a track under UndefinedBehaviorSanitizer, stopped
+in TrackBuilder::Build with "load of value 130, which is not valid for type
+'RawTrackInterpolation::Value'" (both measured, 2026-10-31).
+
+diff --git a/libs/ozz/src/animation/offline/raw_track.cc b/libs/ozz/src/animation/offline/raw_track.cc
+index 3059eb6..d60c6d6 100644
+--- a/libs/ozz/src/animation/offline/raw_track.cc
++++ b/libs/ozz/src/animation/offline/raw_track.cc
+@@ -66,6 +66,11 @@ struct Extern<animation::offline::RawTrackKeyframe<_ValueType>> {
+           _keyframes[i];
+       uint8_t interp;
+       _archive >> interp;
++      if (interp > animation::offline::RawTrackInterpolation::kLinear) {
++        _archive.Refuse("RawTrackKeyframe.interpolation", interp,
++                        animation::offline::RawTrackInterpolation::kLinear);
++        return;
++      }
+       keyframe.interpolation =
+           static_cast<animation::offline::RawTrackInterpolation::Value>(interp);
+       _archive >> keyframe.ratio;

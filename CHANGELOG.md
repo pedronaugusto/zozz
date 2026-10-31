@@ -94,6 +94,11 @@ could not express, so a port has the reason and not only the diff.
   animation of none, accessed a member through a null pointer: a channel of
   no keys holds an empty span and its keys were read from the first key's
   address (`libs/patches/ozz-key-arrays-of-none.patch`).
+- A raw track archive's keyframe could hold any byte as its interpolation,
+  and ozz loaded it as a mode that does not exist, which building the track
+  then read. A mode other than step or linear is `BadFormat` now, its
+  record `RawTrackKeyframe.interpolation`
+  (`libs/patches/ozz-raw-track-interpolation.patch`).
 - `decodeGV4` and `decodeGV4Stream` read past the bytes they were given:
   they checked only the minimum size, then let ozz's decoder read the length
   a group's first byte claims plus the three bytes it loads past every group,
