@@ -27,7 +27,7 @@ fn headerDefine(comptime source: []const u8, comptime name: []const u8) comptime
     comptime {
         @setEvalBranchQuota(200_000);
         const needle = "#define " ++ name ++ " ";
-        const at = std.mem.indexOf(u8, source, needle) orelse
+        const at = std.mem.find(u8, source, needle) orelse
             @compileError("ffi/zozz_core.h has no `" ++ needle ++ "`");
         const rest = source[at + needle.len ..];
         var end: usize = 0;
@@ -195,7 +195,7 @@ pub fn build(b: *std.Build) void {
             bool,
             "enable_asserts",
             "Keep ozz's internal asserts (defaults to on in Debug)",
-        ) orelse (optimize == .Debug),
+        ) orelse (optimize == .debug),
         // Off by default, and deliberately NOT tied to `optimize`.
         //
         // Zig's full C sanitizer emits calls into a runtime that is linked
@@ -252,8 +252,8 @@ pub fn build(b: *std.Build) void {
     // Not an option: the version, carried along so a test can hold what the
     // library REPORTS to build.zig.zon rather than to a literal of its own.
     options_step.addOption([]const u8, "version", @import("build.zig.zon").version);
-    inline for (std.meta.fields(@TypeOf(options))) |field| {
-        options_step.addOption(field.type, field.name, @field(options, field.name));
+    inline for (@typeInfo(@TypeOf(options)).@"struct".field_names) |name| {
+        options_step.addOption(@TypeOf(@field(options, name)), name, @field(options, name));
     }
     const options_module = options_step.createModule();
 
@@ -510,9 +510,9 @@ pub fn build(b: *std.Build) void {
     tests.root_module.linkLibrary(lib);
     tests.root_module.linkLibrary(fixture);
 
-    // The ABI cross-check @cImport-s ffi/zozz.h. It is wired here, on the test
-    // module, and deliberately not on the module above: the shipped module has
-    // no include path and never runs translate-c.
+    // The ABI cross-check reads ffi/zozz.h translated as `zozz_h`. It is wired
+    // here, on the test module, and deliberately not on the module above: the
+    // shipped module has no include path and never runs translate-c.
     //
     // No build macros go with it, and that is a property of the header rather
     // than an oversight. Nothing in ffi/zozz.h changes shape with a `-D` flag —
@@ -521,9 +521,12 @@ pub fn build(b: *std.Build) void {
     // in every configuration. A header that did vary would have to be
     // preprocessed here with the same macros the library was compiled with, or
     // the check would be comparing against something nobody ships.
-    tests.root_module.addIncludePath(b.path("ffi"));
-    // tests/mathref.h, for the same reason and on the same module only.
-    tests.root_module.addIncludePath(b.path("tests"));
+    const zozz_h = b.addTranslateC(.{ .root_source_file = b.path("ffi/zozz.h"), .target = target, .optimize = optimize, .link_libc = true });
+    tests.root_module.addImport("zozz_h", zozz_h.createModule());
+    // tests/mathref.h as `mathref_h`, for the same reason and on the same
+    // module only.
+    const mathref_h = b.addTranslateC(.{ .root_source_file = b.path("tests/mathref.h"), .target = target, .optimize = optimize, .link_libc = true });
+    tests.root_module.addImport("mathref_h", mathref_h.createModule());
 
     const test_step = b.step("test", "Run zozz tests");
     test_step.dependOn(&b.addRunArtifact(tests).step);
@@ -565,7 +568,7 @@ pub fn build(b: *std.Build) void {
     const examples_step = b.step("examples", "Build and run the examples");
     for (example_sources) |source| {
         const example = b.addExecutable(.{
-            .name = std.fs.path.stem(source),
+            .name = std.Io.Dir.path.stem(source),
             .root_module = b.createModule(.{
                 .root_source_file = b.path(source),
                 .target = target,
@@ -589,3 +592,11 @@ pub fn build(b: *std.Build) void {
 const example_sources = [_][]const u8{
     "examples/usage.zig",
 };
+
+/// The development build: `bay <step>` runs the steps added here, with the
+/// dev dependencies of build.zig.zon as `tools` (`tools.<name>` is that
+/// package's build.zig). A package that depends on this one never runs it.
+pub fn dev(b: *std.Build, tools: type) void {
+    _ = b;
+    _ = tools;
+}

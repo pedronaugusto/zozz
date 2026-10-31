@@ -1,5 +1,5 @@
 //! Comptime cross-check: the hand-written externs in `c.zig` against the real C
-//! header, `@cImport`-ed in a test only (the shipped module stays
+//! header, translated as `zozz_h` for the tests only (the shipped module stays
 //! translate-c-free). Every public declaration in `c.zig` is discovered by
 //! reflection, paired with its counterpart by naming convention, and compared
 //! — a declaration fitting no category is a compile error, not a silent pass.
@@ -16,9 +16,7 @@
 const std = @import("std");
 const c = @import("c.zig");
 
-const h = @cImport({
-    @cInclude("zozz.h");
-});
+const h = @import("zozz_h");
 
 //=============================================================================
 // Name conventions, computed rather than tabulated
@@ -155,18 +153,18 @@ fn checkFnType(
     const ours = @typeInfo(Ours).@"fn";
     const theirs = @typeInfo(Theirs).@"fn";
 
-    if (ours.params.len != theirs.params.len) {
-        fail(what ++ " takes " ++ std.fmt.comptimePrint("{d}", .{ours.params.len}) ++
-            " parameters in src/c.zig but " ++ std.fmt.comptimePrint("{d}", .{theirs.params.len}) ++
+    if (ours.param_types.len != theirs.param_types.len) {
+        fail(what ++ " takes " ++ std.fmt.comptimePrint("{d}", .{ours.param_types.len}) ++
+            " parameters in src/c.zig but " ++ std.fmt.comptimePrint("{d}", .{theirs.param_types.len}) ++
             " in ffi/zozz.h");
     }
-    if (ours.is_var_args != theirs.is_var_args) {
+    if (ours.attrs.varargs != theirs.attrs.varargs) {
         fail(what ++ " is variadic on one side of the boundary only");
     }
 
-    inline for (ours.params, theirs.params, 0..) |op, tp, i| {
-        const OP = op.type orelse fail(what ++ " has an untyped parameter in src/c.zig");
-        const TP = tp.type orelse fail(what ++ " has an untyped parameter in ffi/zozz.h");
+    inline for (ours.param_types, theirs.param_types, 0..) |op, tp, i| {
+        const OP = op orelse fail(what ++ " has an untyped parameter in src/c.zig");
+        const TP = tp orelse fail(what ++ " has an untyped parameter in ffi/zozz.h");
         sameScalar(
             what ++ " parameter " ++ std.fmt.comptimePrint("{d}", .{i}),
             OP,
@@ -198,25 +196,25 @@ fn checkStructLayout(
         else => fail(what ++ " is a struct in src/c.zig but not in ffi/zozz.h"),
     };
 
-    if (ours.fields.len != theirs.fields.len) {
-        fail(what ++ " has " ++ std.fmt.comptimePrint("{d}", .{ours.fields.len}) ++
-            " fields in src/c.zig but " ++ std.fmt.comptimePrint("{d}", .{theirs.fields.len}) ++
+    if (ours.field_names.len != theirs.field_names.len) {
+        fail(what ++ " has " ++ std.fmt.comptimePrint("{d}", .{ours.field_names.len}) ++
+            " fields in src/c.zig but " ++ std.fmt.comptimePrint("{d}", .{theirs.field_names.len}) ++
             " in ffi/zozz.h");
     }
 
-    inline for (ours.fields) |f| {
-        if (!@hasField(Theirs, f.name)) {
-            fail(what ++ " has field `" ++ f.name ++ "` in src/c.zig, which ffi/zozz.h does not");
+    inline for (ours.field_names, ours.field_types) |f_name, f_type| {
+        if (!@hasField(Theirs, f_name)) {
+            fail(what ++ " has field `" ++ f_name ++ "` in src/c.zig, which ffi/zozz.h does not");
         }
-        if (@offsetOf(Ours, f.name) != @offsetOf(Theirs, f.name)) {
-            fail(what ++ "." ++ f.name ++ " is at byte " ++
-                std.fmt.comptimePrint("{d}", .{@offsetOf(Ours, f.name)}) ++ " in src/c.zig but " ++
-                std.fmt.comptimePrint("{d}", .{@offsetOf(Theirs, f.name)}) ++ " in ffi/zozz.h");
+        if (@offsetOf(Ours, f_name) != @offsetOf(Theirs, f_name)) {
+            fail(what ++ "." ++ f_name ++ " is at byte " ++
+                std.fmt.comptimePrint("{d}", .{@offsetOf(Ours, f_name)}) ++ " in src/c.zig but " ++
+                std.fmt.comptimePrint("{d}", .{@offsetOf(Theirs, f_name)}) ++ " in ffi/zozz.h");
         }
         sameScalar(
-            what ++ "." ++ f.name,
-            f.type,
-            @FieldType(Theirs, f.name),
+            what ++ "." ++ f_name,
+            f_type,
+            @FieldType(Theirs, f_name),
         );
     }
 }
@@ -232,23 +230,24 @@ fn checkEnumValues(
     comptime Ours: type,
     comptime ours_name: []const u8,
 ) void {
-    inline for (@typeInfo(Ours).@"enum".fields) |f| {
-        const cname = fieldCName(ours_name, f.name);
-        _ = theirDecl(cname, what ++ "." ++ f.name);
+    const info = @typeInfo(Ours).@"enum";
+    inline for (info.field_names, info.field_values) |f_name, f_value| {
+        const cname = fieldCName(ours_name, f_name);
+        _ = theirDecl(cname, what ++ "." ++ f_name);
         // The precondition that lets sameScalar skip signedness across an
         // enum. C leaves the underlying type to the implementation, and the
         // implementations disagree; that is only unobservable while every
         // enumerator is non-negative. One negative value and the same
         // declaration means different things on MSVC and on clang.
-        if (f.value < 0) {
-            fail(what ++ "." ++ f.name ++ " is negative, which makes the enum's " ++
+        if (f_value < 0) {
+            fail(what ++ "." ++ f_name ++ " is negative, which makes the enum's " ++
                 "underlying type observable — C leaves that to the implementation " ++
                 "and MSVC and clang choose differently. Use an explicit " ++
                 "fixed-width constant instead, the way ZOZZ_NO_PARENT is one.");
         }
-        if (@as(i128, @field(h, cname)) != @as(i128, f.value)) {
-            fail(what ++ "." ++ f.name ++ " is " ++
-                std.fmt.comptimePrint("{d}", .{f.value}) ++ " in src/c.zig but " ++ cname ++
+        if (@as(i128, @field(h, cname)) != @as(i128, f_value)) {
+            fail(what ++ "." ++ f_name ++ " is " ++
+                std.fmt.comptimePrint("{d}", .{f_value}) ++ " in src/c.zig but " ++ cname ++
                 " is " ++ std.fmt.comptimePrint("{d}", .{@field(h, cname)}) ++ " in ffi/zozz.h");
         }
     }
@@ -274,14 +273,14 @@ fn sweepOurs() Counts {
     comptime {
         var n = Counts{};
 
-        for (@typeInfo(c).@"struct".decls) |d| {
-            const Decl = @TypeOf(@field(c, d.name));
+        for (@typeInfo(c).@"struct".decl_names) |d| {
+            const Decl = @TypeOf(@field(c, d));
 
             // ---- types -----------------------------------------------------
             if (Decl == type) {
-                const Ours = @field(c, d.name);
-                const cname = typeCName(d.name);
-                const what = "type " ++ d.name;
+                const Ours = @field(c, d);
+                const cname = typeCName(d);
+                const what = "type " ++ d;
                 n.types += 1;
 
                 switch (@typeInfo(Ours)) {
@@ -300,7 +299,7 @@ fn sweepOurs() Counts {
                         switch (s.layout) {
                             .@"extern" => {
                                 checkStructLayout(what, Ours, Theirs);
-                                n.fields += s.fields.len;
+                                n.fields += s.field_names.len;
                             },
                             // No packed struct crosses this boundary today —
                             // zozz has no bit-mask type. One added later would
@@ -314,8 +313,8 @@ fn sweepOurs() Counts {
                     .@"enum" => |e| {
                         _ = theirDecl(cname, what);
                         sameSizeAndAlign(what, Ours, @field(h, cname));
-                        checkEnumValues(what, Ours, d.name);
-                        n.enumerators += e.fields.len;
+                        checkEnumValues(what, Ours, d);
+                        n.enumerators += e.field_names.len;
                     },
                     .int, .float, .bool => {
                         _ = theirDecl(cname, what);
@@ -339,7 +338,7 @@ fn sweepOurs() Counts {
                         const TheirsPtr = if (TheirsOpt == .optional) TheirsOpt.optional.child else Theirs;
                         checkFnType(what, OursFn, @typeInfo(TheirsPtr).pointer.child);
                     },
-                    else => fail("type " ++ d.name ++ " is a " ++
+                    else => fail("type " ++ d ++ " is a " ++
                         @tagName(@typeInfo(Ours)) ++ ", which this check does not know how to " ++
                         "compare against the header"),
                 }
@@ -348,24 +347,24 @@ fn sweepOurs() Counts {
 
             // ---- functions -------------------------------------------------
             if (@typeInfo(Decl) == .@"fn") {
-                if (@typeInfo(Decl).@"fn".calling_convention == .auto) {
+                if (@typeInfo(Decl).@"fn".attrs.@"callconv" == .auto) {
                     // A Zig helper, not an extern — skipping it is right, but
                     // skipping it SILENTLY is not: the reverse sweep only
                     // checks that a name exists, so a helper reusing an
                     // exported symbol's name would pass both sweeps while the
                     // extern it displaced silently vanishes. A helper is
                     // allowed; one wearing a boundary name is not.
-                    if (std.mem.startsWith(u8, d.name, "zozz")) {
-                        fail("src/c.zig declares `" ++ d.name ++ "` as a Zig function, not an " ++
+                    if (std.mem.startsWith(u8, d, "zozz")) {
+                        fail("src/c.zig declares `" ++ d ++ "` as a Zig function, not an " ++
                             "extern. The `zozz` prefix is reserved for the C boundary here: a " ++
                             "helper on that name hides the extern it replaced from both " ++
                             "directions of this check. Rename the helper.");
                     }
                     continue;
                 }
-                const what = "function " ++ d.name;
-                _ = theirDecl(d.name, what);
-                checkFnType(what, Decl, @TypeOf(@field(h, d.name)));
+                const what = "function " ++ d;
+                _ = theirDecl(d, what);
+                checkFnType(what, Decl, @TypeOf(@field(h, d)));
                 n.functions += 1;
                 continue;
             }
@@ -374,13 +373,13 @@ fn sweepOurs() Counts {
             if (@typeInfo(Decl) == .int or @typeInfo(Decl) == .comptime_int or
                 @typeInfo(Decl) == .@"enum")
             {
-                const cname = constCName(d.name);
-                const what = "constant " ++ d.name;
+                const cname = constCName(d);
+                const what = "constant " ++ d;
                 _ = theirDecl(cname, what);
                 const ours_val: i128 = @intCast(if (@typeInfo(Decl) == .@"enum")
-                    @intFromEnum(@field(c, d.name))
+                    @backingInt(@field(c, d))
                 else
-                    @field(c, d.name));
+                    @field(c, d));
                 const theirs_val: i128 = @intCast(@field(h, cname));
                 if (ours_val != theirs_val) {
                     fail(what ++ " is " ++ std.fmt.comptimePrint("{d}", .{ours_val}) ++
@@ -391,7 +390,7 @@ fn sweepOurs() Counts {
                 continue;
             }
 
-            fail("src/c.zig declares `" ++ d.name ++ "` as a " ++ @tagName(@typeInfo(Decl)) ++
+            fail("src/c.zig declares `" ++ d ++ "` as a " ++ @tagName(@typeInfo(Decl)) ++
                 ", which this check does not know how to compare. Add a case rather than " ++
                 "leaving it unchecked.");
         }
@@ -407,17 +406,17 @@ fn sweepTheirs() usize {
     comptime {
         var found: usize = 0;
 
-        for (@typeInfo(h).@"struct".decls) |d| {
+        for (@typeInfo(h).@"struct".decl_names) |d| {
             // Filter by name BEFORE touching the value: translate-c emits
             // `@compileError` declarations for system macros it cannot render,
             // and evaluating one of those would fail the build for a reason
             // that has nothing to do with zozz.
-            if (!std.mem.startsWith(u8, d.name, "zozz")) continue;
-            if (@typeInfo(@TypeOf(@field(h, d.name))) != .@"fn") continue;
+            if (!std.mem.startsWith(u8, d, "zozz")) continue;
+            if (@typeInfo(@TypeOf(@field(h, d))) != .@"fn") continue;
 
             found += 1;
-            if (!@hasDecl(c, d.name)) {
-                fail("ffi/zozz.h exports `" ++ d.name ++ "` but src/c.zig never declares it");
+            if (!@hasDecl(c, d)) {
+                fail("ffi/zozz.h exports `" ++ d ++ "` but src/c.zig never declares it");
             }
             // Existence is not enough: the name has to resolve to something
             // that actually links. A Zig helper or a type sitting on the name
@@ -425,13 +424,13 @@ fn sweepTheirs() usize {
             // already rejects those first, so this is the backstop, not the
             // catch: it depends on nothing but the header, so widening the
             // forward sweep's name filter later cannot reopen the hole.
-            const Ours = @TypeOf(@field(c, d.name));
+            const Ours = @TypeOf(@field(c, d));
             if (@typeInfo(Ours) != .@"fn") {
-                fail("ffi/zozz.h exports `" ++ d.name ++ "` but src/c.zig declares that name " ++
+                fail("ffi/zozz.h exports `" ++ d ++ "` but src/c.zig declares that name " ++
                     "as a " ++ @tagName(@typeInfo(Ours)) ++ " rather than a function");
             }
-            if (@typeInfo(Ours).@"fn".calling_convention == .auto) {
-                fail("ffi/zozz.h exports `" ++ d.name ++ "` but src/c.zig declares that name " ++
+            if (@typeInfo(Ours).@"fn".attrs.@"callconv" == .auto) {
+                fail("ffi/zozz.h exports `" ++ d ++ "` but src/c.zig declares that name " ++
                     "as a Zig function rather than an extern, so nothing binds the symbol");
             }
         }
@@ -459,14 +458,14 @@ fn sweepTheirs() usize {
 fn isBoundaryExtern(comptime name: []const u8) bool {
     const Decl = @TypeOf(@field(c, name));
     if (@typeInfo(Decl) != .@"fn") return false;
-    return @typeInfo(Decl).@"fn".calling_convention != .auto;
+    return @typeInfo(Decl).@"fn".attrs.@"callconv" != .auto;
 }
 
 const entry_point_count = blk: {
     @setEvalBranchQuota(1_000_000);
     var n: usize = 0;
-    for (@typeInfo(c).@"struct".decls) |d| {
-        if (isBoundaryExtern(d.name)) n += 1;
+    for (@typeInfo(c).@"struct".decl_names) |d| {
+        if (isBoundaryExtern(d)) n += 1;
     }
     break :blk n;
 };
@@ -478,9 +477,9 @@ export const zozz_abi_entry_points: [entry_point_count]*const anyopaque = blk: {
     @setEvalBranchQuota(1_000_000);
     var table: [entry_point_count]*const anyopaque = undefined;
     var i: usize = 0;
-    for (@typeInfo(c).@"struct".decls) |d| {
-        if (!isBoundaryExtern(d.name)) continue;
-        table[i] = @ptrCast(&@field(c, d.name));
+    for (@typeInfo(c).@"struct".decl_names) |d| {
+        if (!isBoundaryExtern(d)) continue;
+        table[i] = @ptrCast(&@field(c, d));
         i += 1;
     }
     break :blk table;

@@ -121,7 +121,7 @@ fn frame(fixture: *const Fixture, worker: *Worker, ratio: f32) !void {
 test "distinct handles are usable from several threads at once" {
     if (@import("builtin").single_threaded) return error.SkipZigTest;
 
-    var debug_allocator: std.heap.DebugAllocator(.{}) = .init;
+    var debug_allocator: std.heap.SafeAllocator = .init(std.heap.page_allocator, .{});
     try zozz.resetAllocator();
     try zozz.setAllocator(debug_allocator.allocator());
 
@@ -144,5 +144,5 @@ test "distinct handles are usable from several threads at once" {
         return e;
     }
     try std.testing.expectEqual(@as(usize, 0), zozz.allocatorLiveBlocks());
-    try std.testing.expectEqual(std.heap.Check.ok, debug_allocator.deinit());
+    try std.testing.expectEqual(@as(usize, 0), debug_allocator.deinit());
 }

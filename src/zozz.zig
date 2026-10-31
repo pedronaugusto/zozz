@@ -354,12 +354,12 @@ test "the C library agrees with the extern declarations in c.zig" {
     // Every remaining field is checked, by its own name, against the type it
     // describes -- not against a hand-written list that a new field can be
     // added beside without anyone noticing.
-    inline for (@typeInfo(c.AbiLayout).@"struct".fields) |field| {
-        if (comptime std.mem.eql(u8, field.name, "layout_size")) continue;
-        if (comptime std.mem.eql(u8, field.name, "result_count")) continue;
+    inline for (@typeInfo(c.AbiLayout).@"struct".field_names) |name| {
+        if (comptime std.mem.eql(u8, name, "layout_size")) continue;
+        if (comptime std.mem.eql(u8, name, "result_count")) continue;
         try std.testing.expectEqual(
-            comptime abiLayoutExpected(field.name),
-            @field(layout, field.name),
+            comptime abiLayoutExpected(name),
+            @field(layout, name),
         );
     }
 
@@ -369,7 +369,7 @@ test "the C library agrees with the extern declarations in c.zig" {
     try std.testing.expectEqual(@as(u32, 16), layout.soa_transform_align);
 
     // The Zig error mapping must cover every C result.
-    const result_fields = @typeInfo(c.Result).@"enum".fields;
+    const result_fields = @typeInfo(c.Result).@"enum".field_names;
     try std.testing.expectEqual(@as(u32, result_fields.len), layout.result_count);
 }
 
@@ -403,8 +403,8 @@ test "version reporting is wired up" {
 }
 
 test "result names are never null" {
-    inline for (@typeInfo(c.Result).@"enum".fields) |field| {
-        const name = resultName(@enumFromInt(field.value));
+    inline for (@typeInfo(c.Result).@"enum".field_values) |value| {
+        const name = resultName(@fromBackingInt(@intCast(value)));
         try std.testing.expect(name.len > 0);
     }
 }
@@ -433,7 +433,10 @@ test "loaders reject malformed input instead of parsing it" {
     defer resetAllocator() catch unreachable;
 
     // Not an ozz archive: the tag test must catch it.
-    const garbage = "this is definitely not an ozz archive" ** 4;
+    const garbage = "this is definitely not an ozz archive" ++
+        "this is definitely not an ozz archive" ++
+        "this is definitely not an ozz archive" ++
+        "this is definitely not an ozz archive";
     try std.testing.expectError(Error.BadFormat, Skeleton.initFromMemory(garbage));
     try std.testing.expectError(Error.BadFormat, Animation.initFromMemory(garbage));
 

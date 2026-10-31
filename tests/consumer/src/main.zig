@@ -14,8 +14,8 @@ fn restAt(translation: [3]f32) zozz.Transform {
 }
 
 pub fn main() !void {
-    var gpa_state = std.heap.DebugAllocator(.{}){};
-    defer std.debug.assert(gpa_state.deinit() == .ok);
+    var gpa_state: std.heap.SafeAllocator = .init(std.heap.page_allocator, .{});
+    defer std.debug.assert(gpa_state.deinit() == 0);
     const gpa = gpa_state.allocator();
 
     // The allocator seam is process-wide, mirroring ozz. A leak or a

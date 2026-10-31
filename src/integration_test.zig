@@ -366,8 +366,8 @@ test "the full pipeline runs against .ozz files on disk" {
     try zozz.setAllocator(gpa);
     defer zozz.resetAllocator() catch unreachable;
 
-    var skeleton_buf: [std.fs.max_path_bytes]u8 = undefined;
-    var animation_buf: [std.fs.max_path_bytes]u8 = undefined;
+    var skeleton_buf: [std.Io.Dir.max_path_bytes]u8 = undefined;
+    var animation_buf: [std.Io.Dir.max_path_bytes]u8 = undefined;
 
     const skeleton = try zozz.Skeleton.initFromFile(
         try std.fmt.bufPrintZ(&skeleton_buf, "{s}", .{skeleton_path}),

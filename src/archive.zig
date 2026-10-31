@@ -40,7 +40,7 @@ pub const Endianness = c.Endianness;
 /// entry point to ask a platform its own native order (see zozz_archive.h);
 /// a Zig host already has one, in the compiler's own target information.
 pub fn nativeEndianness() Endianness {
-    return switch (std.builtin.Endian.native) {
+    return switch (std.lang.Endian.native) {
         .big => .big,
         .little => .little,
     };

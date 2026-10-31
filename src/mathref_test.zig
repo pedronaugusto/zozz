@@ -13,9 +13,7 @@
 const std = @import("std");
 const math = @import("math.zig");
 
-const ref = @cImport({
-    @cInclude("mathref.h");
-});
+const ref = @import("mathref_h");
 
 const F4 = math.SimdFloat4;
 const I4 = math.SimdInt4;
@@ -167,15 +165,15 @@ fn writeResult(comptime T: type, out: []Reg, at: usize, value: T) void {
 fn adapt(comptime op: anytype) Impl {
     const info = @typeInfo(@TypeOf(op)).@"fn";
     comptime var total: usize = 0;
-    inline for (info.params) |p| total += regsFor(p.type.?);
+    inline for (info.param_types) |P| total += regsFor(P.?);
     return .{
         .eval = &struct {
             fn e(in: []const Reg, out: []Reg) void {
                 var args: std.meta.ArgsTuple(@TypeOf(op)) = undefined;
                 comptime var at: usize = 0;
-                inline for (info.params, 0..) |p, i| {
-                    args[i] = readArg(p.type.?, in, at);
-                    at += comptime regsFor(p.type.?);
+                inline for (info.param_types, 0..) |P, i| {
+                    args[i] = readArg(P.?, in, at);
+                    at += comptime regsFor(P.?);
                 }
                 writeResult(info.return_type.?, out, 0, @call(.auto, op, args));
             }
@@ -900,18 +898,18 @@ comptime {
         @compileError("mathref: tests/mathref.h declares a different number of " ++
             "operations than src/mathref_test.zig has rows for");
     }
-    for (@typeInfo(ref).@"struct".decls) |d| {
-        if (!std.mem.startsWith(u8, d.name, "ZOZZ_MATHREF_")) continue;
+    for (@typeInfo(ref).@"struct".decl_names) |d| {
+        if (!std.mem.startsWith(u8, d, "ZOZZ_MATHREF_")) continue;
         // The X-macro list and the count sentinel are the header's only two
         // ZOZZ_MATHREF_ names that are not operations.
-        if (std.mem.eql(u8, d.name, "ZOZZ_MATHREF_OPS")) continue;
-        if (std.mem.eql(u8, d.name, "ZOZZ_MATHREF_OP_COUNT")) continue;
-        const want = d.name["ZOZZ_MATHREF_".len..];
+        if (std.mem.eql(u8, d, "ZOZZ_MATHREF_OPS")) continue;
+        if (std.mem.eql(u8, d, "ZOZZ_MATHREF_OP_COUNT")) continue;
+        const want = d["ZOZZ_MATHREF_".len..];
         var found = false;
         for (cases) |cs| {
             if (std.mem.eql(u8, cs.name, want)) found = true;
         }
-        if (!found) @compileError("mathref: no row for " ++ d.name);
+        if (!found) @compileError("mathref: no row for " ++ d);
     }
 }
 

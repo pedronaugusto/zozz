@@ -53,9 +53,9 @@ pub const TwoBoneJob = struct {
         var mid_correction: c.SimdFloat4 = undefined;
         var reached: bool = false;
         var raw = c.IKTwoBoneJob{
-            .target = @bitCast(self.target),
-            .mid_axis = @bitCast(self.mid_axis),
-            .pole_vector = @bitCast(self.pole_vector),
+            .target = .{ .f = self.target },
+            .mid_axis = .{ .f = self.mid_axis },
+            .pole_vector = .{ .f = self.pole_vector },
             .twist_angle = self.twist_angle,
             .soften = self.soften,
             .weight = self.weight,
@@ -68,8 +68,8 @@ pub const TwoBoneJob = struct {
         };
         try err.check(c.zozzIKTwoBoneJobRun(&raw));
         return .{
-            .start_joint_correction = @bitCast(start_correction),
-            .mid_joint_correction = @bitCast(mid_correction),
+            .start_joint_correction = start_correction.f,
+            .mid_joint_correction = mid_correction.f,
             .reached = reached,
         };
     }
@@ -107,11 +107,11 @@ pub const AimJob = struct {
         var joint_correction: c.SimdFloat4 = undefined;
         var reached: bool = false;
         var raw = c.IKAimJob{
-            .target = @bitCast(self.target),
-            .forward = @bitCast(self.forward),
-            .offset = @bitCast(self.offset),
-            .up = @bitCast(self.up),
-            .pole_vector = @bitCast(self.pole_vector),
+            .target = .{ .f = self.target },
+            .forward = .{ .f = self.forward },
+            .offset = .{ .f = self.offset },
+            .up = .{ .f = self.up },
+            .pole_vector = .{ .f = self.pole_vector },
             .twist_angle = self.twist_angle,
             .weight = self.weight,
             .joint = self.joint,
@@ -119,7 +119,7 @@ pub const AimJob = struct {
             .reached = &reached,
         };
         try err.check(c.zozzIKAimJobRun(&raw));
-        return .{ .joint_correction = @bitCast(joint_correction), .reached = reached };
+        return .{ .joint_correction = joint_correction.f, .reached = reached };
     }
 };
 
@@ -136,7 +136,7 @@ pub const JointCorrection = c.JointCorrection;
 
 /// Pairs a joint index with the rotation an IK job produced for it.
 pub fn correction(joint: u32, rotation: Vec4) JointCorrection {
-    return .{ .rotation = @bitCast(rotation), .joint = @intCast(joint) };
+    return .{ .rotation = .{ .f = rotation }, .joint = @intCast(joint) };
 }
 
 /// Left-multiplies each correction onto its joint's current local-space

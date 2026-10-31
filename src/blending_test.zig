@@ -136,7 +136,7 @@ test "an additive layer at weight 0 changes nothing, and at weight 1 applies ful
         .rotation = .{ 0, 0, 0, 1 },
         .scale = .{ 1, 1, 1 },
     };
-    const base = [_]zozz.Transform{base_transform} ** n;
+    const base = @as([n]zozz.Transform, @splat(base_transform));
     const rest = try poseOf(n, &base);
 
     // A delta pose: translate, a 90-degree turn about Z, and double scale.
@@ -146,7 +146,7 @@ test "an additive layer at weight 0 changes nothing, and at weight 1 applies ful
         .rotation = .{ 0, 0, @sin(half_angle), @cos(half_angle) },
         .scale = .{ 2, 2, 2 },
     };
-    const delta = [_]zozz.Transform{delta_transform} ** n;
+    const delta = @as([n]zozz.Transform, @splat(delta_transform));
     const delta_pose = try poseOf(n, &delta);
 
     var out = try identityPose(n);

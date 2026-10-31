@@ -263,9 +263,9 @@ test "IK job defaults match ozz's own" {
         .mid_joint = &dummy,
         .end_joint = &dummy,
     };
-    try std.testing.expectEqual(two_bone_defaults.target, @as(c.SimdFloat4, @bitCast(two_bone.target)));
-    try std.testing.expectEqual(two_bone_defaults.mid_axis, @as(c.SimdFloat4, @bitCast(two_bone.mid_axis)));
-    try std.testing.expectEqual(two_bone_defaults.pole_vector, @as(c.SimdFloat4, @bitCast(two_bone.pole_vector)));
+    try std.testing.expectEqual(two_bone_defaults.target, c.SimdFloat4{ .f = two_bone.target });
+    try std.testing.expectEqual(two_bone_defaults.mid_axis, c.SimdFloat4{ .f = two_bone.mid_axis });
+    try std.testing.expectEqual(two_bone_defaults.pole_vector, c.SimdFloat4{ .f = two_bone.pole_vector });
     try std.testing.expectEqual(two_bone_defaults.twist_angle, two_bone.twist_angle);
     try std.testing.expectEqual(two_bone_defaults.soften, two_bone.soften);
     try std.testing.expectEqual(two_bone_defaults.weight, two_bone.weight);
@@ -273,11 +273,11 @@ test "IK job defaults match ozz's own" {
     var aim_defaults: c.IKAimJob = undefined;
     c.zozzIKAimJobDefaults(&aim_defaults);
     const aim = zozz.ik.AimJob{ .joint = &dummy };
-    try std.testing.expectEqual(aim_defaults.target, @as(c.SimdFloat4, @bitCast(aim.target)));
-    try std.testing.expectEqual(aim_defaults.forward, @as(c.SimdFloat4, @bitCast(aim.forward)));
-    try std.testing.expectEqual(aim_defaults.offset, @as(c.SimdFloat4, @bitCast(aim.offset)));
-    try std.testing.expectEqual(aim_defaults.up, @as(c.SimdFloat4, @bitCast(aim.up)));
-    try std.testing.expectEqual(aim_defaults.pole_vector, @as(c.SimdFloat4, @bitCast(aim.pole_vector)));
+    try std.testing.expectEqual(aim_defaults.target, c.SimdFloat4{ .f = aim.target });
+    try std.testing.expectEqual(aim_defaults.forward, c.SimdFloat4{ .f = aim.forward });
+    try std.testing.expectEqual(aim_defaults.offset, c.SimdFloat4{ .f = aim.offset });
+    try std.testing.expectEqual(aim_defaults.up, c.SimdFloat4{ .f = aim.up });
+    try std.testing.expectEqual(aim_defaults.pole_vector, c.SimdFloat4{ .f = aim.pole_vector });
     try std.testing.expectEqual(aim_defaults.twist_angle, aim.twist_angle);
     try std.testing.expectEqual(aim_defaults.weight, aim.weight);
 }

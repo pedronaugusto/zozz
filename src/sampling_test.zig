@@ -11,7 +11,7 @@ const zozz = @import("zozz.zig");
 
 /// Marks every matrix so an unwritten one is recognisable. No local-to-model
 /// result can hold it: ozz always writes a bottom row of (0, 0, 0, 1).
-const poison: zozz.Mat4 = .{ .m = .{-1.0} ** 16 };
+const poison: zozz.Mat4 = .{ .m = @splat(-1.0) };
 
 fn translated(x: f32, y: f32, z: f32) zozz.Transform {
     var t = zozz.transform_identity;
@@ -61,7 +61,7 @@ test "the default range walks the whole hierarchy" {
     var chain = try Chain.init();
     defer chain.deinit();
 
-    var models: [4]zozz.Mat4 = .{poison} ** 4;
+    var models: [4]zozz.Mat4 = @splat(poison);
     try (zozz.LocalToModelJob{
         .skeleton = chain.skeleton,
         .locals = &chain.pose,
@@ -88,7 +88,7 @@ test "a from with a defaulted to still updates through the last joint" {
 
     // Joints 0 and 1 are ancestors of the range and must already be valid:
     // joint 2 is placed relative to joint 1's model matrix.
-    var models: [4]zozz.Mat4 = .{poison} ** 4;
+    var models: [4]zozz.Mat4 = @splat(poison);
     try (zozz.LocalToModelJob{
         .skeleton = chain.skeleton,
         .locals = &chain.pose,
@@ -117,7 +117,7 @@ test "to ends the walk, leaving later joints untouched" {
     var chain = try Chain.init();
     defer chain.deinit();
 
-    var models: [4]zozz.Mat4 = .{poison} ** 4;
+    var models: [4]zozz.Mat4 = @splat(poison);
     try (zozz.LocalToModelJob{
         .skeleton = chain.skeleton,
         .locals = &chain.pose,
@@ -138,7 +138,7 @@ test "from_excluded keeps from's matrix and updates its children" {
     var chain = try Chain.init();
     defer chain.deinit();
 
-    var models: [4]zozz.Mat4 = .{poison} ** 4;
+    var models: [4]zozz.Mat4 = @splat(poison);
     try (zozz.LocalToModelJob{
         .skeleton = chain.skeleton,
         .locals = &chain.pose,
@@ -171,7 +171,7 @@ test "an out-of-range from or to is refused rather than writing nothing" {
     var chain = try Chain.init();
     defer chain.deinit();
 
-    var models: [4]zozz.Mat4 = .{poison} ** 4;
+    var models: [4]zozz.Mat4 = @splat(poison);
     const base = zozz.LocalToModelJob{
         .skeleton = chain.skeleton,
         .locals = &chain.pose,
@@ -206,7 +206,7 @@ test "a destination smaller than the skeleton is refused whatever the range" {
 
     // Ancestors outside the range are still READ from `out`, so a short buffer
     // is invalid even when the range itself would fit in it.
-    var models: [2]zozz.Mat4 = .{poison} ** 2;
+    var models: [2]zozz.Mat4 = @splat(poison);
     try std.testing.expectError(zozz.Error.BufferTooSmall, (zozz.LocalToModelJob{
         .skeleton = chain.skeleton,
         .locals = &chain.pose,

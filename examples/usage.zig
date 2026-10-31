@@ -43,8 +43,8 @@ fn authorAssets() !void {
 }
 
 pub fn main() !void {
-    var gpa_state = std.heap.DebugAllocator(.{}){};
-    defer std.debug.assert(gpa_state.deinit() == .ok);
+    var gpa_state: std.heap.SafeAllocator = .init(std.heap.page_allocator, .{});
+    defer std.debug.assert(gpa_state.deinit() == 0);
     const gpa = gpa_state.allocator();
 
     // build.zig runs this with its working directory set to zig-out, so the

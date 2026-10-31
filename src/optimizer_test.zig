@@ -408,7 +408,7 @@ test "the compressed control streams size and read back for every channel" {
     // A channel value the host made up is rejected, not read out of bounds.
     try std.testing.expectError(
         error.InvalidArgument,
-        animation.keyframesCtrl(@enumFromInt(99)),
+        animation.keyframesCtrl(@fromBackingInt(@intCast(99))),
     );
 
     // A buffer that is too small is refused rather than overrun.

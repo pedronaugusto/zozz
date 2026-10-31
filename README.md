@@ -107,7 +107,7 @@ exe.root_module.linkLibrary(zozz_dep.artifact("zozz"));  // then #include <zozz.
 Forward `optimize` as shown: zozz does not turn on Zig's C sanitizer for you,
 so a mismatched build mode is a size difference rather than a link failure, but
 a Debug library inside a release executable is still not what you meant. There
-are no package dependencies — ozz is vendored under `libs/ozz`. Zig `0.16.0` or
+are no package dependencies — ozz is vendored under `libs/ozz`. Zig `0.17.0` or
 newer.
 
 ## The API

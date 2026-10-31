@@ -43,10 +43,10 @@ fn prefixSize(alignment: std.mem.Alignment) usize {
 /// The alignment the backing allocation must use: at least the caller's, and
 /// at least what the header itself needs.
 fn backingAlignment(alignment: std.mem.Alignment) std.mem.Alignment {
-    return @enumFromInt(@max(
-        @intFromEnum(alignment),
-        @intFromEnum(std.mem.Alignment.of(Header)),
-    ));
+    return @fromBackingInt(@intCast(@max(
+        @backingInt(alignment),
+        @backingInt(std.mem.Alignment.of(Header)),
+    )));
 }
 
 fn allocate(user: ?*anyopaque, size: usize, alignment: usize) callconv(.c) ?*anyopaque {
@@ -209,9 +209,9 @@ test "getAllocator distinguishes a never-installed state from the exact allocato
 test "a block outstanding across a swap is freed by the allocator that produced it" {
     // Two allocators that each account for their own blocks, so a free landing
     // on the wrong one is not a matter of opinion: the producer reports a leak
-    // and the other reports a free it never issued.
-    var first: std.heap.DebugAllocator(.{}) = .init;
-    var second: std.heap.DebugAllocator(.{}) = .init;
+    // and the other, whose canary differs, panics on a block it never issued.
+    var first: std.heap.SafeAllocator = .init(std.heap.page_allocator, .{ .canary = 0x1f1f1f1f });
+    var second: std.heap.SafeAllocator = .init(std.heap.page_allocator, .{ .canary = 0x2e2e2e2e });
 
     try resetAllocator();
     try setAllocator(first.allocator());
@@ -227,8 +227,8 @@ test "a block outstanding across a swap is freed by the allocator that produced 
     deallocate(@ptrCast(&installed), block);
 
     try resetAllocator();
-    try std.testing.expectEqual(std.heap.Check.ok, first.deinit());
-    try std.testing.expectEqual(std.heap.Check.ok, second.deinit());
+    try std.testing.expectEqual(@as(usize, 0), first.deinit());
+    try std.testing.expectEqual(@as(usize, 0), second.deinit());
 }
 
 test "the seam refuses to change allocator while blocks it produced are live" {

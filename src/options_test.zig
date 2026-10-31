@@ -18,7 +18,7 @@ const zozz = @import("zozz.zig");
 // Windows its `open` does not compile at all.
 //=============================================================================
 
-const crt = if (@import("builtin").os.tag == .windows) struct {
+const crt = if (@import("builtin").target.os.tag == .windows) struct {
     const null_device = "NUL";
     extern "c" fn _open(path: [*:0]const u8, flags: c_int, ...) c_int;
     extern "c" fn _close(fd: c_int) c_int;

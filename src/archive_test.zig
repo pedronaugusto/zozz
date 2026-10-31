@@ -519,8 +519,8 @@ test "an archive written with the opposite endianness byte-swaps its fields, and
     // the two archives it must be an exact byte-for-byte reversal, which is
     // what "byte-swapped" means, not merely "some other bytes".
     const tag = "ozz-skeleton\x00";
-    const native_tag_pos = std.mem.indexOf(u8, native_sink.list.items, tag).?;
-    const foreign_tag_pos = std.mem.indexOf(u8, foreign_sink.list.items, tag).?;
+    const native_tag_pos = std.mem.find(u8, native_sink.list.items, tag).?;
+    const foreign_tag_pos = std.mem.find(u8, foreign_sink.list.items, tag).?;
     const native_num_joints = native_sink.list.items[native_tag_pos + tag.len + 4 ..];
     const foreign_num_joints = foreign_sink.list.items[foreign_tag_pos + tag.len + 4 ..];
     for (0..4) |i| {
@@ -865,8 +865,7 @@ test "the offline types round-trip through a file, and through its bytes" {
     // resolves against too: std.testing.tmpDir puts its directory under
     // .zig-cache/tmp of that same cwd, so both halves of the round trip name
     // one file without either needing an absolute path.
-    const path = try std.fmt.allocPrintSentinel(
-        gpa,
+    const path = try gpa.printSentinel(
         ".zig-cache/tmp/{s}/clip.ozz",
         .{tmp.sub_path},
         0,
@@ -905,8 +904,7 @@ test "the offline types round-trip through a file, and through its bytes" {
 
     // A file that is not an archive at all, and one that is the wrong type.
     try tmp.dir.writeFile(std.testing.io, .{ .sub_path = "junk.ozz", .data = "not an ozz archive" });
-    const junk = try std.fmt.allocPrintSentinel(
-        gpa,
+    const junk = try gpa.printSentinel(
         ".zig-cache/tmp/{s}/junk.ozz",
         .{tmp.sub_path},
         0,
