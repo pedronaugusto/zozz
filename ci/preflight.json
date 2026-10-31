@@ -2,6 +2,16 @@
   "sources": ["src"],
   "test_roots": ["src/zozz.zig"],
   "test_dependencies": ["zozz_h", "mathref_h", "test_options", "shakedown"],
+  "fuzz": {
+    "parsers": [
+      "initFromMemory", "initFromFile",
+      "loadSkeleton", "loadAnimation",
+      "loadFloatTrack", "loadFloat2Track", "loadFloat3Track", "loadFloat4Track", "loadQuaternionTrack",
+      "loadRawSkeleton", "loadRawAnimation",
+      "loadRawFloatTrack", "loadRawFloat2Track", "loadRawFloat3Track", "loadRawFloat4Track", "loadRawQuaternionTrack",
+      "decodeGV4", "decodeGV4Stream"
+    ]
+  },
   "shipped": {
     "ffi": "the C boundary: the library compiles its translation units, and the installed headers are ffi/*.h",
     "libs": "the vendored ozz-animation, which the library compiles"

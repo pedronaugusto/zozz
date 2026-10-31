@@ -298,13 +298,24 @@ build containers, are where it can. Every other allocation ozz makes is
 checked and comes back as `OutOfMemory`. Sampling, once loaded, allocates
 nothing.
 
-ozz's parser is not hardened against arbitrary hostile input, and zozz cannot
-make it so from outside. What holds is that truncation and type confusion
-fail cleanly and deterministically, that every version and count is
+ozz's parser was not written for hostile input. zozz holds it to that at the
+cause, with patches ([Patches](#patches)), and with fuzz properties over every
+parser of a host's bytes (`src/testing/fuzz.zig`, each parser named in
+`ci/preflight.json`'s `fuzz.parsers`). What holds is that truncation and type
+confusion fail cleanly and deterministically, that every version and count is
 checked against ozz's limits and the bytes left before anything is sized from
-it, and that what a job walks (names, parents, ratios, the key chains and
-iframes) is checked before a loaded object reaches one ([Patches](#patches)). To load `.ozz` from an untrusted source, put a
-length-and-checksum container around it and validate that first.
+it, and that what a job walks (names, parents, rest poses, interpolation
+modes, ratios, the key chains and iframes) is checked before a loaded object
+reaches one.
+
+The fuzz properties mutate valid archives of every type, runtime and raw,
+load each case from memory, from a file and through a host's stream, run the
+jobs a host runs on whatever loads, and require a refusal to name its call.
+zozz and the property allocate from one guarded quarantine, so an overrun or a
+use after free stops the case. They run in every test arm, the sanitized ones
+included. A bounded run is evidence, not proof: to load `.ozz` from a source
+that can be hostile, put a length-and-checksum container around it and
+validate that first.
 
 Every prefix of a valid archive, across both fixtures, is tested to be
 refused, and the whole archives still load.
