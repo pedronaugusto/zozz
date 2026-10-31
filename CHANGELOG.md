@@ -23,12 +23,23 @@ could not express, so a port has the reason and not only the diff.
 - Development runs under preflight's gate (`bay test`), with every check a Zig
   program under `ci/`; the shell scripts, `ci/run.sh` and its pre-push hook are
   gone. `zig build recon -- <Class>` replaces `tools/recon.sh`.
+- `BINDING.md`, `UPSTREAM.md` and the four files under `docs/` are one
+  `docs/design.md`. The README's archive-version table moved into its Scope
+  section, and its Platforms section says what preflight's matrix runs: the
+  suite on `x86_64-windows-msvc` is executed on a Windows machine before a
+  release, not by CI.
 
 ### Fixed
 
 - README's numbers block counted every header in `ffi/` as an installed public
   header, the two C++-internal ones that are never installed included. It now
   counts `zozz.h` and the headers it includes.
+- The archive-version table left out the five element types the offline
+  archives declare in source files (`RawAnimation::JointTrack` and its three
+  key types, `RawSkeleton::Joint`); `zig build archive-versions` reads
+  `libs/ozz/src` as well as `libs/ozz/include` now.
+- The `ShiftL` site recorded for the sanitizer exemption was
+  `simd_math_ref-inl.h:1491`; the shift is at `simd_math_ref-inl.h:1493`.
 
 - `-Denable_asserts=true` keeps ozz's asserts in ReleaseFast and ReleaseSmall.
   Zig 0.17 defines NDEBUG for C by itself in those two modes, and the build

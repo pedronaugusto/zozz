@@ -428,8 +428,8 @@ ZozzResult zozzImporterImportFloat4Track(ZozzImporter* importer,
 //===----------------------------------------------------------------------===//
 // The CLI driver — always unsupported. See zozz_gltf.h's module comment:
 // OzzImporter::operator() needs import2ozz_config.cc's JSON handling, which
-// needs jsoncpp, which UPSTREAM.md records as deliberately excluded from the
-// vendored tree ("What was excluded, and why").
+// needs jsoncpp, which docs/design.md records as deliberately excluded from the
+// vendored tree ("What was taken, and what was left behind").
 //===----------------------------------------------------------------------===//
 
 ZozzResult zozzImporterRun(ZozzImporter*, int, const char* const*) {

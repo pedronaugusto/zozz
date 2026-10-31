@@ -161,108 +161,88 @@ With `-Dgltf` or `-Doptions` off, the calls behind them return
 the linked library what it was compiled with, which tells a feature absent from
 this build apart from a call that failed.
 
-## Design
-
-### The caller owns the SoA pose
-
-ozz's job pipeline speaks structure-of-arrays: sampling writes it, blending
-consumes and produces it, local-to-model reads it. A pose is a
-`[]SoaTransform` — one element per four joints, `soaBlocks(n)` of them — and
-every entry point takes that slice, which is exactly the `ozz::span` the C++
-jobs take. Conversion to `Transform` happens only at the edges. The memory is
-yours: a pose can live on the stack, in an arena, or as a sub-range of a batch,
-and a `BlendingLayer` is `ozz::animation::BlendingJob::Layer` field for field,
-so `BlendingJob.run` hands your array straight to ozz with no copy. Every entry
-point taking SoA memory checks the 16-byte boundary and returns
-`ZOZZ_RESULT_INVALID_ARGUMENT` rather than letting ozz fault on an aligned SIMD
-load.
-
-### Allocators
-
-`setAllocator` routes every ozz allocation through a `std.mem.Allocator`. It is
-process-wide, because ozz's own allocator is a single global and no ozz entry
-point takes an allocator parameter. Installing or resetting is refused with
-`ZOZZ_RESULT_ALLOCATOR_IN_USE` while `zozzAllocatorLiveBlocks()` is non-zero and
-the call would change where a free lands; reinstalling the identical allocator,
-or resetting while none is installed, always succeeds. Swapping one Zig
-allocator for another is safe with blocks live, because each block records its
-producer and frees through it. The count covers every outstanding ozz block, not
-only the host's, so it doubles as a leak check for a host whose allocator has
-none.
-
-Distinct handles may be used concurrently as long as the installed allocator is
-thread-safe, because every entry point that allocates arrives at this one seam.
-A single handle is not internally synchronised, and neither is installing or
-resetting: do that from one thread before any other is inside zozz.
-[docs/allocators.md](docs/allocators.md) has the mechanism.
-
-### Validation at the boundary
-
-ozz's archive reader guards its reads and its tag check with `assert`s, which
-`NDEBUG` removes, so the loaders here bracket it: a tag test before parsing,
-every archive — files included — read through a stream that cannot return
-short, and a sanity check of joint counts, array lengths and duration after.
-Malformed and truncated input is `BadFormat`; NaN ratios and misaligned matrix
-buffers are refused rather than faulting inside SIMD code. An allocation
-failure inside ozz itself is a null dereference there, with no position to
-intercept it from.
-[docs/validation.md](docs/validation.md) has each check;
-[UPSTREAM.md](UPSTREAM.md) the upstream sites with file and line.
-
-### The ABI guard
-
-`src/c.zig` hand-writes its `extern` declarations rather than running
-translate-c, so the shipped module never compiles C. Three checks hold those
-declarations to reality: `src/abi_test.zig` compares them against `ffi/zozz.h`
-by reflection, `zozzAbiLayout()` compares them against the linked library, and
-`static_assert`s in `ffi/zozz_abi.cpp` compare the C++ against ozz.
-`bay probe` proves the first one fires: each drift in `ci/probes/` must fail
-it. That check pairs declarations to the header by name, so the naming
-convention in
-[BINDING.md](BINDING.md) is a build requirement.
-[docs/abi-guard.md](docs/abi-guard.md) has what each check covers;
-[docs/build-hygiene.md](docs/build-hygiene.md) the rules `build.zig` keeps.
+| Type | Archive version | Declared in |
+|---|---:|---|
+| `animation::Animation` | 7 | `include/ozz/animation/runtime/animation.h` |
+| `animation::Float2Track` | 1 | `include/ozz/animation/runtime/track.h` |
+| `animation::Float3Track` | 1 | `include/ozz/animation/runtime/track.h` |
+| `animation::Float4Track` | 1 | `include/ozz/animation/runtime/track.h` |
+| `animation::FloatTrack` | 1 | `include/ozz/animation/runtime/track.h` |
+| `animation::QuaternionTrack` | 1 | `include/ozz/animation/runtime/track.h` |
+| `animation::Skeleton` | 2 | `include/ozz/animation/runtime/skeleton.h` |
+| `animation::offline::RawAnimation::JointTrack` | 1 | `src/animation/offline/raw_animation_archive.cc` |
+| `animation::offline::RawAnimation::RotationKey` | 1 | `src/animation/offline/raw_animation_archive.cc` |
+| `animation::offline::RawAnimation::ScaleKey` | 1 | `src/animation/offline/raw_animation_archive.cc` |
+| `animation::offline::RawAnimation::TranslationKey` | 1 | `src/animation/offline/raw_animation_archive.cc` |
+| `animation::offline::RawAnimation` | 3 | `include/ozz/animation/offline/raw_animation.h` |
+| `animation::offline::RawFloat2Track` | 1 | `include/ozz/animation/offline/raw_track.h` |
+| `animation::offline::RawFloat3Track` | 1 | `include/ozz/animation/offline/raw_track.h` |
+| `animation::offline::RawFloat4Track` | 1 | `include/ozz/animation/offline/raw_track.h` |
+| `animation::offline::RawFloatTrack` | 1 | `include/ozz/animation/offline/raw_track.h` |
+| `animation::offline::RawQuaternionTrack` | 1 | `include/ozz/animation/offline/raw_track.h` |
+| `animation::offline::RawSkeleton::Joint` | 1 | `src/animation/offline/raw_skeleton_archive.cc` |
+| `animation::offline::RawSkeleton` | 1 | `include/ozz/animation/offline/raw_skeleton.h` |
+ndary check, the ABI guard, what upstream does that the
+boundary stands in front of, and how the vendored copy is checked and updated.
 
 ## Scope
 
-The scope is ozz-animation at the vendored version: ozz `0.17.0`, commit
-pinned, taken unmodified. `zig build check-vendor` fetches that commit and
-diffs it against `libs/` in the gate, and [UPSTREAM.md](UPSTREAM.md) records what
-was left out of the vendored tree and every upstream behaviour worked around
-here.
-
-Every public name ozz declares in its include tree is accounted for, and
-`zig build check-coverage` is what says so: it enumerates them from ozz's own
-headers, requires a verdict for each — bound across the C ABI, delivered as a C
-callback, provided in Zig, provided by the Zig language, or internal to ozz —
-and fails the build on one that has none. Every directory under
-`libs/ozz/include/ozz` counts. Not available:
+ozz-animation at the vendored version: ozz `0.17.0`, its commit pinned, taken
+unmodified; `zig build check-vendor` fetches that commit and diffs it against
+`libs/` in the gate. Every public name ozz declares in its include tree is
+accounted for: `zig build check-coverage` enumerates them from ozz's headers,
+requires a verdict for each (bound across the C ABI, delivered as a C callback,
+provided in Zig, provided by the Zig language, or internal to ozz) and fails on
+one that has none. Not available:
 
 - **The FBX importer**, which needs the proprietary Autodesk FBX SDK. Its
   sources are not vendored.
 - **`gltf2ozz`'s command line.** Its driver (`OzzImporter::operator()`,
-  `Importer.run`) is configured through jsoncpp, in upstream's excluded
-  `extern/`, and reports `error.Unsupported`. The importer underneath it does
-  build: `Importer.initFromGltf` reads glTF and glb through the vendored
-  `tiny_gltf.h` and hands back the `RawSkeleton` and `RawAnimation` the offline
-  builders take, so a file is imported, optimised and built in process.
-- **Assets from an older toolchain.** ozz versions its archives per type and
-  refuses what it does not recognise; animation version 6 files are common and
-  load as `BadFormat` here, though their skeletons still load.
+  `Importer.run`) is configured through jsoncpp, which upstream keeps outside
+  the vendored tree, and reports `error.Unsupported`. The importer underneath
+  builds: `Importer.initFromGltf` reads glTF and glb and hands back the
+  `RawSkeleton` and `RawAnimation` the offline builders take, so a file is
+  imported, optimised and built in process.
+- **Assets from another ozz version.** ozz versions its archives per type and
+  refuses a version it does not know, so an `.ozz` file loads here only if the
+  ozz that wrote it declared the versions below. Animation version 6 files are
+  common and load as `BadFormat`, though their skeletons still load.
+
+<!-- BEGIN GENERATED zig build archive-versions -->
+| Type | Archive version | Declared in |
+|---|---:|---|
+| `animation::Animation` | 7 | `include/ozz/animation/runtime/animation.h` |
+| `animation::Float2Track` | 1 | `include/ozz/animation/runtime/track.h` |
+| `animation::Float3Track` | 1 | `include/ozz/animation/runtime/track.h` |
+| `animation::Float4Track` | 1 | `include/ozz/animation/runtime/track.h` |
+| `animation::FloatTrack` | 1 | `include/ozz/animation/runtime/track.h` |
+| `animation::QuaternionTrack` | 1 | `include/ozz/animation/runtime/track.h` |
+| `animation::Skeleton` | 2 | `include/ozz/animation/runtime/skeleton.h` |
+| `animation::offline::RawAnimation::JointTrack` | 1 | `src/animation/offline/raw_animation_archive.cc` |
+| `animation::offline::RawAnimation::RotationKey` | 1 | `src/animation/offline/raw_animation_archive.cc` |
+| `animation::offline::RawAnimation::ScaleKey` | 1 | `src/animation/offline/raw_animation_archive.cc` |
+| `animation::offline::RawAnimation::TranslationKey` | 1 | `src/animation/offline/raw_animation_archive.cc` |
+| `animation::offline::RawAnimation` | 3 | `include/ozz/animation/offline/raw_animation.h` |
+| `animation::offline::RawFloat2Track` | 1 | `include/ozz/animation/offline/raw_track.h` |
+| `animation::offline::RawFloat3Track` | 1 | `include/ozz/animation/offline/raw_track.h` |
+| `animation::offline::RawFloat4Track` | 1 | `include/ozz/animation/offline/raw_track.h` |
+| `animation::offline::RawFloatTrack` | 1 | `include/ozz/animation/offline/raw_track.h` |
+| `animation::offline::RawQuaternionTrack` | 1 | `include/ozz/animation/offline/raw_track.h` |
+| `animation::offline::RawSkeleton::Joint` | 1 | `src/animation/offline/raw_skeleton_archive.cc` |
+| `animation::offline::RawSkeleton` | 1 | `include/ozz/animation/offline/raw_skeleton.h` |
+<!-- END GENERATED -->
 
 ## Platforms
 
-| Platform | Suite executed by CI | Also compile-checked by CI |
-|---|---|---|
-| Linux | x86_64 glibc | aarch64 glibc, x86_64 and aarch64 musl |
-| macOS | aarch64 | x86_64 |
-| Windows | x86_64, gnu ABI and MSVC ABI | aarch64 gnu |
-
-Every job in that matrix passed on run
-[`34779004370`](https://github.com/pedronaugusto/zozz/actions/runs/34779004370).
-Where the suite runs it runs in every optimize mode, plus the standalone C test,
-the three non-default combinations of `-Dgltf` and `-Doptions`, ozz's scalar
-reference SIMD backend, and the downstream-consumer build.
+CI is preflight's (`.github/workflows/ci.yml`, generated from
+`ci/workflow.json`). Its nightly matrix runs the suite in Debug and
+ReleaseSafe on Linux x86_64 (ReleaseFast too) and aarch64, glibc; macOS
+aarch64; and Windows x86_64 and aarch64, gnu ABI; and in Debug on riscv64
+Linux under QEMU. It compiles every target in `ci/workflow.json` and
+ReleaseSmall, and links the macOS and Windows targets,
+`x86_64-windows-msvc` among them, against their SDKs. The suite on
+`x86_64-windows-msvc` is executed on a Windows machine before each release,
+in every optimize mode, until preflight's matrix executes it.
 
 ## Testing
 
@@ -273,20 +253,14 @@ zig build test-c        # the C header on its own, no Zig in the picture
 bay probe               # each invariant in ci/probes/, mutated, must fail
 ```
 
-Assets are built at test time through ozz's own offline builders and serialised
-in memory (`tests/fixture.cpp`), so the suite is version-matched to the vendored
-runtime and ships no third-party clips. `zig build check-consumer` builds zozz
-the way a downstream package does, through `b.dependency` — a path nothing in
-`src/` or `tests/` exercises.
+The suite runs in seven arms (under the C sanitizer, as a consumer builds it,
+with the asserts flipped, with each optional half and both, and on ozz's scalar
+SIMD backend) and builds its assets at test time through ozz's own offline
+builders, so it ships no third-party clips. `-Dsanitize_c=true` skips the
+truncated-archive test, for an upstream null-pointer member access
+docs/design.md records.
 
-`-Dsanitize_c=true` skips the truncated-archive test: upstream ozz forms member
-accesses on a null pointer when a keyframe array has zero entries, the exact
-shape a zero-filled count produces. `-Dskeleton_path=` and `-Danimation_path=`
-add a real asset on disk, held to unit-length quaternions, finite transforms,
-parent-precedes-child joint ordering, root joints whose model matrix matches
-their local translation, a clip that moves, and a refused NaN ratio.
-
-### By the numbers
+## By the numbers
 
 <!-- BEGIN GENERATED zig build measurements -->
 | | |
@@ -310,17 +284,12 @@ their local translation, a clip that moves, and a refused NaN ratio.
 the committed block differs, or if a document states a number by hand that
 `ci/numbers.zig` does not account for.
 
+
 ## Contributing
 
-Issues and pull requests are welcome; [BINDING.md](BINDING.md) is the contract
-a new area has to satisfy. `libs/ozz` is vendored verbatim and must not be
-edited — changes there are lost at the next re-vendor, so work around upstream
-in `ffi/` and record it in [UPSTREAM.md](UPSTREAM.md). Run `bay test` before
-pushing. Comments state a contract, not a narrative, and `zig build
-check-comments` enforces the length cap
-and the register; the cap never justifies dropping a fact, so units, ownership,
-lifetime, nullability, error conditions and ordering constraints come first.
-New source files go into the explicit lists in `build.zig` deliberately.
+Issues and pull requests are welcome. The rules a change has to satisfy, and
+the binding conventions a new area follows, are in
+[docs/design.md](docs/design.md); `bay test` is green before a push.
 
 ## Licence
 

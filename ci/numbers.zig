@@ -1,5 +1,5 @@
 //! Refuses a multi-digit number written by hand in a top-level `*.md`
-//! document. A count that belongs to the tree belongs in a generated block,
+//! document or docs/design.md. A count that belongs to the tree belongs in a generated block,
 //! which the docs check rebuilds; anything else stated outside one must be in
 //! `allowed` with the reason it cannot go stale. Numbers in a generated
 //! block, a fenced or inline code span, a link target or an identifier
@@ -17,6 +17,8 @@ const Allowance = struct { number: []const u8, reason: []const u8 };
 /// is empty, and that is the intended state.
 const allowed = [_]Allowance{};
 
+/// Documents beyond the top-level `*.md` files.
+const extra_documents = [_][]const u8{"docs/design.md"};
 /// The largest document read.
 const max_file_bytes = 1 << 22;
 /// The most top-level documents read.
@@ -43,7 +45,8 @@ pub fn main(init: std.process.Init) !u8 {
     return 1;
 }
 
-/// The `*.md` files at the root, in byte order.
+/// The `*.md` files at the root and `extra_documents` that exist, in byte
+/// order.
 fn documents(a: std.mem.Allocator, io: Io, cwd: Io.Dir) ![]const []const u8 {
     var names: std.ArrayList([]const u8) = .empty;
     var root = try cwd.openDir(io, ".", .{ .iterate = true });
@@ -54,6 +57,13 @@ fn documents(a: std.mem.Allocator, io: Io, cwd: Io.Dir) ![]const []const u8 {
         if (!std.mem.endsWith(u8, entry.name, ".md")) continue;
         if (names.items.len == max_documents) return error.TooManyDocuments;
         try names.append(a, try a.dupe(u8, entry.name));
+    }
+    for (extra_documents) |name| {
+        _ = cwd.statFile(io, name, .{}) catch |e| switch (e) {
+            error.FileNotFound => continue,
+            else => return e,
+        };
+        try names.append(a, name);
     }
     std.mem.sort([]const u8, names.items, {}, lessThan);
     return names.items;
@@ -296,4 +306,19 @@ test "every allowance is a distinct number with a reason" {
         try std.testing.expect(nextNumber(entry.number, 0) != null);
         for (allowed[0..index]) |earlier| try std.testing.expect(!std.mem.eql(u8, earlier.number, entry.number));
     }
+}
+
+test "docs/design.md is a document, as a top-level one is" {
+    var arena: std.heap.ArenaAllocator = .init(std.testing.allocator);
+    defer arena.deinit();
+    var tmp = std.testing.tmpDir(.{});
+    defer tmp.cleanup();
+    try tmp.dir.createDirPath(std.testing.io, "docs");
+    try tmp.dir.writeFile(std.testing.io, .{ .sub_path = "docs/design.md", .data = "" });
+    try tmp.dir.writeFile(std.testing.io, .{ .sub_path = "docs/notes.md", .data = "" });
+    try tmp.dir.writeFile(std.testing.io, .{ .sub_path = "README.md", .data = "" });
+    const names = try documents(arena.allocator(), std.testing.io, tmp.dir);
+    try std.testing.expectEqual(2, names.len);
+    try std.testing.expectEqualStrings("README.md", names[0]);
+    try std.testing.expectEqualStrings("docs/design.md", names[1]);
 }

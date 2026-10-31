@@ -177,7 +177,7 @@ test "gltf: the host-implementable interface is unsupported without -Doptions" {
 
 //=============================================================================
 // The CLI driver (OzzImporter::operator()) is not bound: its dependency
-// chain needs jsoncpp, which UPSTREAM.md records as deliberately excluded
+// chain needs jsoncpp, which docs/design.md records as deliberately excluded
 // from the vendored tree. Pinned here so a future change that vendors
 // jsoncpp and wires the driver up for real has to touch this test.
 //=============================================================================

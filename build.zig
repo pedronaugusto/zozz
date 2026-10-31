@@ -325,7 +325,7 @@ fn library(b: *std.Build, target: std.Build.ResolvedTarget, optimize: std.lang.O
 ///   reciprocal with `(0x3f800000 * 2) - uf.i` over the input's bit pattern;
 ///   a negative input passes INT_MAX, and the bit trick is the routine.
 ///
-///   shift-base: `ShiftL` (simd_math_ref-inl.h:1491) left-shifts each `int`
+///   shift-base: `ShiftL` (simd_math_ref-inl.h:1493) left-shifts each `int`
 ///   lane, and a lane holding a comparison mask is negative; the SSE backend's
 ///   `_mm_slli_epi32` has no such rule.
 fn cxxFlags(b: *std.Build, target: std.Build.ResolvedTarget, options: Options, upstream: bool) []const []const u8 {
@@ -482,10 +482,10 @@ pub fn dev(b: *std.Build, tools: type) void {
     coverage.setCwd(p.path("."));
     coverage.addPassthruArgs();
     b.step("coverage", "Run ci/coverage.zig in the mode given after --").dependOn(&coverage.step);
-    // The generated blocks of README.md and UPSTREAM.md, which the docs check
+    // The generated blocks of README.md, which the docs check
     // regenerates through these steps (ci/preflight.json).
     _ = tool(b, p, test_step, "measurements", "ci/measurements.zig", "Print README.md's numbers block, recomputed from the tree");
-    _ = tool(b, p, test_step, "archive-versions", "ci/archive_versions.zig", "Print UPSTREAM.md's archive-version table, read from the vendored headers");
+    _ = tool(b, p, test_step, "archive-versions", "ci/archive_versions.zig", "Print README.md's archive-version table, read from the vendored tree");
 
     // libs/ozz against upstream at the pinned commit, which the manifest
     // fetches as a development dependency.
@@ -498,7 +498,7 @@ pub fn dev(b: *std.Build, tools: type) void {
     verify.addDirectoryArg2(p.path("libs/ozz"), .{});
     verify.addDirectoryArg2(b.dependency("ozz", .{}).path("."), .{});
     verify.addFileArg(p.path("build.zig.zon"));
-    verify.addFileArg(p.path("UPSTREAM.md"));
+    verify.addFileArg(p.path("docs/design.md"));
     verify.step.dependOn(&b.addRunArtifact(b.addTest(.{ .root_module = vendor.root_module })).step);
     b.step("check-vendor", "Prove libs/ozz is upstream at the pinned commit").dependOn(&verify.step);
 
@@ -506,7 +506,7 @@ pub fn dev(b: *std.Build, tools: type) void {
     // tests run with the suite.
     const probe = tool(b, p, test_step, "probe", "ci/probes.zig", "Mutate each invariant in ci/probes/ and require the named failure (`bay probe [filter]`)");
     probe.addPassthruArgs();
-    // The binder's first step (BINDING.md): the lines of an ozz class that
+    // The binder's first step (docs/design.md): the lines of an ozz class that
     // decide its binding.
     const recon = tool(b, p, test_step, "recon", "ci/recon.zig", "Print what decides the binding of an ozz class (`zig build recon -- <Class>`)");
     recon.addPassthruArgs();

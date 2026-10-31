@@ -394,7 +394,7 @@ test "version reporting is wired up" {
     const reported = try std.mem.print(&buf, "{f}", .{version()});
     try std.testing.expectEqualStrings(options.version, reported);
 
-    // The vendored ozz, pinned in UPSTREAM.md. Asserting the minor alone let a
+    // The vendored ozz, pinned in docs/design.md. Asserting the minor alone let a
     // MAJOR bump through, and a major bump is the one that changes everything
     // this binding is written against.
     const ozz = ozzVersion();

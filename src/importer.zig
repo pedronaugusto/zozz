@@ -7,7 +7,7 @@
 //! Every method returns `error.Unsupported` when the option its implementation
 //! needs is off. `run` (`OzzImporter::operator()`, the CLI driver) always
 //! returns it: its dependency chain needs jsoncpp, deliberately excluded per
-//! UPSTREAM.md; kept only so the interface stays complete.
+//! docs/design.md; kept only so the interface stays complete.
 //!
 //! An `Importer` is opaque regardless of which side created it: every method
 //! drives it through `OzzImporter`'s own virtual interface, so a

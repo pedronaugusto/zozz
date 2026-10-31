@@ -83,7 +83,7 @@ pub fn main(init: std.process.Init) !u8 {
     try private.finish(out);
 
     // zozz mirrors these, and its ABI check refuses a negative enumerator: C
-    // leaves an enum's underlying type to the implementation. See BINDING.md.
+    // leaves an enum's underlying type to the implementation. See docs/design.md.
     try section(out, "Enums to mirror");
     var enums: Shown = .{ .limit = shown_enums };
     try enums.scan(out, located.header, header, isEnum);

@@ -131,7 +131,7 @@ uint32_t zozzVersion(void) {
 }
 
 uint32_t zozzOzzVersion(void) {
-  // Pinned in UPSTREAM.md; bump both together when re-vendoring.
+  // Pinned in docs/design.md; bump both together when re-vendoring.
   return (0u << 16) | (17u << 8) | 0u;
 }
 
