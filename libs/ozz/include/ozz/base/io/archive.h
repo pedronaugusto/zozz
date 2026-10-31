@@ -184,7 +184,7 @@ class OZZ_BASE_DLL IArchive {
 
   // Loads _size bytes of binary data to _data.
   size_t LoadBinary(void* _data, size_t _size) {
-    if (refused()) {
+    if (stopped()) {
       std::memset(_data, 0, _size);
       return _size;
     }
@@ -194,7 +194,7 @@ class OZZ_BASE_DLL IArchive {
   // Class type loading.
   template <typename _Ty>
   void operator>>(_Ty& _ty) {
-    if (refused()) {
+    if (stopped()) {
       return;
     }
     // Only uses tag validation for assertions, as reading cannot fail.
@@ -209,7 +209,7 @@ class OZZ_BASE_DLL IArchive {
 // Primitive type loading.
 #define OZZ_IO_PRIMITIVE_TYPE(_type)                          \
   void operator>>(_type& _v) {                                \
-    if (refused()) {                                          \
+    if (stopped()) {                                          \
       _v = _type();                                           \
       return;                                                 \
     }                                                         \
@@ -282,6 +282,16 @@ class OZZ_BASE_DLL IArchive {
   bool Enter(const char* _what, uint64_t _limit);
   void Leave() { --depth_; }
 
+  // Records that a Load could not allocate its object, which it then leaves
+  // empty. Kept apart from a refusal, since the archive may be well formed;
+  // like one, it stops the archive reading (stopped).
+  void FailAllocation() { out_of_memory_ = true; }
+  bool out_of_memory() const { return out_of_memory_; }
+
+  // True once the archive reads nothing more: a Load refused it or failed to
+  // allocate, either of which leaves the stream inside an object.
+  bool stopped() const { return refused() || out_of_memory_; }
+
  private:
   template <typename _Ty>
   uint32_t LoadVersion() {
@@ -306,6 +316,9 @@ class OZZ_BASE_DLL IArchive {
 
   // How many Enter calls are open.
   uint64_t depth_ = 0;
+
+  // Whether a Load failed to allocate.
+  bool out_of_memory_ = false;
 };
 
 // Primitive type are not versionable.

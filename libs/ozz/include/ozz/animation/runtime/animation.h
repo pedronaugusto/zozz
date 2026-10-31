@@ -184,7 +184,8 @@ class OZZ_ANIMATION_DLL Animation {
     IFrames rotation_iframes;
     IFrames scale_iframes;
   };
-  void Allocate(const AllocateParams& _params);
+  // False when the allocation fails, which leaves the animation empty.
+  bool Allocate(const AllocateParams& _params);
   void Deallocate();
 
   // Duration of the animation clip.

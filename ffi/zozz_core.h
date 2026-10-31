@@ -105,7 +105,8 @@ ZOZZ_API const char* zozzResultName(ZozzResult result);
 /// It is filled with ZOZZ_RESULT_BAD_FORMAT when a bound of ozz's is broken,
 /// and with ZOZZ_RESULT_IO when a count runs past the bytes the archive has
 /// left: the archive ends before what it claims, and `limit` is what fits.
-/// A zozzIArchive that refused once stays refused, its stream left mid-object.
+/// A zozzIArchive that refused, or ran out of memory, stays so: its stream
+/// is left mid-object.
 typedef struct ZozzRefusal {
   /// Static, never freed: "Skeleton.num_joints". NULL when there is none.
   const char* what;

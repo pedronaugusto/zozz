@@ -91,7 +91,8 @@ class OZZ_ANIMATION_DLL Track {
   friend class offline::TrackBuilder;
 
   // Internal destruction function.
-  void Allocate(size_t _keys_count, size_t _name_len);
+  // False when the allocation fails, which leaves the track empty.
+  bool Allocate(size_t _keys_count, size_t _name_len);
   void Deallocate();
 
   // Allocation for the whole track.

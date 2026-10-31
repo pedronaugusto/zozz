@@ -206,6 +206,9 @@ bool MemoryStream::Resize(size_t _size) {
     const size_t new_size = ozz::Align(_size, kBufferSizeIncrement);
     byte* new_buffer = reinterpret_cast<byte*>(
         ozz::memory::default_allocator()->Allocate(new_size, 16));
+    if (new_buffer == nullptr) {
+      return false;
+    }
     if (buffer_ != nullptr) {
       std::memcpy(new_buffer, buffer_, alloc_size_);
     }

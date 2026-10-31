@@ -121,6 +121,8 @@ class OZZ_ANIMATION_DLL Skeleton {
  private:
   // Internal allocation/deallocation function.
   // Allocate returns the beginning of the contiguous buffer of names.
+  // Null with no joints, or when the allocation fails, which leaves the
+  // skeleton empty.
   char* Allocate(size_t _char_count, size_t _num_joints);
   void Deallocate();
 

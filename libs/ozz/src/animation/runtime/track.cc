@@ -65,7 +65,7 @@ Track<_ValueType>::~Track() {
 }
 
 template <typename _ValueType>
-void Track<_ValueType>::Allocate(size_t _keys_count, size_t _name_len) {
+bool Track<_ValueType>::Allocate(size_t _keys_count, size_t _name_len) {
   assert(allocation_ == nullptr && "Already allocated");
 
   // Distributes buffer memory while ensuring proper alignment (serves larger
@@ -82,6 +82,9 @@ void Track<_ValueType>::Allocate(size_t _keys_count, size_t _name_len) {
 
   auto* allocator = memory::default_allocator();
   allocation_ = allocator->Allocate(buffer_size, alignof(_ValueType));
+  if (allocation_ == nullptr && buffer_size != 0) {
+    return false;
+  }
   span<byte> buffer = {static_cast<byte*>(allocation_), buffer_size};
 
   // Fix up pointers. Serves larger alignment values first.
@@ -95,6 +98,7 @@ void Track<_ValueType>::Allocate(size_t _keys_count, size_t _name_len) {
       _name_len > 0 ? fill_span<char>(buffer, _name_len + 1).data() : nullptr;
 
   assert(buffer.empty() && "Whole buffer should be consumed");
+  return true;
 }
 
 template <typename _ValueType>
@@ -152,7 +156,10 @@ void Track<_ValueType>::Load(ozz::io::IArchive& _archive, uint32_t _version) {
     return;
   }
 
-  Allocate(num_keys, name_len);
+  if (!Allocate(num_keys, name_len)) {
+    _archive.FailAllocation();
+    return;
+  }
 
   _archive >> ozz::io::MakeArray(ratios_);
   _archive >> ozz::io::MakeArray(values_);

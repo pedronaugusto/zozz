@@ -74,7 +74,7 @@ size_t IArchive::remaining() const {
 
 bool IArchive::CheckCount(const char* _what, uint64_t _count,
                           size_t _element_size, uint64_t _limit) {
-  if (refused()) {
+  if (stopped()) {
     return false;
   }
   const uint64_t fit = _element_size ? remaining() / _element_size : _limit;
@@ -90,7 +90,7 @@ bool IArchive::CheckCount(const char* _what, uint64_t _count,
 }
 
 bool IArchive::Enter(const char* _what, uint64_t _limit) {
-  if (refused()) {
+  if (stopped()) {
     return false;
   }
   if (depth_ >= _limit) {

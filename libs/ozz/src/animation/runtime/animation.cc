@@ -65,7 +65,7 @@ Animation& Animation::operator=(Animation&& _other) {
 
 Animation::~Animation() { Deallocate(); }
 
-void Animation::Allocate(const AllocateParams& _params) {
+bool Animation::Allocate(const AllocateParams& _params) {
   // Distributes buffer memory while ensuring proper alignment (serves larger
   // alignment values first).
   static_assert(
@@ -104,6 +104,9 @@ void Animation::Allocate(const AllocateParams& _params) {
   // Allocate whole buffer
   auto* allocator = memory::default_allocator();
   allocation_ = allocator->Allocate(buffer_size, alignof(float));
+  if (allocation_ == nullptr && buffer_size != 0) {
+    return false;
+  }
   span<byte> buffer = {static_cast<byte*>(allocation_), buffer_size};
 
   // Fix up pointers. Serves larger alignment values first.
@@ -153,6 +156,7 @@ void Animation::Allocate(const AllocateParams& _params) {
               : nullptr;
 
   assert(buffer.empty() && "Whole buffer should be consumed");
+  return true;
 }
 
 void Animation::Deallocate() {
@@ -357,7 +361,11 @@ void Animation::Load(ozz::io::IArchive& _archive, uint32_t _version) {
                               {t_iframe_entries_count, t_iframe_desc_count},
                               {r_iframe_entries_count, r_iframe_desc_count},
                               {s_iframe_entries_count, s_iframe_desc_count}};
-  Allocate(params);
+  if (!Allocate(params)) {
+    num_tracks_ = 0;
+    _archive.FailAllocation();
+    return;
+  }
 
   if (name_) {  // nullptr name_ is supported.
     _archive >> ozz::io::MakeArray(name_, name_len);

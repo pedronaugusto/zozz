@@ -63,7 +63,7 @@ struct Extern<std::vector<_Ty, _Allocator>> {
       uint32_t size;
       _archive >> size;
       // Every element takes at least one byte in the archive.
-      if (_archive.refused() ||
+      if (_archive.stopped() ||
           !_archive.CheckCount("vector.size", size, 1,
                                std::numeric_limits<uint32_t>::max())) {
         return;

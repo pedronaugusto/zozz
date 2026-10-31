@@ -232,8 +232,10 @@ ZozzResult LoadTaggedObject(ZozzIArchive* archive, T* object,
                             ZozzRefusal* refusal) {
   if (archive == nullptr) return ZOZZ_RESULT_INVALID_ARGUMENT;
   if (archive->stream.failed()) return ZOZZ_RESULT_IO;
-  // A refused object was left part read, so the stream holds no next object
-  // to find: the archive stays refused, as a failed stream stays failed.
+  // A refused object, or one that could not be allocated, was left part
+  // read, so the stream holds no next object to find: the archive stays as
+  // it was left, as a failed stream stays failed.
+  if (archive->archive.out_of_memory()) return ZOZZ_RESULT_OUT_OF_MEMORY;
   if (archive->archive.refused()) {
     return zozz::RefusedBy(archive->archive, refusal);
   }
@@ -242,6 +244,7 @@ ZozzResult LoadTaggedObject(ZozzIArchive* archive, T* object,
   archive->archive >> *object;
   // As zozz::LoadTagged: a failed stream is the cause of anything refused.
   if (archive->stream.failed()) return ZOZZ_RESULT_IO;
+  if (archive->archive.out_of_memory()) return ZOZZ_RESULT_OUT_OF_MEMORY;
   if (archive->archive.refused()) {
     return zozz::RefusedBy(archive->archive, refusal);
   }

@@ -81,6 +81,9 @@ template <typename _Ty, typename... _Args>
 _Ty* New(_Args&&... _args) {
   void* alloc =
       memory::default_allocator()->Allocate(sizeof(_Ty), alignof(_Ty));
+  if (alloc == nullptr) {
+    return nullptr;
+  }
   return new (alloc) _Ty(std::forward<_Args>(_args)...);
 }
 

@@ -251,10 +251,11 @@ object, with no error returned.
   of consistent length, a positive duration. This turns a version-mismatched
   clip into `BadFormat` instead of a zero-duration animation that samples to
   garbage.
-- **Checked allocation.** `ozz::New` is a placement-new on an unchecked
-  allocation, so a failed allocation constructs at address zero.
-  `ffi/zozz_internal.h` replaces it with a checked `zozz::New`, which makes
-  the `OutOfMemory` paths reachable.
+- **Checked allocation.** `ffi/` allocates its handles through a checked
+  `zozz::New` (`ffi/zozz_internal.h`), and a load or build that ozz could
+  not allocate for, which it now reports ([Patches](#patches)), returns
+  `ZOZZ_RESULT_OUT_OF_MEMORY`. A `zozzIArchive` that ran out of memory stays
+  so, its stream left inside the object.
 
 **The refusal record.** Every loader (`*LoadMemory`, `*LoadFile`,
 `zozzIArchiveLoad<Type>`) takes a `ZozzRefusal*` last, NULL allowed, and
@@ -284,11 +285,16 @@ SIMD load.
 
 ### What it does not cover
 
-ozz's own internal allocations are unchecked: `Skeleton` and `Animation` each
-build spans over an unchecked `Allocate` and write through them, so a load
-under memory pressure is a null dereference inside ozz, with no position to
-intercept it from ([Known upstream behaviour](#known-upstream-behaviour)).
-Sampling, once loaded, allocates nothing.
+A standard container inside ozz cannot report a refused allocation: `resize`
+and `push_back` have no failure path, and the build has no exceptions. ozz's
+`StdAllocator` stops the process there instead (`std::abort`) rather than
+handing the container a null block ([Patches](#patches)). Every count an
+archive gives a container is checked against the bytes left before it is
+resized, so a crafted archive is refused by count and only real exhaustion
+reaches the abort; the raw loaders, offline builders and optimizers, which
+build containers, are where it can. Every other allocation ozz makes is
+checked and comes back as `OutOfMemory`. Sampling, once loaded, allocates
+nothing.
 
 ozz's parser is not hardened against arbitrary hostile input, and zozz cannot
 make it so from outside. What holds is that truncation and type confusion
@@ -403,6 +409,7 @@ finds one fixed upstream drops it.
 | Patch | Defect it closes |
 |---|---|
 | `ozz-archive-counts.patch` | Every `Load` sized allocations from counts read off the archive unchecked, and an unsupported version loaded as an empty object. `IArchive` gains a refusal record, the bytes left and a count check; every version and count is checked against ozz's own limits and the bytes left before anything is allocated, and `RawSkeleton` nesting is bounded. |
+| `ozz-checked-allocation.patch` | Every allocation ozz made was written through unchecked: `Skeleton`, `Animation` and `Track` `Allocate`, `ozz::New`, a suppressed log line's stream, `MemoryStream::Resize`. Each now reports the failure (a load leaves its object empty and marks the archive out of memory, a builder returns null). `StdAllocator`, behind every standard container, aborts instead, since a container has no failure path. |
 
 ### What was taken, and what was left behind
 
@@ -448,8 +455,7 @@ each check here is not mistaken for arbitrary defensiveness.
 |---|---|
 | `IArchive::operator>>` reads a primitive and only asserts the size (`include/ozz/base/io/archive.h`); under `NDEBUG` a short read leaves stack garbage. The tag check is an assert too. | Every archive, files included, is parsed through `ConstMemoryStream`, which never reads short and latches a truncation flag; a tag test runs first. |
 | Every `Load` sizes allocations from counts it reads, and an unsupported version logs and returns an empty object; the caller sees no failure. | Patched at the cause: `ozz-archive-counts.patch`. `ffi/` still validates after load: `duration() > 0`, joint counts in range. |
-| `ozz::New` is `new (allocator->Allocate(...)) T(...)`: a failed allocation is a placement-new at address zero. | Replaced by a checked `zozz::New` in `ffi/zozz_internal.h`. |
-| `Skeleton::Allocate` (`src/animation/runtime/skeleton.cc:81`) and `Animation::Allocate` (`src/animation/runtime/animation.cc:105`) build spans over an allocation with no null check and write through them. | Not closable from outside: the allocation happens inside a call zozz makes. A load under memory pressure is a null dereference. Sampling allocates nothing. |
+| `ozz::New` is `new (allocator->Allocate(...)) T(...)`: a failed allocation is a placement-new at address zero. | Patched at the cause for ozz's own callers (`ozz-checked-allocation.patch`); `ffi/` allocates through its own checked `zozz::New` (`ffi/zozz_internal.h`). |
 | `MemoryStream::Write` (`src/base/io/stream.cc:160`) calls `memcpy` without a size check, and an empty `ozz::vector` hands it a null source, which `memcpy` declares nonnull even for size 0. Every short clip's empty `iframe_entries` reaches it on save; found by a sanitized CI arm (run `32667186311`). | The vendored units compile with `-fno-sanitize=nonnull-attribute`, rather than excusing the affected tests from the sanitizer, which would unsanitize the normal path. |
 | With a zero keyframe count, `Animation::Load` forms `_keys->values` through a null pointer (`src/animation/runtime/animation.cc:214`); the loop around it runs zero times. | Not worked around: only malformed input reaches it, and zozz refuses that input. The truncated-archive test skips under `-Dsanitize_c=true`. |
 | `IKTwoBoneJob::Run` returns identity at `weight <= 0`; `IKAimJob::Run` has no such branch and returns `NormalizeEst4(Lerp(identity, q, weight))` (`src/animation/runtime/ik_aim_job.cc`). On the SSE backend `NormalizeEst4` is `_mm_rsqrt_ps`, an estimate: `rsqrt(1.0)` is `0.999755859375`, identity only to `kNormalizationToleranceEstSq` (`2e-3`). | Not worked around: it is the precision ozz documents for its `Est` family. Recorded because it looks like a binding defect from outside, and it depends on the backend. |

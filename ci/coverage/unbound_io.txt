@@ -14,6 +14,7 @@ base/io	CheckCount	BOUND	ZozzRefusal zozzSkeletonLoadMemory zozzIArchiveLoad*
 base/io	Close	BOUND	zozzOArchiveCreate zozzIArchiveCreate ZozzStream zozzOArchiveDestroy zozzIArchiveDestroy
 base/io	Enter	BOUND	ZozzRefusal zozzSkeletonLoadMemory zozzIArchiveLoad*
 base/io	Exist	BOUND	ZOZZ_RESULT_FILE_NOT_FOUND zozzSkeletonLoadFile
+base/io	FailAllocation	BOUND	ZOZZ_RESULT_OUT_OF_MEMORY zozzSkeletonLoadMemory zozzIArchiveLoad*
 base/io	GetNativeEndianness	ZIG	src/archive.zig:nativeEndianness
 base/io	Leave	BOUND	ZozzRefusal zozzSkeletonLoadMemory zozzIArchiveLoad*
 base/io	MakeArray	LANGUAGE	Zig slices and std.ArrayList
@@ -24,11 +25,13 @@ base/io	Tell	EXTENSION	ZozzStream zozzIArchiveTest*
 base/io	TestTag	BOUND	zozzIArchiveTestSkeleton zozzIArchiveTestAnimation zozzIArchiveTestFloatTrack zozzIArchiveTestFloat2Track zozzIArchiveTestFloat3Track zozzIArchiveTestFloat4Track zozzIArchiveTestQuaternionTrack
 base/io	Write	EXTENSION	ZozzStream zozzOArchiveCreate
 base/io	opened	EXTENSION	ZozzStream zozzOArchiveCreate
+base/io	out_of_memory	BOUND	ZOZZ_RESULT_OUT_OF_MEMORY zozzSkeletonLoadMemory zozzIArchiveLoad*
 base/io	refusal_limit	BOUND	ZozzRefusal zozzSkeletonLoadMemory zozzIArchiveLoad*
 base/io	refusal_past_end	BOUND	ZozzRefusal zozzSkeletonLoadMemory zozzIArchiveLoad*
 base/io	refusal_value	BOUND	ZozzRefusal zozzSkeletonLoadMemory zozzIArchiveLoad*
 base/io	refusal_what	BOUND	ZozzRefusal zozzSkeletonLoadMemory zozzIArchiveLoad*
 base/io	refused	BOUND	ZozzRefusal zozzSkeletonLoadMemory zozzIArchiveLoad*
 base/io	remaining	BOUND	ZozzRefusal zozzSkeletonLoadMemory zozzIArchiveLoad*
+base/io	stopped	BOUND	ZOZZ_RESULT_OUT_OF_MEMORY zozzSkeletonLoadMemory zozzIArchiveLoad*
 base/io	IArchive::operator>>	BOUND	zozzIArchiveLoad*
 base/io	OArchive::operator<<	BOUND	zozzOArchiveSave*

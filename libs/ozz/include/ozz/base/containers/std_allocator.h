@@ -28,6 +28,7 @@
 #ifndef OZZ_OZZ_BASE_CONTAINERS_STD_ALLOCATOR_H_
 #define OZZ_OZZ_BASE_CONTAINERS_STD_ALLOCATOR_H_
 
+#include <cstdlib>
 #include <new>
 
 #include "ozz/base/memory/allocator.h"
@@ -74,8 +75,15 @@ class StdAllocator {
   pointer allocate(size_t _count) noexcept {
     // Makes sure to a use c like allocator, to avoid duplicated constructor
     // calls.
-    return reinterpret_cast<pointer>(memory::default_allocator()->Allocate(
-        sizeof(value_type) * _count, alignof(value_type)));
+    void* block = memory::default_allocator()->Allocate(
+        sizeof(value_type) * _count, alignof(value_type));
+    // A standard container has no failure path for a null block and this
+    // build has no exceptions, so a refused allocation stops the process
+    // rather than letting the container construct at null.
+    if (block == nullptr && _count != 0) {
+      std::abort();
+    }
+    return reinterpret_cast<pointer>(block);
   }
 
   // Deallocates object at _Ptr, ignores size.

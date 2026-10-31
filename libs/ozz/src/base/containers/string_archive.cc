@@ -57,7 +57,7 @@ void Extern<string>::Load(IArchive& _archive, string* _values, size_t _count,
 
     uint32_t size;
     _archive >> size;
-    if (_archive.refused() ||
+    if (_archive.stopped() ||
         !_archive.CheckCount("string.size", size, 1,
                              std::numeric_limits<uint32_t>::max())) {
       return;

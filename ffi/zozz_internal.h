@@ -280,6 +280,7 @@ ZozzResult LoadTagged(ConstMemoryStream* stream, T* out,
   // A truncated stream fed the parse zeros, so whatever Load then refused,
   // the cause is the missing bytes.
   if (stream->truncated()) return ZOZZ_RESULT_IO;
+  if (archive.out_of_memory()) return ZOZZ_RESULT_OUT_OF_MEMORY;
   if (archive.refused()) return RefusedBy(archive, refusal);
   return ZOZZ_RESULT_OK;
 }

@@ -273,8 +273,8 @@ docs/design.md records.
 | **0.5.0** | version, the same in `build.zig.zon` and `ffi/zozz_core.h` |
 | **359** | C entry points (`ZOZZ_API` in `ffi/*.h`), each with its Zig extern |
 | **19** | installed public headers: `zozz.h` and those it includes |
-| **331** | public ozz names no entry point spells out, each carrying a verdict in `ci/coverage/` |
-| **46** | of them reachable through the C boundary under another name (`BOUND`) |
+| **334** | public ozz names no entry point spells out, each carrying a verdict in `ci/coverage/` |
+| **49** | of them reachable through the C boundary under another name (`BOUND`) |
 | **5** | C++ virtuals delivered as C callbacks (`EXTENSION`) |
 | **212** | provided in Zig without crossing the boundary (`ZIG`) |
 | **38** | provided by the Zig language (`LANGUAGE`) |

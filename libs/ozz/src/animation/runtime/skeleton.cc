@@ -80,6 +80,9 @@ char* Skeleton::Allocate(size_t _chars_size, size_t _num_joints) {
   // Allocates whole buffer.
   auto* allocator = memory::default_allocator();
   allocation_ = allocator->Allocate(buffer_size, alignof(math::SoaTransform));
+  if (allocation_ == nullptr) {
+    return nullptr;
+  }
   span<byte> buffer = {static_cast<byte*>(allocation_), buffer_size};
 
   // Serves larger alignment values first.
@@ -167,6 +170,10 @@ void Skeleton::Load(ozz::io::IArchive& _archive, uint32_t _version) {
 
   // Allocates all skeleton data members.
   char* cursor = Allocate(chars_count, num_joints);
+  if (cursor == nullptr) {
+    _archive.FailAllocation();
+    return;
+  }
 
   // Reads name's buffer, they are all contiguous in the same buffer.
   _archive >> ozz::io::MakeArray(cursor, chars_count);

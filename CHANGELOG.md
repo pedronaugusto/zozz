@@ -64,6 +64,14 @@ could not express, so a port has the reason and not only the diff.
   through the record above. `libs/ozz` was upstream byte for byte, and had no
   way to say so short of crashing; `check-vendor` now proves upstream plus
   exactly the listed patches.
+- A load or build that ozz could not allocate for wrote through the null
+  block: `Skeleton`, `Animation` and `Track` built their spans over it, the
+  builders filled them, `ozz::New` constructed at address zero, and a
+  suppressed log line did the same with its stream. Each now reports the
+  failure, and the loader or builder returns `OutOfMemory`
+  (`libs/patches/ozz-checked-allocation.patch`). Inside a standard
+  container, which has no failure path, ozz aborts instead of constructing
+  at null; every count an archive gives one is checked before it resizes.
 - A caller's `u32` or `usize` past what the C boundary's `int` carries
   (`SamplingContext.init(1 << 31)`, a joint, track or vertex count) was
   `@intCast`, a panic in a safe build and undefined in ReleaseFast; it is

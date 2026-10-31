@@ -56,9 +56,27 @@ Out::Out() : Logger(std::cout, kStandard) {}
 
 Err::Err() : Logger(std::cerr, kStandard) {}
 
+namespace {
+// A stream with no buffer, which discards: where a suppressed level writes
+// when no local stream can be allocated. One per thread, so none is shared.
+std::ostream& Discard() {
+  thread_local std::ostream discard(nullptr);
+  return discard;
+}
+
+// The local stream a suppressed level writes to.
+std::ostream& Silent() {
+  std::ostringstream* local = ozz::New<std::ostringstream>();
+  if (local == nullptr) {
+    return Discard();
+  }
+  return *local;
+}
+}  // namespace
+
 Logger::Logger(std::ostream& _stream, Level _level)
-    : stream_(_level <= GetLevel() ? _stream : *ozz::New<std::ostringstream>()),
-      local_stream_(&stream_ != &_stream) {}
+    : stream_(_level <= GetLevel() ? _stream : Silent()),
+      local_stream_(&stream_ != &_stream && &stream_ != &Discard()) {}
 Logger::~Logger() {
   if (local_stream_) {
       ozz::Delete(&stream_);

@@ -869,3 +869,102 @@ test "a raw skeleton nests no deeper than ozz's joint limit" {
     defer over.deinit();
     try expectLoadRefused(zozz.RawSkeleton, over.bytes.items, .raw_skeleton_load_memory, err.Error.BadFormat, "RawSkeleton.depth", zozz.c.max_joints + 1, zozz.c.max_joints);
 }
+
+//=============================================================================
+// Allocation (libs/patches/ozz-checked-allocation.patch)
+//=============================================================================
+
+// tests/allocation.cpp: ozz's own allocation sites, each driven with an
+// allocation refused; 1 when ozz returned its failure.
+extern fn zozzTestBuildRefusingNew(object: c_int) c_int;
+extern fn zozzTestBuildRefusingBuffer(object: c_int) c_int;
+extern fn zozzTestLoadRefusingAll(object: c_int) c_int;
+extern fn zozzTestLogRefusingAll() c_int;
+extern fn zozzTestStreamRefusingGrowth() c_int;
+extern fn zozzTestBuildEmptySkeleton() c_int;
+
+// A skeleton, an animation and a float track, as tests/allocation.h names
+// them; a test each, so one that faults cannot hide another.
+const test_skeleton: c_int = 0;
+const test_animation: c_int = 1;
+const test_float_track: c_int = 2;
+
+test "a skeleton builder that cannot allocate the skeleton returns none" {
+    try std.testing.expectEqual(@as(c_int, 1), zozzTestBuildRefusingNew(test_skeleton));
+}
+
+test "an animation builder that cannot allocate the animation returns none" {
+    try std.testing.expectEqual(@as(c_int, 1), zozzTestBuildRefusingNew(test_animation));
+}
+
+test "a track builder that cannot allocate the track returns none" {
+    try std.testing.expectEqual(@as(c_int, 1), zozzTestBuildRefusingNew(test_float_track));
+}
+
+test "a skeleton builder that cannot allocate the skeleton's buffer returns none" {
+    try std.testing.expectEqual(@as(c_int, 1), zozzTestBuildRefusingBuffer(test_skeleton));
+}
+
+test "an animation builder that cannot allocate the animation's buffer returns none" {
+    try std.testing.expectEqual(@as(c_int, 1), zozzTestBuildRefusingBuffer(test_animation));
+}
+
+test "a track builder that cannot allocate the track's buffer returns none" {
+    try std.testing.expectEqual(@as(c_int, 1), zozzTestBuildRefusingBuffer(test_float_track));
+}
+
+test "a skeleton load that cannot allocate leaves the skeleton empty" {
+    try std.testing.expectEqual(@as(c_int, 1), zozzTestLoadRefusingAll(test_skeleton));
+}
+
+test "an animation load that cannot allocate leaves the animation empty" {
+    try std.testing.expectEqual(@as(c_int, 1), zozzTestLoadRefusingAll(test_animation));
+}
+
+test "a track load that cannot allocate leaves the track empty" {
+    try std.testing.expectEqual(@as(c_int, 1), zozzTestLoadRefusingAll(test_float_track));
+}
+
+test "a suppressed log line needs no allocation" {
+    try std.testing.expectEqual(@as(c_int, 1), zozzTestLogRefusingAll());
+}
+
+test "a memory stream that cannot grow writes nothing and keeps what it held" {
+    try std.testing.expectEqual(@as(c_int, 1), zozzTestStreamRefusingGrowth());
+}
+
+test "a skeleton with no joints still builds, its null buffer being no failure" {
+    try std.testing.expectEqual(@as(c_int, 1), zozzTestBuildEmptySkeleton());
+}
+
+test "a load refused any one allocation it makes is OutOfMemory" {
+    var failure: zozz.Failure = .{};
+    const gpa = std.testing.allocator;
+    const skeleton = try FixtureBlob.init(zozzFixtureSkeleton);
+    defer skeleton.deinit();
+    const animation = try FixtureBlob.init(zozzFixtureAnimation);
+    defer animation.deinit();
+
+    const Load = *const fn ([*]const u8, usize, *?*anyopaque, ?*zozz.c.Refusal) callconv(.c) Result;
+    const Destroy = *const fn (?*anyopaque) callconv(.c) void;
+    const Loader = struct { bytes: []const u8, load: Load, destroy: Destroy };
+    const loaders = [_]Loader{
+        .{ .bytes = skeleton.bytes, .load = @ptrCast(&zozz.c.zozzSkeletonLoadMemory), .destroy = @ptrCast(&zozz.c.zozzSkeletonDestroy) },
+        .{ .bytes = animation.bytes, .load = @ptrCast(&zozz.c.zozzAnimationLoadMemory), .destroy = @ptrCast(&zozz.c.zozzAnimationDestroy) },
+    };
+    for (loaders) |loader| {
+        var index: usize = 0;
+        while (true) : (index += 1) {
+            var failing: std.testing.FailingAllocator = .init(gpa, .{ .fail_index = index });
+            try zozz.setAllocator(failing.allocator(), &failure);
+            var handle: ?*anyopaque = null;
+            const result = loader.load(loader.bytes.ptr, loader.bytes.len, &handle, null);
+            if (result == .ok) loader.destroy(handle);
+            try zozz.resetAllocator(&failure);
+            if (result == .ok) break;
+            try std.testing.expectEqual(Result.out_of_memory, result);
+        }
+        // The handle and the object's own buffer, at least.
+        try std.testing.expect(index >= 2);
+    }
+}

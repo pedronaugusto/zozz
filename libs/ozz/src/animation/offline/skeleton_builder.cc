@@ -84,6 +84,9 @@ unique_ptr<ozz::animation::Skeleton> SkeletonBuilder::operator()(
   // Everything is fine, allocates and fills the skeleton.
   // Will not fail.
   unique_ptr<ozz::animation::Skeleton> skeleton = make_unique<Skeleton>();
+  if (!skeleton) {
+    return skeleton;
+  }
   const int num_joints = _raw_skeleton.num_joints();
 
   // Iterates through all the joint of the raw skeleton and fills a sorted joint
@@ -102,6 +105,10 @@ unique_ptr<ozz::animation::Skeleton> SkeletonBuilder::operator()(
 
   // Allocates all skeleton members.
   char* cursor = skeleton->Allocate(chars_size, num_joints);
+  // A skeleton with no joints allocates nothing and is valid.
+  if (cursor == nullptr && num_joints != 0) {
+    return nullptr;
+  }
 
   // Copy names. All names are allocated in a single buffer. Only the first name
   // is set, all other names array entries must be initialized.

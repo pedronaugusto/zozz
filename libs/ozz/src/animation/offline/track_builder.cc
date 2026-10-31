@@ -94,6 +94,9 @@ unique_ptr<_Track> TrackBuilder::Build(const _RawTrack& _input) const {
   // Everything is fine, allocates and fills the animation.
   // Nothing can fail now.
   unique_ptr<_Track> track = make_unique<_Track>();
+  if (!track) {
+    return track;
+  }
 
   // Copy data to temporary prepared data structure
   typename _RawTrack::Keyframes keyframes;
@@ -113,7 +116,9 @@ unique_ptr<_Track> TrackBuilder::Build(const _RawTrack& _input) const {
 
   // Allocates output track.
   const size_t name_len = _input.name.size();
-  track->Allocate(keyframes.size(), _input.name.size());
+  if (!track->Allocate(keyframes.size(), _input.name.size())) {
+    return unique_ptr<_Track>();
+  }
 
   // Copy all keys to output.
   assert(keyframes.size() == track->ratios_.size() &&

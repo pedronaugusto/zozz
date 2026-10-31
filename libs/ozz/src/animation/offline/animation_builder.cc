@@ -443,6 +443,9 @@ unique_ptr<Animation> AnimationBuilder::operator()(
   // Everything is fine, allocates and fills the animation.
   // Nothing can fail now.
   unique_ptr<Animation> animation = make_unique<Animation>();
+  if (!animation) {
+    return animation;
+  }
 
   // Sets duration.
   const float duration = _input.duration;
@@ -544,7 +547,9 @@ unique_ptr<Animation> AnimationBuilder::operator()(
       {translation_ss.entries.size(), translation_ss.desc.size()},
       {rotation_ss.entries.size(), rotation_ss.desc.size()},
       {scale_ss.entries.size(), scale_ss.desc.size()}};
-  animation->Allocate(params);
+  if (!animation->Allocate(params)) {
+    return nullptr;
+  }
 
   CopyIFrames(translation_ss, animation->translations_ctrl_);
   CopyIFrames(rotation_ss, animation->rotations_ctrl_);
