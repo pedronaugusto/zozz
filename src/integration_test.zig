@@ -1469,3 +1469,64 @@ test "an unnamed clip whose iframe entries end its block samples without reading
     defer gpa.free(clip);
     try expectRunsClean(zozz.Animation, clip, sampleClip);
 }
+
+//=============================================================================
+// Raw validation (libs/patches/ozz-raw-validation-nan.patch)
+//=============================================================================
+
+/// `bytes` with the one native-order `old` float in it written over by NaN.
+fn withNan(gpa: std.mem.Allocator, bytes: []const u8, old: f32) ![]u8 {
+    const pattern = std.mem.toBytes(old);
+    try std.testing.expectEqual(@as(usize, 1), std.mem.count(u8, bytes, &pattern));
+    return overwritten(gpa, bytes, std.mem.find(u8, bytes, &pattern).?, &std.mem.toBytes(std.math.nan(f32)));
+}
+
+test "a raw animation read with a key time that is not a number does not validate or build" {
+    var failure: zozz.Failure = .{};
+    const gpa = std.testing.allocator;
+    try zozz.setAllocator(gpa, &failure);
+    defer zozz.resetAllocator(&failure) catch |e| std.debug.panic("zozz: {s}", .{@errorName(e)});
+    // `pushTranslation` refuses it; an archive never passes there.
+    var authored = try zozz.RawAnimation.init(1, 1.0, null, &failure);
+    defer authored.deinit();
+    try authored.pushTranslation(0, 0.375, .{ 5, 0, 0 }, &failure);
+    var buffer: WriteBuffer = .{ .gpa = gpa };
+    defer buffer.deinit();
+    const bridge = buffer.stream();
+    var archive = try zozz.OArchive.init(&bridge, zozz.nativeEndianness(), &failure);
+    try archive.saveRawAnimation(authored, &failure);
+    archive.deinit();
+    const nan = try withNan(gpa, buffer.list.items, 0.375);
+    defer gpa.free(nan);
+
+    var loaded = try zozz.RawAnimation.initFromMemory(.init(nan), &failure);
+    defer loaded.deinit();
+    try std.testing.expect(!loaded.validate());
+    try std.testing.expectError(err.Error.InvalidData, loaded.build(0, &failure));
+    try std.testing.expectEqualSlices(zozz.Frame, &.{.{ .call = .animation_build, .result = .invalid_data }}, failure.frames());
+}
+
+test "a raw track read with a keyframe ratio that is not a number does not validate or build" {
+    var failure: zozz.Failure = .{};
+    const gpa = std.testing.allocator;
+    try zozz.setAllocator(gpa, &failure);
+    defer zozz.resetAllocator(&failure) catch |e| std.debug.panic("zozz: {s}", .{@errorName(e)});
+    // `pushKeyframe` refuses it; an archive never passes there.
+    var authored = try zozz.RawFloatTrack.init(&failure);
+    defer authored.deinit();
+    try authored.pushKeyframe(.linear, 0.375, 5, &failure);
+    var buffer: WriteBuffer = .{ .gpa = gpa };
+    defer buffer.deinit();
+    const bridge = buffer.stream();
+    var archive = try zozz.OArchive.init(&bridge, zozz.nativeEndianness(), &failure);
+    try archive.saveRawFloatTrack(authored, &failure);
+    archive.deinit();
+    const nan = try withNan(gpa, buffer.list.items, 0.375);
+    defer gpa.free(nan);
+
+    var loaded = try zozz.RawFloatTrack.initFromMemory(.init(nan), &failure);
+    defer loaded.deinit();
+    try std.testing.expect(!loaded.validate());
+    try std.testing.expectError(err.Error.InvalidData, loaded.build(&failure));
+    try std.testing.expectEqualSlices(zozz.Frame, &.{.{ .call = .float_track_build, .result = .invalid_data }}, failure.frames());
+}

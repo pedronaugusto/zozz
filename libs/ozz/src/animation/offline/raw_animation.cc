@@ -44,8 +44,8 @@ static bool ValidateTrack(const typename ozz::vector<_Key>& _track,
   float previous_time = -1.f;
   for (size_t k = 0; k < _track.size(); ++k) {
     const float frame_time = _track[k].time;
-    // Tests frame's time is in range [0:duration].
-    if (frame_time < 0.f || frame_time > _duration) {
+    // Tests frame's time is in range [0:duration]; a NaN is in no range.
+    if (!(frame_time >= 0.f && frame_time <= _duration)) {
       return false;
     }
     // Tests that frames are sorted.
@@ -64,7 +64,7 @@ bool RawAnimation::JointTrack::Validate(float _duration) const {
 }
 
 bool RawAnimation::Validate() const {
-  if (duration <= 0.f) {  // Tests duration is valid.
+  if (!(duration > 0.f)) {  // Tests duration is valid, and not a NaN.
     return false;
   }
   if (tracks.size() > Skeleton::kMaxJoints) {  // Tests number of tracks.

@@ -129,6 +129,11 @@ could not express, so a port has the reason and not only the diff.
   skeleton whose joints `LocalToModelJob` could not place without failing
   ozz's assert. `RawSkeleton.validate` is false for it now, and `build`
   `InvalidData` (`libs/patches/ozz-raw-skeleton-rotations.patch`).
+- A raw animation key time or raw track keyframe ratio that is not a number,
+  which an archive can hold, validated: building the animation stopped on
+  ozz's assert, or with asserts off built the NaN into the clip.
+  `validate` is false for it now, and `build` `InvalidData`
+  (`libs/patches/ozz-raw-validation-nan.patch`).
 - `decodeGV4` and `decodeGV4Stream` read past the bytes they were given:
   they checked only the minimum size, then let ozz's decoder read the length
   a group's first byte claims plus the three bytes it loads past every group,

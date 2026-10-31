@@ -28,6 +28,7 @@ const patches = [_][]const u8{
     "ozz-raw-track-interpolation.patch",
     "ozz-rest-pose-rotations.patch",
     "ozz-raw-skeleton-rotations.patch",
+    "ozz-raw-validation-nan.patch",
 };
 /// Where a patch's file paths start.
 const patch_root = "libs/ozz/";

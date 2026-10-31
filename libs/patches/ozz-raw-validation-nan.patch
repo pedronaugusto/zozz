@@ -1,0 +1,56 @@
+ozz-raw-validation-nan: a raw key's time or ratio that is not a number is invalid
+
+RawAnimation::Validate and RawTrack::Validate test a key's time or ratio
+by refusing one below 0 or past the end. Both comparisons are false for a
+NaN, so a NaN passed: the animation builder then stopped on its own assert
+that each time is in range, or, with asserts off, built the NaN into the
+runtime clip. The duration's test had the same shape.
+
+Each test now requires the value inside its range, which a NaN never is.
+
+Evidence: zozz's fuzz property, building a raw animation it loaded, stopped
+in AnimationBuilder on "Assertion failed: raw_key.time >= 0 && raw_key.time
+<= _duration" (ReleaseFast with asserts on); zozz's src/integration_test.zig
+loads a raw animation whose key time is NaN and a raw float track whose
+keyframe ratio is NaN, and upstream validates both (both measured,
+2026-10-31).
+
+diff --git a/libs/ozz/src/animation/offline/raw_animation.cc b/libs/ozz/src/animation/offline/raw_animation.cc
+index 9a8e6f0..2ce2704 100644
+--- a/libs/ozz/src/animation/offline/raw_animation.cc
++++ b/libs/ozz/src/animation/offline/raw_animation.cc
+@@ -44,8 +44,8 @@ static bool ValidateTrack(const typename ozz::vector<_Key>& _track,
+   float previous_time = -1.f;
+   for (size_t k = 0; k < _track.size(); ++k) {
+     const float frame_time = _track[k].time;
+-    // Tests frame's time is in range [0:duration].
+-    if (frame_time < 0.f || frame_time > _duration) {
++    // Tests frame's time is in range [0:duration]; a NaN is in no range.
++    if (!(frame_time >= 0.f && frame_time <= _duration)) {
+       return false;
+     }
+     // Tests that frames are sorted.
+@@ -64,7 +64,7 @@ bool RawAnimation::JointTrack::Validate(float _duration) const {
+ }
+ 
+ bool RawAnimation::Validate() const {
+-  if (duration <= 0.f) {  // Tests duration is valid.
++  if (!(duration > 0.f)) {  // Tests duration is valid, and not a NaN.
+     return false;
+   }
+   if (tracks.size() > Skeleton::kMaxJoints) {  // Tests number of tracks.
+diff --git a/libs/ozz/src/animation/offline/raw_track.cc b/libs/ozz/src/animation/offline/raw_track.cc
+index d60c6d6..6b4b9c9 100644
+--- a/libs/ozz/src/animation/offline/raw_track.cc
++++ b/libs/ozz/src/animation/offline/raw_track.cc
+@@ -88,8 +88,8 @@ bool RawTrack<_ValueType>::Validate() const {
+   float previous_ratio = -1.f;
+   for (size_t k = 0; k < keyframes.size(); ++k) {
+     const float frame_ratio = keyframes[k].ratio;
+-    // Tests frame's ratio is in range [0:1].
+-    if (frame_ratio < 0.f || frame_ratio > 1.f) {
++    // Tests frame's ratio is in range [0:1]; a NaN is in no range.
++    if (!(frame_ratio >= 0.f && frame_ratio <= 1.f)) {
+       return false;
+     }
+     // Tests that frames are sorted.

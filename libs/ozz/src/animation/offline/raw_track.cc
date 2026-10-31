@@ -88,8 +88,8 @@ bool RawTrack<_ValueType>::Validate() const {
   float previous_ratio = -1.f;
   for (size_t k = 0; k < keyframes.size(); ++k) {
     const float frame_ratio = keyframes[k].ratio;
-    // Tests frame's ratio is in range [0:1].
-    if (frame_ratio < 0.f || frame_ratio > 1.f) {
+    // Tests frame's ratio is in range [0:1]; a NaN is in no range.
+    if (!(frame_ratio >= 0.f && frame_ratio <= 1.f)) {
       return false;
     }
     // Tests that frames are sorted.
