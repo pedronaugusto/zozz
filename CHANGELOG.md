@@ -49,6 +49,16 @@ could not express, so a port has the reason and not only the diff.
   goes through a narrowing that stops in every build. A handle used after its
   `deinit` stops in every build too: it was a null unwrap, undefined in
   ReleaseFast.
+- The coverage check read a template's `<class T>` as a class header that
+  opened no body, and carried it into the next header it read: nine public
+  ozz names (`IntrusiveList`, `allocate`, `array_begin` and six more) counted
+  as having no public declaration, so `INTERNAL` could be claimed for them.
+  `array_begin` and `array_end` were, and are `LANGUAGE` now.
+- The ABI check held the bound surface to floors of ten-odd, so most of it
+  could vanish unnoticed. Its floors are the measured counts, held in
+  `src/abi_test.zig`, and the two call shapes Zig has
+  miscompiled (a float after more than six integer parameters, an aggregate
+  returned by value) are counted and pinned at none.
 - README's numbers block counted every header in `ffi/` as an installed public
   header, the two C++-internal ones that are never installed included. It now
   counts `zozz.h` and the headers it includes.

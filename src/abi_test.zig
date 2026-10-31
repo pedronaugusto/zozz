@@ -254,6 +254,42 @@ fn checkEnumValues(
 }
 
 //=============================================================================
+// Hazard shapes
+//
+// Two caller shapes were measured miscompiled by Zig 0.16.0 in the sibling
+// package zmeshopt (its hosted CI, 2026-09-02): a float argument after more
+// than 6 integer-class parameters, and a small all-float struct returned by
+// value. Each is counted over the bound functions and pinned in the test, so
+// a change that introduces one reopens that decision explicitly.
+//=============================================================================
+
+const max_int_class_params_before_float = 6;
+
+/// True when `Fn` passes a float after more than 6 integer-class parameters.
+fn hasLateFloat(comptime Fn: type) bool {
+    comptime {
+        var int_class: usize = 0;
+        for (@typeInfo(Fn).@"fn".param_types) |param| {
+            const P = param orelse continue;
+            switch (@typeInfo(scalarIdentity(P))) {
+                .float, .vector => if (int_class > max_int_class_params_before_float) return true,
+                else => int_class += 1,
+            }
+        }
+        return false;
+    }
+}
+
+/// True when `Fn` returns a struct or union by value.
+fn hasAggregateReturn(comptime Fn: type) bool {
+    const R = @typeInfo(Fn).@"fn".return_type orelse return false;
+    return switch (@typeInfo(scalarIdentity(R))) {
+        .@"struct", .@"union" => true,
+        else => false,
+    };
+}
+
+//=============================================================================
 // The sweep
 //=============================================================================
 
@@ -263,6 +299,8 @@ const Counts = struct {
     constants: usize = 0,
     fields: usize = 0,
     enumerators: usize = 0,
+    late_float_fns: usize = 0,
+    aggregate_return_fns: usize = 0,
 };
 
 /// One type `c.zig` declares, compared with the header's, and counted on `n`.
@@ -371,6 +409,8 @@ fn sweepOurs() Counts {
                 _ = theirDecl(d, what);
                 checkFnType(what, Decl, @TypeOf(@field(h, d)));
                 n.functions += 1;
+                if (hasLateFloat(Decl)) n.late_float_fns += 1;
+                if (hasAggregateReturn(Decl)) n.aggregate_return_fns += 1;
                 continue;
             }
 
@@ -505,12 +545,31 @@ test "ABI: src/c.zig agrees with ffi/zozz.h" {
     const ours = comptime sweepOurs();
     const theirs = comptime sweepTheirs();
 
-    try std.testing.expect(ours.types >= 10);
-    try std.testing.expect(ours.functions >= 45);
-    try std.testing.expect(ours.constants >= 1);
-    try std.testing.expect(ours.fields >= 20);
-    try std.testing.expect(ours.enumerators >= 10);
+    // The counted surface, as floors measured on this tree, so a binding
+    // lost on the Zig side fails here; `ours == theirs` pins functions exactly.
+    try atLeast("types", ours.types, 68);
+    try atLeast("fields", ours.fields, 177);
+    try atLeast("enumerators", ours.enumerators, 37);
+    try atLeast("constants", ours.constants, 3);
     try std.testing.expectEqual(ours.functions, theirs);
+    // The two hazard shapes: the boundary has neither, so it needs no
+    // forwarding shim.
+    try std.testing.expectEqual(@as(usize, 0), ours.late_float_fns);
+    try std.testing.expectEqual(@as(usize, 0), ours.aggregate_return_fns);
+}
+
+/// Fails, naming the count, when the bound surface is below its floor.
+fn atLeast(comptime what: []const u8, got: usize, floor: usize) !void {
+    if (got >= floor) return;
+    std.log.err("zozz binds {d} {s}, below the floor of {d}", .{ got, what, floor });
+    return error.BelowFloor;
+}
+
+test "the hazard shapes are recognised" {
+    try std.testing.expect(comptime hasLateFloat(fn (i32, i32, i32, i32, i32, i32, i32, f32) callconv(.c) void));
+    try std.testing.expect(!comptime hasLateFloat(fn (i32, i32, i32, i32, i32, i32, f32) callconv(.c) void));
+    try std.testing.expect(comptime hasAggregateReturn(fn () callconv(.c) extern struct { x: f32, y: f32 }));
+    try std.testing.expect(!comptime hasAggregateReturn(fn () callconv(.c) c_int));
 }
 
 test "ABI: every extern in src/c.zig has a definition in this build" {

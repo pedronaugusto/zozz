@@ -13,8 +13,8 @@
 base/containers	IntrusiveList	LANGUAGE	Zig slices and std.ArrayList
 base/containers	address	LANGUAGE	std.mem.Allocator; Zig passes allocators explicitly
 base/containers	allocate	LANGUAGE	std.mem.Allocator; Zig passes allocators explicitly
-base/containers	array_begin	INTERNAL	no public declaration
-base/containers	array_end	INTERNAL	no public declaration
+base/containers	array_begin	LANGUAGE	Zig slices: .ptr
+base/containers	array_end	LANGUAGE	Zig slices: .ptr + .len
 base/containers	construct	LANGUAGE	std.mem.Allocator; Zig passes allocators explicitly
 base/containers	deallocate	LANGUAGE	std.mem.Allocator; Zig passes allocators explicitly
 base/containers	debug_is_linked_in	INTERNAL	upstream libs/ozz/include/ozz/base/containers/intrusive_list.h:94 (namespace)

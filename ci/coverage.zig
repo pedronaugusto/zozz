@@ -655,10 +655,7 @@ const AccessScanner = struct {
     scopes: std.ArrayList(struct { depth: isize, public: bool }) = .empty,
     in_comment: bool = false,
     pending: bool = false,
-    /// A class header seen whose `{` has not, carried into the next header
-    /// of a batch as the awk this program replaced carried it: `template <class T>`
-    /// closing deque.h makes intrusive_list.h's namespace a private scope.
-    /// Byte-order reading fixes which header it lands in.
+    /// A class header seen whose `{` has not; it ends with its header.
     pendopen: bool = false,
 
     fn file(s: *AccessScanner, text: []const u8) !void {
@@ -666,6 +663,7 @@ const AccessScanner = struct {
         s.scopes.clearRetainingCapacity();
         s.in_comment = false;
         s.pending = false;
+        s.pendopen = false;
         var lines: Lines = .init(text);
         while (lines.next()) |raw| try s.line(raw);
     }
@@ -673,8 +671,9 @@ const AccessScanner = struct {
     fn line(s: *AccessScanner, raw: []const u8) !void {
         const code = cutText((try stripBlockComments(s.a, raw, &s.in_comment)) orelse return, "//");
         if (mem.startsWith(u8, trimStart(code), "#")) return;
-        if (keywordAt(code, &.{ "class", "struct", "union" }, true) and !mem.endsWith(u8, trimEnd(code), ";")) {
-            s.pending = keywordAt(code, &.{ "struct", "union" }, false);
+        const header = afterTemplateParameters(code);
+        if (keywordAt(header, &.{ "class", "struct", "union" }, true) and !mem.endsWith(u8, trimEnd(header), ";")) {
+            s.pending = keywordAt(header, &.{ "struct", "union" }, false);
             s.pendopen = true;
         }
         if (accessLabel(code)) |public| {
@@ -700,6 +699,25 @@ const AccessScanner = struct {
         try s.out.append(s.a, .{ .name = code[id.start..id.end], .ref = if (public) "public" else "nonpublic" });
     }
 };
+
+/// `l` past a leading `template <...>`, whose `class` and `typename` name
+/// parameters rather than open a class; empty when the list runs on.
+fn afterTemplateParameters(l: []const u8) []const u8 {
+    const t = trimStart(l);
+    if (!mem.startsWith(u8, t, "template")) return l;
+    var i = skipSpace(t, "template".len);
+    if (i >= t.len or t[i] != '<') return l;
+    var depth: usize = 0;
+    while (i < t.len) : (i += 1) switch (t[i]) {
+        '<' => depth += 1,
+        '>' => {
+            depth -= 1;
+            if (depth == 0) return t[i + 1 ..];
+        },
+        else => {},
+    };
+    return "";
+}
 
 /// Whether one of `keywords` stands at a word boundary in `l`, followed by
 /// whitespace and, with `named`, by an identifier.
@@ -1726,12 +1744,35 @@ test "a declaration is public only when every enclosing scope is" {
     }, false));
 }
 
-test "a class header with no body carries into the next header of a batch" {
+test "nothing one header leaves open carries into the next of a batch" {
     var arena: std.heap.ArenaAllocator = .init(testing.allocator);
     defer arena.deinit();
-    const texts = [_][]const u8{ "template <class T>\n", "namespace ozz {\nvoid Free();\n}\n" };
-    try testing.expectEqualStrings("Free nonpublic\n", try accessed(arena.allocator(), &texts, true));
+    const texts = [_][]const u8{ "class Fwd\n", "namespace ozz {\nvoid Free();\n}\n" };
+    try testing.expectEqualStrings("Free public\n", try accessed(arena.allocator(), &texts, true));
     try testing.expectEqualStrings("Free public\n", try accessed(arena.allocator(), &texts, false));
+}
+
+test "a template's parameter list opens no class" {
+    var arena: std.heap.ArenaAllocator = .init(testing.allocator);
+    defer arena.deinit();
+    try testing.expectEqualStrings(
+        \\allocate public
+        \\Get public
+        \\Hidden nonpublic
+        \\
+    , try accessed(arena.allocator(), &.{
+        \\namespace ozz {
+        \\template <typename T, class U> T* allocate(U n) {
+        \\  return nullptr;
+        \\}
+        \\template <class T>
+        \\struct Box {
+        \\  T Get();
+        \\ private:
+        \\  T Hidden();
+        \\};
+        \\}
+    }, false));
 }
 
 test "upstream's internal markers: a namespace, a comment and a type" {

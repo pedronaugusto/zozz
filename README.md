@@ -275,8 +275,8 @@ docs/design.md records.
 | **36** | of them reachable through the C boundary under another name (`BOUND`) |
 | **5** | C++ virtuals delivered as C callbacks (`EXTENSION`) |
 | **212** | provided in Zig without crossing the boundary (`ZIG`) |
-| **36** | provided by the Zig language (`LANGUAGE`) |
-| **32** | internal to ozz or compiled by no source here (`INTERNAL`) |
+| **38** | provided by the Zig language (`LANGUAGE`) |
+| **30** | internal to ozz or compiled by no source here (`INTERNAL`) |
 | **206** | assertions in the standalone C smoke test |
 | **41** | vendored ozz translation units `build.zig` compiles |
 | **20** | zozz C++ translation units (`ffi/*.cpp`) |
